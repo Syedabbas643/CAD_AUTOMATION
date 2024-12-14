@@ -760,13 +760,9 @@ namespace CAD_AUTOMATION
             Database db = doc.Database;
             Editor ed = doc.Editor;
 
-
             try
             {
-                //Application.SetSystemVariable("REGENAUTO", 0);
-                //Application.SetSystemVariable("TILEMODE", 0);
-
-                // Prompt for a rectangle selection
+                
                 PromptEntityOptions options = new PromptEntityOptions("\nSelect a rectangle: ");
                 options.SetRejectMessage("\nOnly rectangles (closed polylines) are allowed.");
                 options.AddAllowedClass(typeof(Polyline), true);
@@ -828,8 +824,8 @@ namespace CAD_AUTOMATION
                 SaveFileDialog saveFileDialog = new SaveFileDialog();
                 saveFileDialog.Filter = "PDF Files (*.pdf)|*.pdf";
                 saveFileDialog.Title = "Save PDF File";
-                saveFileDialog.DefaultExt = "pdf"; // Default file extension
-                saveFileDialog.AddExtension = true; // Automatically add extension if not provided
+                saveFileDialog.DefaultExt = "pdf"; 
+                saveFileDialog.AddExtension = true; 
 
                 if (saveFileDialog.ShowDialog() != DialogResult.OK)
                 {
@@ -862,7 +858,7 @@ namespace CAD_AUTOMATION
                 }
 
                 List<Extents3d> allRectangles = new List<Extents3d>();
-                List<Extents3d> outerRectangles = new List<Extents3d>();
+                //List<Extents3d> outerRectangles = new List<Extents3d>();
                 Point2d minPoint = new Point2d(0, 0);
                 Point2d maxPoint = new Point2d(0, 0);
 
@@ -876,9 +872,6 @@ namespace CAD_AUTOMATION
                         Extents3d selectedExtents = rect.GeometricExtents;
                         minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
                         maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
-
-                        
-
 
                         using (Transaction tr = db.TransactionManager.StartTransaction())
                         {
@@ -907,7 +900,7 @@ namespace CAD_AUTOMATION
                                         // Scan for rectangles within the exploded entities
                                         foreach (DBObject explodedObj in explodedEntities)
                                         {
-                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "0")
+                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                             {
                                                 Extents3d polyExtents = poly.GeometricExtents;
 
@@ -916,14 +909,14 @@ namespace CAD_AUTOMATION
                                                     continue;
 
                                                 if (IsRectangleWithin(selectedExtents, polyExtents))
-                                                {                                                 
+                                                {
                                                     allRectangles.Add(polyExtents);
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "0")
+                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                 {
                                     Extents3d polyExtents = poly.GeometricExtents;
 
@@ -932,37 +925,13 @@ namespace CAD_AUTOMATION
 
                                     if (IsRectangleWithin(selectedExtents, polyExtents))
                                     {
+                                        
                                         allRectangles.Add(polyExtents);
                                     }
                                 }
                             }
 
                             tr.Commit();
-                        }
-
-                        // Check each rectangle against all others
-                        foreach (var polyExtents in allRectangles)
-                        {
-                            bool isOuter = true;
-
-                            foreach (var otherExtents in allRectangles)
-                            {
-                                // Skip the same rectangle
-                                if (polyExtents.Equals(otherExtents))
-                                    continue;
-
-                                // Check if the rectangle is inside another rectangle
-                                if (IsRectangleWithin(otherExtents, polyExtents))
-                                {
-                                    isOuter = false;
-                                    break;
-                                }
-                            }
-
-                            if (isOuter)
-                            {                                
-                                outerRectangles.Add(polyExtents);
-                            }
                         }
 
                         acTrans.Commit();
@@ -974,14 +943,14 @@ namespace CAD_AUTOMATION
                         return;
                     }
 
-                    outerRectangles = outerRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+                    allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
 
-                    if (outerRectangles.Count > 0)
+                    if (allRectangles.Count > 0)
                     {
 
                         using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
                         {
-                            using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, outerRectangles.Count, true))
+                            using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
                             {
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
@@ -1001,7 +970,7 @@ namespace CAD_AUTOMATION
                                 // Create a new layout for each page
                                 using (Transaction tr = db.TransactionManager.StartTransaction())
                                 {
-                                    foreach (var polyExtents in outerRectangles)
+                                    foreach (var polyExtents in allRectangles)
                                     {
 
                                         LayoutManager layoutManager = LayoutManager.Current;
@@ -1027,63 +996,62 @@ namespace CAD_AUTOMATION
 
 
                                         // Get the block table record associated with the layout
-                                        BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+                                        BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;                                      
 
                                         foreach (ObjectId id in layoutBlock)
                                         {
                                             if (id.ObjectClass.DxfName == "VIEWPORT")
                                             {
-                                                Viewport vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-
-                                                // Calculate the center and dimensions of the extents
-                                                Point2d center = new Point2d(
-                                                    (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
-                                                    (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
-                                                );
-                                                vp.ViewCenter = center;
-                                                
-
-
-                                                // Calculate the dimensions of the A4 landscape sheet
-                                                double paperWidth = layout1.PlotPaperSize.X;
-                                                double paperHeight = layout1.PlotPaperSize.Y;
-
-                                                // Set the viewport size to match the paper size
-                                                vp.Width = paperHeight;
-                                                vp.Height = paperWidth;
-
-                                                // Calculate the center of the paper
-                                                double paperCenterX = paperHeight / 2;
-                                                double paperCenterY = paperWidth / 2;
-
-                                                // Move the viewport to the center of the paper
-                                                vp.CenterPoint = new Point3d(131.5, 100, 0);
-
-                                                // Calculate the width and height of the rectangle in model space
-                                                double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
-                                                double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
-
-                                                // Calculate the scale factors for width and height
-                                                double scaleX = paperWidth / rectWidth;
-                                                double scaleY = paperHeight / rectHeight;
-
-                                                // Choose the smaller scale factor to ensure the rectangle fits within the viewport
-                                                double scale = Math.Min(scaleX, scaleY);
-                                                scale = scale / userscale;
-                                                vp.CustomScale = scale;
-                                                
-                                                //vp.Locked = true;
+                                                Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                                                vp2.Erase();
+                                                //vp2.Visible = false;
                                             }
                                         }
 
-                                        validator.SetPlotOrigin(layout1, new Point2d(0, 0));
-                                        //validator.SetPlotWindowArea(plotSettings, plotWindowArea);
+                                        Viewport vp = new Viewport();
+                                        layoutBlock.AppendEntity(vp);
+                                        tr.AddNewlyCreatedDBObject(vp, true);
+                                        vp.SetUcsToWorld();
+
+                                        // Calculate the center and dimensions of the extents
+                                        Point2d center1 = new Point2d(
+                                            (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
+                                            (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
+                                        );
+                                        vp.ViewCenter = center1;
+                                        
+                                        double paperWidth = layout1.PlotPaperSize.X;
+                                        double paperHeight = layout1.PlotPaperSize.Y;
+
+                                        // Set the viewport size to match the paper size
+                                        vp.Width = paperHeight;
+                                        vp.Height = paperWidth;
+
+                                        // Calculate the center of the paper
+                                        double paperCenterX = paperHeight / 2;
+                                        double paperCenterY = paperWidth / 2;
+
+                                        // Move the viewport to the center of the paper
+                                        vp.CenterPoint = new Point3d(131.5, 100, 0);
+
+                                        // Calculate the width and height of the rectangle in model space
+                                        double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
+                                        double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
+
+                                        // Calculate the scale factors for width and height
+                                        double scaleX = paperWidth / rectWidth;
+                                        double scaleY = paperHeight / rectHeight;
+
+                                        // Choose the smaller scale factor to ensure the rectangle fits within the viewport
+                                        double scale = Math.Min(scaleX, scaleY);
+                                        scale = scale / userscale;
+                                        vp.CustomScale = scale;
+                                        vp.On = true;
+
                                         validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
-                                        //validator.SetPlotCentered(plotSettings, true);
-                                        //validator.SetPlotRotation(plotSettings, PlotRotation.Degrees090);
+                                        
                                         validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
 
-                                        //validator.RefreshLists(layout1);
 
                                         PlotInfo plotInfo = new PlotInfo
                                         {
@@ -1101,24 +1069,21 @@ namespace CAD_AUTOMATION
                                         }
 
                                         PlotPageInfo plotPageInfo = new PlotPageInfo();
-                                        plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == outerRectangles.Count, null);
-                                        //System.Threading.Thread.Sleep(1000);
-                                        progressDialog.SheetProgressPos = (int)((pageNumber / (double)outerRectangles.Count) * 100);
+                                        plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
+                                        progressDialog.SheetProgressPos = (int)((pageNumber / (double)allRectangles.Count) * 100);
                                         plotEngine.BeginGenerateGraphics(null);
                                         plotEngine.EndGenerateGraphics(null);
                                         plotEngine.EndPage(null);
 
                                         pageNumber++;
-                                        progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {outerRectangles.Count}");
-                                        //await Task.Run(() => Thread.Sleep(5000));
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
+                                        
                                     }
 
                                     plotEngine.EndDocument(null);
                                     plotEngine.EndPlot(null);
                                     progressDialog.OnEndPlot();
                                     progressDialog.IsVisible = false;
-
-
 
                                     tr.Commit();
                                 }
@@ -1133,7 +1098,7 @@ namespace CAD_AUTOMATION
 
                             int pageNumberToDel = 1;
 
-                            foreach (var polyExtents in outerRectangles) // Replace with your actual collection
+                            foreach (var polyExtents in allRectangles) // Replace with your actual collection
                             {
                                 string layoutName = $"Page {pageNumberToDel}";
 
@@ -1215,6 +1180,29 @@ namespace CAD_AUTOMATION
 
                 double linescale = linescaleResult.Value;
 
+                PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nPLOT WITH LINE WEIGHT OR NOT [True/False]: ");
+                lineweightOptions.Keywords.Add("True");
+                lineweightOptions.Keywords.Add("False");
+                lineweightOptions.AllowNone = true; // Allow pressing Enter without choosing
+                lineweightOptions.Message = "\nEnter 'True' or 'False' (default is 'True'): ";
+
+                PromptResult lineweightResult = ed.GetKeywords(lineweightOptions);
+
+                // Handle the default manually
+                bool plotWithLineWeight;
+                if (lineweightResult.Status == PromptStatus.OK)
+                {
+                    plotWithLineWeight = lineweightResult.StringResult == "True";
+                }
+                else if (lineweightResult.Status == PromptStatus.None)
+                {
+                    plotWithLineWeight = true; // Default to True if Enter is pressed
+                }
+                else
+                {
+                    return; // Exit on Cancel or other statuses
+                }
+
                 SaveFileDialog saveFileDialog = new SaveFileDialog
                 {
                     Title = "Select a folder",
@@ -1256,7 +1244,7 @@ namespace CAD_AUTOMATION
                 }
 
                 List<Extents3d> allRectanglesfull = new List<Extents3d>();
-                List<Extents3d> outerRectanglesfull = new List<Extents3d>();
+                //List<Extents3d> outerRectanglesfull = new List<Extents3d>();
                 Point2d minPointfull = new Point2d(0, 0);
                 Point2d maxPointfull = new Point2d(0, 0);
 
@@ -1283,7 +1271,7 @@ namespace CAD_AUTOMATION
                             {
                                 Entity entity = trfull.GetObject(objId, OpenMode.ForRead) as Entity;
 
-                                if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "0")
+                                if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                 {
                                     Extents3d polyExtents = poly.GeometricExtents;
 
@@ -1300,31 +1288,6 @@ namespace CAD_AUTOMATION
                             trfull.Commit();
                         }
 
-                        // Check each rectangle against all others
-                        foreach (var polyExtents in allRectanglesfull)
-                        {
-                            bool isOuter = true;
-
-                            foreach (var otherExtents in allRectanglesfull)
-                            {
-                                // Skip the same rectangle
-                                if (polyExtents.Equals(otherExtents))
-                                    continue;
-
-                                // Check if the rectangle is inside another rectangle
-                                if (IsRectangleWithin(otherExtents, polyExtents))
-                                {
-                                    isOuter = false;
-                                    break;
-                                }
-                            }
-
-                            if (isOuter)
-                            {
-                                outerRectanglesfull.Add(polyExtents);
-                            }
-                        }
-
                         acTransfull.Commit();
                     }
                     else
@@ -1335,14 +1298,14 @@ namespace CAD_AUTOMATION
                     }
                 }
 
-                outerRectanglesfull = outerRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
+                allRectanglesfull = allRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
 
                 int pdfnumber = 1;
 
-                foreach (var polyExtents2 in outerRectanglesfull)
+                foreach (var polyExtents2 in allRectanglesfull)
                 {
                     List<Extents3d> allRectangles = new List<Extents3d>();
-                    List<Extents3d> outerRectangles = new List<Extents3d>();
+                    //List<Extents3d> outerRectangles = new List<Extents3d>();
                     Point2d minPoint = new Point2d(0, 0);
                     Point2d maxPoint = new Point2d(0, 0);
 
@@ -1384,7 +1347,7 @@ namespace CAD_AUTOMATION
                                         // Scan for rectangles within the exploded entities
                                         foreach (DBObject explodedObj in explodedEntities)
                                         {
-                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "0")
+                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                             {
                                                 Extents3d polyExtents = poly.GeometricExtents;
 
@@ -1400,7 +1363,7 @@ namespace CAD_AUTOMATION
                                         }
                                     }
                                 }
-                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "0")
+                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                 {
                                     Extents3d polyExtents = poly.GeometricExtents;
 
@@ -1417,31 +1380,6 @@ namespace CAD_AUTOMATION
                             
 
                             tr.Commit();
-                        }
-
-                        // Check each rectangle against all others
-                        foreach (var polyExtents in allRectangles)
-                        {
-                            bool isOuter = true;
-
-                            foreach (var otherExtents in allRectangles)
-                            {
-                                // Skip the same rectangle
-                                if (polyExtents.Equals(otherExtents))
-                                    continue;
-
-                                // Check if the rectangle is inside another rectangle
-                                if (IsRectangleWithin(otherExtents, polyExtents))
-                                {
-                                    isOuter = false;
-                                    break;
-                                }
-                            }
-
-                            if (isOuter)
-                            {
-                                outerRectangles.Add(polyExtents);
-                            }
                         }
 
                         acTrans.Commit();
@@ -1466,7 +1404,7 @@ namespace CAD_AUTOMATION
                                         bool isInsideInnerRectangle = false;
 
 
-                                        foreach (var innerRect in outerRectangles)
+                                        foreach (var innerRect in allRectangles)
                                         {
                                             Point3d innerMinPoint = innerRect.MinPoint;
                                             Point3d innerMaxPoint = innerRect.MaxPoint;
@@ -1494,14 +1432,14 @@ namespace CAD_AUTOMATION
                             tr.Commit();
                         }
 
-                        outerRectangles = outerRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+                        allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
 
-                        if (outerRectangles.Count > 0)
+                        if (allRectangles.Count > 0)
                         {
 
                             using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
                             {
-                                using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, outerRectangles.Count, true))
+                                using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
                                 {
                                     progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
                                     progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
@@ -1521,7 +1459,7 @@ namespace CAD_AUTOMATION
                                     // Create a new layout for each page
                                     using (Transaction tr = db.TransactionManager.StartTransaction())
                                     {
-                                        foreach (var polyExtents in outerRectangles)
+                                        foreach (var polyExtents in allRectangles)
                                         {
 
                                             LayoutManager layoutManager = LayoutManager.Current;
@@ -1535,7 +1473,7 @@ namespace CAD_AUTOMATION
 
 
                                             Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
-                                            layout1.PrintLineweights = false;
+                                            layout1.PrintLineweights = plotWithLineWeight;
 
                                             // Set the layout page size to A4 landscape
                                             PlotSettingsValidator validator = PlotSettingsValidator.Current;
@@ -1553,61 +1491,58 @@ namespace CAD_AUTOMATION
                                             {
                                                 if (id.ObjectClass.DxfName == "VIEWPORT")
                                                 {
-                                                    Viewport vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-
-                                                    // Calculate the center and dimensions of the extents
-                                                    Point2d center = new Point2d(
-                                                        (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
-                                                        (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
-                                                    );
-                                                    vp.ViewCenter = center;
-
-                                                    // Calculate the dimensions of the A4 landscape sheet
-                                                    double paperWidth = layout1.PlotPaperSize.X;
-                                                    double paperHeight = layout1.PlotPaperSize.Y;
-
-                                                    // Set the viewport size to match the paper size
-                                                    vp.Width = paperHeight;
-                                                    vp.Height = paperWidth;
-
-                                                    // Calculate the center of the paper
-                                                    double paperCenterX = paperHeight / 2;
-                                                    double paperCenterY = paperWidth / 2;
-
-                                                    // Move the viewport to the center of the paper
-                                                    vp.CenterPoint = new Point3d(131.5, 100, 0);
-
-                                                    // Calculate the width and height of the rectangle in model space
-                                                    double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
-                                                    double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
-
-                                                    // Calculate the scale factors for width and height
-                                                    double scaleX = paperWidth / rectWidth;
-                                                    double scaleY = paperHeight / rectHeight;
-
-                                                    // Choose the smaller scale factor to ensure the rectangle fits within the viewport
-                                                    double scale = Math.Min(scaleX, scaleY);
-                                                    scale = scale / userscale;
-                                                    vp.CustomScale = scale;
-                                                    vp.Locked = true;
+                                                    Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                                                    vp2.Erase();
+                                                    //vp2.Visible = false;
                                                 }
                                             }
 
+                                            Viewport vp = new Viewport();
+                                            layoutBlock.AppendEntity(vp);
+                                            tr.AddNewlyCreatedDBObject(vp, true);
+                                            vp.SetUcsToWorld();
 
-                                            Extents2d plotWindowArea = new Extents2d(
-                                                new Point2d(polyExtents.MinPoint.X, polyExtents.MinPoint.Y),
-                                                new Point2d(polyExtents.MaxPoint.X, polyExtents.MaxPoint.Y)
+                                            // Calculate the center and dimensions of the extents
+                                            Point2d center1 = new Point2d(
+                                                (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
+                                                (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
                                             );
+                                            vp.ViewCenter = center1;
+
+                                            double paperWidth = layout1.PlotPaperSize.X;
+                                            double paperHeight = layout1.PlotPaperSize.Y;
+
+                                            // Set the viewport size to match the paper size
+                                            vp.Width = paperHeight;
+                                            vp.Height = paperWidth;
+
+                                            // Calculate the center of the paper
+                                            double paperCenterX = paperHeight / 2;
+                                            double paperCenterY = paperWidth / 2;
+
+                                            // Move the viewport to the center of the paper
+                                            vp.CenterPoint = new Point3d(131.5, 100, 0);
+
+                                            // Calculate the width and height of the rectangle in model space
+                                            double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
+                                            double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
+
+                                            // Calculate the scale factors for width and height
+                                            double scaleX = paperWidth / rectWidth;
+                                            double scaleY = paperHeight / rectHeight;
+
+                                            // Choose the smaller scale factor to ensure the rectangle fits within the viewport
+                                            double scale = Math.Min(scaleX, scaleY);
+                                            scale = scale / userscale;
+                                            vp.CustomScale = scale;
+                                            vp.On = true;
 
 
                                             validator.SetPlotOrigin(layout1, new Point2d(0, 0));
-                                            //validator.SetPlotWindowArea(plotSettings, plotWindowArea);
+                                            
                                             validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
-                                            //validator.SetPlotCentered(plotSettings, true);
-                                            //validator.SetPlotRotation(plotSettings, PlotRotation.Degrees090);
+                                            
                                             validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
-
-                                            //validator.RefreshLists(layout1);
 
                                             PlotInfo plotInfo = new PlotInfo
                                             {
@@ -1640,14 +1575,14 @@ namespace CAD_AUTOMATION
                                             }
 
                                             PlotPageInfo plotPageInfo = new PlotPageInfo();
-                                            plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == outerRectangles.Count, null);
-                                            progressDialog.SheetProgressPos = (int)((pageNumber / (double)outerRectangles.Count) * 100);
+                                            plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
+                                            progressDialog.SheetProgressPos = (int)((pageNumber / (double)allRectangles.Count) * 100);
                                             plotEngine.BeginGenerateGraphics(null);
                                             plotEngine.EndGenerateGraphics(null);
                                             plotEngine.EndPage(null);
 
                                             pageNumber++;
-                                            progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {outerRectangles.Count}");
+                                            progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
                                         }
 
                                         plotEngine.EndDocument(null);
@@ -1664,20 +1599,24 @@ namespace CAD_AUTOMATION
 
                             using (Transaction tr2 = db.TransactionManager.StartTransaction())
                             {
+                                DBDictionary layoutDict = tr2.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
+
                                 LayoutManager layoutManager = LayoutManager.Current;
 
-                                int pagenumbertodel = 1;
+                                int pageNumberToDel = 1;
 
-                                foreach (var polyExtents in outerRectangles)
+                                foreach (var polyExtents in allRectangles) // Replace with your actual collection
                                 {
+                                    string layoutName = $"Page {pageNumberToDel}";
 
-                                    string layoutName = $"Page {pagenumbertodel}";
-
-                                    if (layoutManager.LayoutExists(layoutName))
+                                    // Check if the layout exists
+                                    if (layoutDict.Contains(layoutName))
                                     {
+                                        // Delete the layout
                                         layoutManager.DeleteLayout(layoutName);
                                     }
-                                    pagenumbertodel++;
+
+                                    pageNumberToDel++;
                                 }
 
                                 tr2.Commit();
@@ -1689,7 +1628,7 @@ namespace CAD_AUTOMATION
                         
                     }
                     pdfnumber++;
-                    System.Threading.Thread.Sleep(4000);
+                    System.Threading.Thread.Sleep(2000);
                 }
 
                 db.Ltscale = oldlinescale;
@@ -1703,6 +1642,195 @@ namespace CAD_AUTOMATION
             }
 
         }
+
+        [CommandMethod("DESCRPTION")]
+        public void ENTERDESCRPTION()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            // start a transaction
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                // open the block Table for read
+                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+
+                // open the block Table Record Model space for write
+                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+
+                // Ask the user for a point
+                PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
+                PromptPointResult pointResult = ed.GetPoint(pointOptions);
+
+                if (pointResult.Status != PromptStatus.OK)
+                {
+                    return;
+                }
+
+                Point3d descPoint = pointResult.Value;
+                int offset = 30;
+
+
+                // ask the user for a word
+                PromptStringOptions Descrption = new PromptStringOptions("Enter a des: ");
+                Descrption.AllowSpaces = true;
+
+                // geting the value we typed
+                PromptResult desresult = ed.GetString(Descrption);
+                String descrption = desresult.StringResult.ToUpper();
+                String DESFINAL = $"DESCRPTION - {descrption}";
+                //MessageBox.Show(DESFINAL);
+
+
+                DBText textdesc = new DBText();
+                textdesc.Position = descPoint;
+                textdesc.Height = 15;
+                textdesc.TextString = DESFINAL;
+                textdesc.ColorIndex = 2;
+
+                // Add the text object to the model space
+                btr.AppendEntity(textdesc);
+                tr.AddNewlyCreatedDBObject(textdesc, true);
+
+
+
+
+                // for thickness
+                // ask the user for a word
+                PromptStringOptions whatthick = new PromptStringOptions("Enter a THICKNESS: ");
+
+                // geting the value we typed
+                PromptResult enteredthick = ed.GetString(whatthick);
+                String thickness = enteredthick.StringResult.ToUpper();
+                String thickfinal = $"THICKNESS - {thickness} mm";
+                //MessageBox.Show(thickfinal);
+
+
+                Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                offset = offset + 30;
+
+
+                DBText textthick = new DBText();
+                textthick.Position = thickpoint;
+                textthick.Height = 15;
+                textthick.TextString = thickfinal;
+                textthick.ColorIndex = 3;
+
+                // Add the text object to the model space
+                btr.AppendEntity(textthick);
+                tr.AddNewlyCreatedDBObject(textthick, true);
+
+
+
+                // for QUANTITY
+                // ask the user for a word
+                PromptStringOptions whatqty = new PromptStringOptions("Enter a QUANTITY: ");
+
+                // geting the value we typed
+                PromptResult enteredqty = ed.GetString(whatqty);
+                String quantity = enteredqty.StringResult.ToUpper();
+                String qtyfinal = $"QTY - {quantity} NOS";
+                //MessageBox.Show(qtyfinal);
+
+
+                Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                offset = offset + 30;
+
+
+                DBText textqty = new DBText();
+                textqty.Position = qtypoint;
+                textqty.Height = 15;
+                textqty.TextString = qtyfinal;
+                textqty.ColorIndex = 1;
+
+                // Add the text object to the model space
+                btr.AppendEntity(textqty);
+                tr.AddNewlyCreatedDBObject(textqty, true);
+
+
+
+                // for BENDING
+                // ask the user for a word
+                PromptStringOptions whatbend = new PromptStringOptions("Enter a BENDING: ");
+
+                // geting the value we typed
+                PromptResult enteredbend = ed.GetString(whatbend);
+                String bending = enteredbend.StringResult.ToUpper();
+                if (bending != null && bending != "")
+                {
+                    String bendfinal = $"BENDING - BEND {bending}";
+                    Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                    offset = offset + 30;
+
+
+                    DBText textbend = new DBText();
+                    textbend.Position = bendpoint;
+                    textbend.Height = 15;
+                    textbend.TextString = bendfinal;
+                    textbend.ColorIndex = 3;
+                    // Add the text object to the model space
+                    btr.AppendEntity(textbend);
+                    tr.AddNewlyCreatedDBObject(textbend, true);
+                }
+
+
+
+
+                // for MATERIAL
+                // ask the user for a word
+                PromptStringOptions whatmaterial = new PromptStringOptions("Enter a MATERIAL: ");
+
+                // geting the value we typed
+                PromptResult enteredmaterial = ed.GetString(whatmaterial);
+                String material = enteredmaterial.StringResult.ToUpper();
+                String materialfinal = $"MATERIAL - {material}";
+                //MessageBox.Show(bendfinal);
+
+
+                Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                offset = offset + 30;
+
+
+                DBText textmaterial = new DBText();
+                textmaterial.Position = materialpoint;
+                textmaterial.Height = 15;
+                textmaterial.TextString = materialfinal;
+                textmaterial.ColorIndex = 2;
+
+                // Add the text object to the model space
+                btr.AppendEntity(textmaterial);
+                tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+                Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+                Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+                Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+                Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+                Polyline rectangle = new Polyline();
+
+                // Add the rectangle's vertices
+                rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+                rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+                rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+                rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+                // Close the polyline to form a rectangle
+                rectangle.Closed = true;
+
+                // Set the color index
+                rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+                // Add the polyline to the model space
+                btr.AppendEntity(rectangle);
+                tr.AddNewlyCreatedDBObject(rectangle, true);
+
+
+
+                tr.Commit();
+            }
+        }
+
 
         private bool IsRectangleWithin(Extents3d outer, Extents3d inner)
         {
