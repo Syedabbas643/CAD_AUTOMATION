@@ -25,24 +25,90 @@ using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using ExcelApplication = Microsoft.Office.Interop.Excel.Application;
 using Excel = Microsoft.Office.Interop.Excel;
 using SaveFileDialog = System.Windows.Forms.SaveFileDialog;
+using Microsoft.WindowsAPICodePack.Dialogs;
 using DialogResult = System.Windows.Forms.DialogResult;
 using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.GraphicsSystem;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Diagnostics;
+using System.IO.Pipes;
+using System.Windows.Documents;
 
 namespace CAD_AUTOMATION
 {
-    public class RectangleDrawer
+    public class RectangleDrawer : IExtensionApplication
     {
         private static string lastFolderName = string.Empty;
         private static string lastFileName = string.Empty;
         private static double lastoblen;
         private static double lastobwid;
+        private static bool isEnabled = false;
+        public void Initialize()
+        {
+            
+            string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+            // Define the path to the http.exe
+            string httpExePath = Path.Combine(pluginDirectory, "http.exe");
+
+            if (File.Exists(httpExePath))
+            {
+                // Start the external http.exe with command-line argument
+                ProcessStartInfo startInfo = new ProcessStartInfo(httpExePath, "/fromautocad");
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
+
+                // Start the process (http.exe)
+                Process process = Process.Start(startInfo);
+
+                // Listen to the pipe for the message
+                Thread pipeListenerThread = new Thread(() =>
+                {
+                    try
+                    {
+                        // Create a named pipe server to listen for messages
+                        using (var pipeServer = new NamedPipeServerStream("AutoCADPipe", PipeDirection.In))
+                        {
+                            pipeServer.WaitForConnection();
+
+                            // Read the message sent by the WinForms app (http.exe)
+                            using (var reader = new StreamReader(pipeServer, Encoding.UTF8))
+                            {
+                                string message = reader.ReadLine();
+                                if (message == "OK") 
+                                {
+                                    isEnabled = true;
+                                }
+                            }
+
+                            pipeServer.Close();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"Error listening to pipe: {ex.Message}");
+                    }
+                });
+
+                pipeListenerThread.Start();
+                //process.WaitForExit();
+            }
+            else
+            {
+                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("http.exe not found in the same directory as the plugin.");
+            }
+
+        }
 
         [CommandMethod("oblong")]
         public void DrawRectangle()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             // Get the current document and database
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
@@ -125,6 +191,11 @@ namespace CAD_AUTOMATION
         [CommandMethod("enterpartnumbers")]
         public static void NumberPartNumbers()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             // Get the current document and database
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
@@ -171,6 +242,11 @@ namespace CAD_AUTOMATION
         [CommandMethod("MECHBOM")]
         public static void BOMcount()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             // Get the current document and database
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
@@ -754,6 +830,11 @@ namespace CAD_AUTOMATION
         [CommandMethod("YnotPDF")]
         public void ExportPDF()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) throw new InvalidOperationException("Active document is null.");
 
@@ -787,7 +868,7 @@ namespace CAD_AUTOMATION
 
                 // Prompt for scale number
                 PromptDoubleOptions linescaleOptions = new PromptDoubleOptions("\nEnter the scale number for line types: ");
-                linescaleOptions.DefaultValue = 0.1; // Set default value
+                linescaleOptions.DefaultValue = 0.03; // Set default value
                 linescaleOptions.AllowNegative = false; // Optional: Prevent negative values
                 linescaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
                 PromptDoubleResult linescaleResult = ed.GetDouble(linescaleOptions);
@@ -955,11 +1036,12 @@ namespace CAD_AUTOMATION
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Sheet Set Progress");
+                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
                                 progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
                                 progressDialog.LowerPlotProgressRange = 0;
-                                progressDialog.UpperPlotProgressRange = 100;
-                                progressDialog.SheetProgressPos = 0;
+                                progressDialog.UpperPlotProgressRange = allRectangles.Count;
+                                progressDialog.LowerSheetProgressRange = 0;
+                                progressDialog.UpperSheetProgressRange = allRectangles.Count;
 
                                 progressDialog.OnBeginPlot();
                                 progressDialog.IsVisible = true;
@@ -1069,15 +1151,14 @@ namespace CAD_AUTOMATION
                                         }
 
                                         PlotPageInfo plotPageInfo = new PlotPageInfo();
+                                        progressDialog.SheetProgressPos = pageNumber;
+                                        progressDialog.PlotProgressPos = pageNumber;
                                         plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
-                                        progressDialog.SheetProgressPos = (int)((pageNumber / (double)allRectangles.Count) * 100);
                                         plotEngine.BeginGenerateGraphics(null);
                                         plotEngine.EndGenerateGraphics(null);
                                         plotEngine.EndPage(null);
-
-                                        pageNumber++;
                                         progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
-                                        
+                                        pageNumber++;
                                     }
 
                                     plotEngine.EndDocument(null);
@@ -1119,7 +1200,7 @@ namespace CAD_AUTOMATION
                     }
 
                     db.Ltscale = oldlinescale;
-
+                    MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
                 }
             }
             catch (Exception ex)
@@ -1137,6 +1218,11 @@ namespace CAD_AUTOMATION
         [CommandMethod("YnotPDFALL")]
         public void ExportPDFall()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             try
             {
                 Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -1170,7 +1256,7 @@ namespace CAD_AUTOMATION
 
                 // Prompt for scale number
                 PromptDoubleOptions linescaleOptions = new PromptDoubleOptions("\nEnter the scale number for line types: ");
-                linescaleOptions.DefaultValue = 0.1; // Set default value
+                linescaleOptions.DefaultValue = 0.03; // Set default value
                 linescaleOptions.AllowNegative = false; // Optional: Prevent negative values
                 linescaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
                 PromptDoubleResult linescaleResult = ed.GetDouble(linescaleOptions);
@@ -1203,21 +1289,21 @@ namespace CAD_AUTOMATION
                     return; // Exit on Cancel or other statuses
                 }
 
-                SaveFileDialog saveFileDialog = new SaveFileDialog
+                string lastUsedFolder = null;
+                string folderPath = null;
+
+                using (var dialog = new CommonOpenFileDialog
                 {
                     Title = "Select a folder",
-                    Filter = "Folders|\n", // Trick to allow folder selection
-                    FileName = "Select this folder", // Dummy file name
-                    CheckFileExists = false,
-                    CheckPathExists = true
-                };
-
-                // Show the dialog and get result
-                if (saveFileDialog.ShowDialog() != DialogResult.OK)
+                    IsFolderPicker = true, // Enables folder selection
+                    RestoreDirectory = true // Restores the selected directory for future use
+                })
+                if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
                 {
-                    return; // Exit if no folder is selected
+                        folderPath = dialog.FileName;
+                        lastUsedFolder = folderPath;
                 }
-                string folderPath = Path.GetDirectoryName(saveFileDialog.FileName);
+                
 
                 double oldlinescale = db.Ltscale;
 
@@ -1301,23 +1387,20 @@ namespace CAD_AUTOMATION
                 allRectanglesfull = allRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
 
                 int pdfnumber = 1;
+                int pagecount = 1;
+                int maxpagecount = 0;
 
-                foreach (var polyExtents2 in allRectanglesfull)
+                foreach (var polyExtents3 in allRectanglesfull)
                 {
-                    List<Extents3d> allRectangles = new List<Extents3d>();
-                    //List<Extents3d> outerRectangles = new List<Extents3d>();
-                    Point2d minPoint = new Point2d(0, 0);
-                    Point2d maxPoint = new Point2d(0, 0);
-
-                    string pdfName = null;
-                    bool namefound = false;
-
                     using (Transaction acTrans = doc.TransactionManager.StartTransaction())
                     {
-
-                        Extents3d selectedExtents = polyExtents2;
-                        minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
-                        maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+                        List<Extents3d> allRectanglescount = new List<Extents3d>();
+                        //List<Extents3d> outerRectangles = new List<Extents3d>();
+                        Point2d minPointcount = new Point2d(0, 0);
+                        Point2d maxPointcount = new Point2d(0, 0);
+                        Extents3d selectedExtents = polyExtents3;
+                        minPointcount = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                        maxPointcount = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
 
 
                         using (Transaction tr = db.TransactionManager.StartTransaction())
@@ -1357,7 +1440,7 @@ namespace CAD_AUTOMATION
 
                                                 if (IsRectangleWithin(selectedExtents, polyExtents))
                                                 {
-                                                    allRectangles.Add(polyExtents);
+                                                    maxpagecount++;
                                                 }
                                             }
                                         }
@@ -1372,268 +1455,360 @@ namespace CAD_AUTOMATION
 
                                     if (IsRectangleWithin(selectedExtents, polyExtents))
                                     {
-                                        allRectangles.Add(polyExtents);
+                                        maxpagecount++;
                                     }
                                 }
                             }
 
-                            
+
 
                             tr.Commit();
+
+
                         }
 
                         acTrans.Commit();
+                    }
+                }
 
-                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                foreach (var polyExtents2 in allRectanglesfull)
+                {
+                        List<Extents3d> allRectangles = new List<Extents3d>();
+                        //List<Extents3d> outerRectangles = new List<Extents3d>();
+                        Point2d minPoint = new Point2d(0, 0);
+                        Point2d maxPoint = new Point2d(0, 0);
+
+                        string pdfName = null;
+                        bool namefound = false;
+
+                        using (Transaction acTrans = doc.TransactionManager.StartTransaction())
                         {
-                            BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                            BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                            Extents3d selectedExtents = polyExtents2;
+                            minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
 
 
-                            foreach (ObjectId entId in btr)
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
                             {
-                                Entity ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
 
-                                if (ent is DBText dbText)
+                                //string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
                                 {
-                                    Point3d insertionPoint = dbText.Position; ;
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
 
-                                    if (insertionPoint.X >= minPoint.X && insertionPoint.X <= maxPoint.X &&
-                                        insertionPoint.Y >= minPoint.Y && insertionPoint.Y <= maxPoint.Y)
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
                                     {
-                                        bool isInsideInnerRectangle = false;
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
 
-
-                                        foreach (var innerRect in allRectangles)
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
                                         {
-                                            Point3d innerMinPoint = innerRect.MinPoint;
-                                            Point3d innerMaxPoint = innerRect.MaxPoint;
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
 
-                                            if (insertionPoint.X >= innerMinPoint.X && insertionPoint.X <= innerMaxPoint.X &&
-                                                insertionPoint.Y >= innerMinPoint.Y && insertionPoint.Y <= innerMaxPoint.Y)
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
                                             {
-                                                isInsideInnerRectangle = true;
-                                                break;
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                                {
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        allRectangles.Add(polyExtents);
+                                                    }
+                                                }
                                             }
                                         }
+                                    }
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
 
-                                        if (!isInsideInnerRectangle && !namefound)
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
                                         {
-                                            string todayDate = DateTime.Now.ToString("dd-MM-yyyy");
-                                            string timeWithSeconds = DateTime.Now.ToString("HH-mm-ss");
-                                            pdfName = $"{dbText.TextString}-GA-{todayDate}-{timeWithSeconds}";
-                                            namefound = true;
-
+                                            allRectangles.Add(polyExtents);
                                         }
                                     }
                                 }
+
+
+
+                                tr.Commit();
                             }
 
-                            tr.Commit();
-                        }
+                            acTrans.Commit();
 
-                        allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
-
-                        if (allRectangles.Count > 0)
-                        {
-
-                            using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
                             {
-                                using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+
+                                foreach (ObjectId entId in btr)
                                 {
-                                    progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
-                                    progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
-                                    progressDialog.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
-                                    progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Sheet Set Progress");
-                                    progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
-                                    progressDialog.LowerPlotProgressRange = 0;
-                                    progressDialog.UpperPlotProgressRange = 100;
-                                    progressDialog.SheetProgressPos = 0;
+                                    Entity ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
 
-                                    progressDialog.OnBeginPlot();
-                                    progressDialog.IsVisible = true;
-
-                                    int pageNumber = 1;
-
-                                    plotEngine.BeginPlot(progressDialog, null);
-                                    // Create a new layout for each page
-                                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                                    if (ent is DBText dbText)
                                     {
-                                        foreach (var polyExtents in allRectangles)
+                                        Point3d insertionPoint = dbText.Position; ;
+
+                                        if (insertionPoint.X >= minPoint.X && insertionPoint.X <= maxPoint.X &&
+                                            insertionPoint.Y >= minPoint.Y && insertionPoint.Y <= maxPoint.Y)
                                         {
-
-                                            LayoutManager layoutManager = LayoutManager.Current;
-                                            Layout newLayout = new Layout();
-                                            newLayout.LayoutName = $"Page {pageNumber}";
-                                            layoutManager.CreateLayout(newLayout.LayoutName);
-                                            layoutManager.CurrentLayout = newLayout.LayoutName;
-
-                                            // Get the new layout's ID
-                                            ObjectId newLayoutId = LayoutManager.Current.GetLayoutId($"Page {pageNumber}");
+                                            bool isInsideInnerRectangle = false;
 
 
-                                            Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
-                                            layout1.PrintLineweights = plotWithLineWeight;
-
-                                            // Set the layout page size to A4 landscape
-                                            PlotSettingsValidator validator = PlotSettingsValidator.Current;
-                                            validator.SetPlotConfigurationName(layout1, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
-                                            validator.SetPlotPaperUnits(layout1, PlotPaperUnit.Millimeters);
-                                            validator.SetPlotRotation(layout1, PlotRotation.Degrees090);
-                                            validator.SetCurrentStyleSheet(layout1, "Monochrome.ctb");
-
-
-
-                                            // Get the block table record associated with the layout
-                                            BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
-
-                                            foreach (ObjectId id in layoutBlock)
+                                            foreach (var innerRect in allRectangles)
                                             {
-                                                if (id.ObjectClass.DxfName == "VIEWPORT")
+                                                Point3d innerMinPoint = innerRect.MinPoint;
+                                                Point3d innerMaxPoint = innerRect.MaxPoint;
+
+                                                if (insertionPoint.X >= innerMinPoint.X && insertionPoint.X <= innerMaxPoint.X &&
+                                                    insertionPoint.Y >= innerMinPoint.Y && insertionPoint.Y <= innerMaxPoint.Y)
                                                 {
-                                                    Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-                                                    vp2.Erase();
-                                                    //vp2.Visible = false;
+                                                    isInsideInnerRectangle = true;
+                                                    break;
                                                 }
                                             }
 
-                                            Viewport vp = new Viewport();
-                                            layoutBlock.AppendEntity(vp);
-                                            tr.AddNewlyCreatedDBObject(vp, true);
-                                            vp.SetUcsToWorld();
-
-                                            // Calculate the center and dimensions of the extents
-                                            Point2d center1 = new Point2d(
-                                                (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
-                                                (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
-                                            );
-                                            vp.ViewCenter = center1;
-
-                                            double paperWidth = layout1.PlotPaperSize.X;
-                                            double paperHeight = layout1.PlotPaperSize.Y;
-
-                                            // Set the viewport size to match the paper size
-                                            vp.Width = paperHeight;
-                                            vp.Height = paperWidth;
-
-                                            // Calculate the center of the paper
-                                            double paperCenterX = paperHeight / 2;
-                                            double paperCenterY = paperWidth / 2;
-
-                                            // Move the viewport to the center of the paper
-                                            vp.CenterPoint = new Point3d(131.5, 100, 0);
-
-                                            // Calculate the width and height of the rectangle in model space
-                                            double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
-                                            double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
-
-                                            // Calculate the scale factors for width and height
-                                            double scaleX = paperWidth / rectWidth;
-                                            double scaleY = paperHeight / rectHeight;
-
-                                            // Choose the smaller scale factor to ensure the rectangle fits within the viewport
-                                            double scale = Math.Min(scaleX, scaleY);
-                                            scale = scale / userscale;
-                                            vp.CustomScale = scale;
-                                            vp.On = true;
-
-
-                                            validator.SetPlotOrigin(layout1, new Point2d(0, 0));
-                                            
-                                            validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
-                                            
-                                            validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
-
-                                            PlotInfo plotInfo = new PlotInfo
+                                            if (!isInsideInnerRectangle && !namefound)
                                             {
-                                                Layout = newLayoutId,
-                                                OverrideSettings = layout1
-                                            };
+                                                string todayDate = DateTime.Now.ToString("dd-MM-yyyy");
+                                                string timehour = DateTime.Now.ToString("HH");
+                                                string timemin = DateTime.Now.ToString("mm");
+                                                pdfName = $"{dbText.TextString}-GA-{todayDate}_{timehour}H-{timemin}m";
+                                                namefound = true;
 
-                                            PlotInfoValidator plotInfoValidator = new PlotInfoValidator();
-                                            plotInfoValidator.MediaMatchingPolicy = MatchingPolicy.MatchEnabled;
-                                            plotInfoValidator.Validate(plotInfo);
-
-                                            // Construct file path (with a default name)
-
-                                            string fileName = "pdf.pdf";
-
-                                            if (pdfName != null)
-                                            {
-                                                fileName = $"{pdfName}.pdf";
                                             }
-                                            else
+                                        }
+                                    }
+                                }
+
+                                tr.Commit();
+                            }
+
+                            allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+
+                            if (allRectangles.Count > 0)
+                            {
+
+                                using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
+                                {
+                                    using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
+                                    {
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
+                                        progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
+                                        progressDialog.LowerPlotProgressRange = 0;
+                                        progressDialog.UpperPlotProgressRange = maxpagecount;
+                                        progressDialog.LowerSheetProgressRange = 0;
+                                        progressDialog.UpperSheetProgressRange = allRectangles.Count;
+
+                                        progressDialog.OnBeginPlot();
+                                        progressDialog.IsVisible = true;
+
+                                        int pageNumber = 1;
+
+                                        plotEngine.BeginPlot(progressDialog, null);
+                                        // Create a new layout for each page
+                                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                                        {
+                                            foreach (var polyExtents in allRectangles)
                                             {
-                                                fileName = $"{pdfnumber}.pdf";
+
+                                                LayoutManager layoutManager = LayoutManager.Current;
+                                                Layout newLayout = new Layout();
+                                                newLayout.LayoutName = $"Page {pageNumber}";
+                                                layoutManager.CreateLayout(newLayout.LayoutName);
+                                                layoutManager.CurrentLayout = newLayout.LayoutName;
+
+                                                // Get the new layout's ID
+                                                ObjectId newLayoutId = LayoutManager.Current.GetLayoutId($"Page {pageNumber}");
+
+
+                                                Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
+                                                layout1.PrintLineweights = plotWithLineWeight;
+
+                                                // Set the layout page size to A4 landscape
+                                                PlotSettingsValidator validator = PlotSettingsValidator.Current;
+                                                validator.SetPlotConfigurationName(layout1, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                                validator.SetPlotPaperUnits(layout1, PlotPaperUnit.Millimeters);
+                                                validator.SetPlotRotation(layout1, PlotRotation.Degrees090);
+                                                validator.SetCurrentStyleSheet(layout1, "Monochrome.ctb");
+
+
+
+                                                // Get the block table record associated with the layout
+                                                BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+
+                                                foreach (ObjectId id in layoutBlock)
+                                                {
+                                                    if (id.ObjectClass.DxfName == "VIEWPORT")
+                                                    {
+                                                        Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                                                        vp2.Erase();
+                                                        //vp2.Visible = false;
+                                                    }
+                                                }
+
+                                                Viewport vp = new Viewport();
+                                                layoutBlock.AppendEntity(vp);
+                                                tr.AddNewlyCreatedDBObject(vp, true);
+                                                vp.SetUcsToWorld();
+
+                                                // Calculate the center and dimensions of the extents
+                                                Point2d center1 = new Point2d(
+                                                    (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
+                                                    (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
+                                                );
+                                                vp.ViewCenter = center1;
+
+                                                double paperWidth = layout1.PlotPaperSize.X;
+                                                double paperHeight = layout1.PlotPaperSize.Y;
+
+                                                // Set the viewport size to match the paper size
+                                                vp.Width = paperHeight;
+                                                vp.Height = paperWidth;
+
+                                                // Calculate the center of the paper
+                                                double paperCenterX = paperHeight / 2;
+                                                double paperCenterY = paperWidth / 2;
+
+                                                // Move the viewport to the center of the paper
+                                                vp.CenterPoint = new Point3d(131.5, 100, 0);
+
+                                                // Calculate the width and height of the rectangle in model space
+                                                double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
+                                                double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
+
+                                                // Calculate the scale factors for width and height
+                                                double scaleX = paperWidth / rectWidth;
+                                                double scaleY = paperHeight / rectHeight;
+
+                                                // Choose the smaller scale factor to ensure the rectangle fits within the viewport
+                                                double scale = Math.Min(scaleX, scaleY);
+                                                scale = scale / userscale;
+                                                vp.CustomScale = scale;
+                                                vp.On = true;
+
+
+                                                validator.SetPlotOrigin(layout1, new Point2d(0, 0));
+
+                                                validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
+
+                                                validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
+
+                                                PlotInfo plotInfo = new PlotInfo
+                                                {
+                                                    Layout = newLayoutId,
+                                                    OverrideSettings = layout1
+                                                };
+
+                                                PlotInfoValidator plotInfoValidator = new PlotInfoValidator();
+                                                plotInfoValidator.MediaMatchingPolicy = MatchingPolicy.MatchEnabled;
+                                                plotInfoValidator.Validate(plotInfo);
+
+                                                // Construct file path (with a default name)
+
+                                                string fileName = "pdf.pdf";
+
+                                                if (pdfName != null)
+                                                {
+                                                    fileName = $"{pdfName}.pdf";
+                                                }
+                                                else
+                                                {
+                                                    fileName = $"{pdfnumber}.pdf";
+                                                }
+
+                                                string pdfPath = Path.Combine(folderPath, fileName);
+
+                                                if (pageNumber == 1)
+                                                {
+                                                    plotEngine.BeginDocument(plotInfo, doc.Name, null, 1, true, pdfPath);
+                                                }
+
+                                                PlotPageInfo plotPageInfo = new PlotPageInfo();
+                                                progressDialog.SheetProgressPos = pageNumber;
+                                                progressDialog.PlotProgressPos = pagecount;
+                                                plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
+                                                plotEngine.BeginGenerateGraphics(null);
+                                                plotEngine.EndGenerateGraphics(null);
+                                                plotEngine.EndPage(null);
+                                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
+                                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, $"Processing Total page {pagecount} of {maxpagecount}");
+                                                pageNumber++;
+                                                pagecount++;
+
                                             }
 
-                                            string pdfPath = Path.Combine(folderPath, fileName);
+                                            plotEngine.EndDocument(null);
+                                            plotEngine.EndPlot(null);
+                                            progressDialog.OnEndPlot();
+                                            progressDialog.IsVisible = false;
 
-                                            if (pageNumber == 1)
-                                            {
-                                                plotEngine.BeginDocument(plotInfo, doc.Name, null, 1, true, pdfPath);
-                                            }
 
-                                            PlotPageInfo plotPageInfo = new PlotPageInfo();
-                                            plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
-                                            progressDialog.SheetProgressPos = (int)((pageNumber / (double)allRectangles.Count) * 100);
-                                            plotEngine.BeginGenerateGraphics(null);
-                                            plotEngine.EndGenerateGraphics(null);
-                                            plotEngine.EndPage(null);
 
-                                            pageNumber++;
-                                            progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
+                                            tr.Commit();
+                                        }
+                                    }
+                                }
+
+                                using (Transaction tr2 = db.TransactionManager.StartTransaction())
+                                {
+                                    DBDictionary layoutDict = tr2.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
+
+                                    LayoutManager layoutManager = LayoutManager.Current;
+
+                                    int pageNumberToDel = 1;
+
+                                    foreach (var polyExtents in allRectangles) // Replace with your actual collection
+                                    {
+                                        string layoutName = $"Page {pageNumberToDel}";
+
+                                        // Check if the layout exists
+                                        if (layoutDict.Contains(layoutName))
+                                        {
+                                            // Delete the layout
+                                            layoutManager.DeleteLayout(layoutName);
                                         }
 
-                                        plotEngine.EndDocument(null);
-                                        plotEngine.EndPlot(null);
-                                        progressDialog.OnEndPlot();
-                                        progressDialog.IsVisible = false;
-
-
-
-                                        tr.Commit();
+                                        pageNumberToDel++;
                                     }
+
+                                    tr2.Commit();
+
+                                    layoutManager.CurrentLayout = "MODEL";
                                 }
                             }
 
-                            using (Transaction tr2 = db.TransactionManager.StartTransaction())
-                            {
-                                DBDictionary layoutDict = tr2.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
 
-                                LayoutManager layoutManager = LayoutManager.Current;
-
-                                int pageNumberToDel = 1;
-
-                                foreach (var polyExtents in allRectangles) // Replace with your actual collection
-                                {
-                                    string layoutName = $"Page {pageNumberToDel}";
-
-                                    // Check if the layout exists
-                                    if (layoutDict.Contains(layoutName))
-                                    {
-                                        // Delete the layout
-                                        layoutManager.DeleteLayout(layoutName);
-                                    }
-
-                                    pageNumberToDel++;
-                                }
-
-                                tr2.Commit();
-
-                                layoutManager.CurrentLayout = "MODEL";
-                            }
                         }
-
-                        
+                        pdfnumber++;
+                        System.Threading.Thread.Sleep(2000);
                     }
-                    pdfnumber++;
-                    System.Threading.Thread.Sleep(2000);
-                }
 
-                db.Ltscale = oldlinescale;
+                    db.Ltscale = oldlinescale;
+                    MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
+
                 
-
             }
             catch (Exception ex)
             {
@@ -1643,9 +1818,14 @@ namespace CAD_AUTOMATION
 
         }
 
-        [CommandMethod("DESCRPTION")]
+        [CommandMethod("DESCRIPTION")]
         public void ENTERDESCRPTION()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
             Editor ed = doc.Editor;
@@ -1679,7 +1859,7 @@ namespace CAD_AUTOMATION
                 // geting the value we typed
                 PromptResult desresult = ed.GetString(Descrption);
                 String descrption = desresult.StringResult.ToUpper();
-                String DESFINAL = $"DESCRPTION - {descrption}";
+                String DESFINAL = $"DESCRIPTION - {descrption}";
                 //MessageBox.Show(DESFINAL);
 
 
@@ -1831,11 +2011,366 @@ namespace CAD_AUTOMATION
             }
         }
 
+        [CommandMethod("GaMeR")]
+        public static void HelloAutoCAD()
+        {
+            // Initialize AutoCAD application
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+            try
+            {
+                var acadApp = Application.AcadApplication as dynamic;
+                if (acadApp == null)
+                {
+                    MessageBox.Show("AutoCAD is not running.");
+                    return;
+                }
+                Document doc = Application.DocumentManager.MdiActiveDocument;
+                Database db = doc.Database;
+                Editor editor = doc.Editor;
+
+                
+                string blockName = null;
+
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockTable bt = (BlockTable)db.BlockTableId.GetObject(OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);
+
+                    PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
+                    promptOptions.SetRejectMessage("\nYou can only select a block.");
+                    promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
+
+                    // Get the user input
+                    PromptEntityResult result = editor.GetEntity(promptOptions);
+
+                    // Check if the user selected a valid entity
+                    if (result.Status == PromptStatus.OK)
+                    {
+                        // Open the selected object and check if it's a BlockReference
+                        ObjectId objectId = result.ObjectId;
+                        BlockReference block = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
+                        blockName = block.Name;
+   
+                    }
+                    else
+                    {
+                        MessageBox.Show("Selection was not successful or the user canceled.");
+                    }
+                    // Ask the user for a point
+                    PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
+                    PromptPointResult pointResult = editor.GetPoint(pointOptions);
+
+                    if (pointResult.Status != PromptStatus.OK)
+                    {
+                        return;
+                    }
+
+                    Point3d descPoint = pointResult.Value;
+
+                    Processdoor(blockName, descPoint);
+
+
+                    tr.Commit();
+                }
+                editor.Command("DESCRIPTION");
+
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            
+
+        }
+
+        public static void Processdoor(string blockname , Point3d placepoint)
+        {
+            // Get the current AutoCAD document and database
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            Editor editor = doc.Editor;
+
+            var config = new System.Collections.Specialized.NameValueCollection();
+            string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+            // Define the path to the http.exe
+            string iniFilePath = Path.Combine(pluginDirectory, "gi_config_in.ini");
+
+            if (File.Exists(iniFilePath))
+            {
+                var lines = File.ReadAllLines(iniFilePath);
+                foreach (var line in lines)
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2)
+                    {
+                        config[parts[0].Trim()] = parts[1].Trim();
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("\nConfiguration file not found: " + iniFilePath);
+                return;
+            }
+
+            // Read specific configuration values
+            string inches = config["inches"];
+            double inchx = Convert.ToDouble(config["inches_size_x"]);
+            double inchy = Convert.ToDouble(config["inches_size_y"]);
+            double inchclear = Convert.ToDouble(config["inches_clearence_y"]);
+            string needtext = config["text_box"];
+            double dclearx = Convert.ToDouble(config["door_clearence_x"]);
+            double dcleary = Convert.ToDouble(config["door_clearence_y"]);
+            double dclearmid = Convert.ToDouble(config["door_clearence_mid"]);
+            double foldlength = Convert.ToDouble(config["folding_lenght"]);
+            double thick = Convert.ToDouble(config["door_thick"]);
+
+            string blockName = blockname;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                BlockTable blockTable = (BlockTable)db.BlockTableId.GetObject(OpenMode.ForRead);
+
+                // Get the block definition using the block name
+                if (blockTable.Has(blockName))
+                {
+                    BlockTableRecord block = (BlockTableRecord)blockTable[blockName].GetObject(OpenMode.ForRead);
+                    BlockTableRecord modelSpace = (BlockTableRecord)tr.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    List<double> lineLengths = new List<double>();
+
+                    // Iterate over the block entities and count lines
+                    foreach (ObjectId entityId in block)
+                    {
+                        Entity entity = (Entity)entityId.GetObject(OpenMode.ForRead);
+
+                        // Check if the entity is a line
+                        if (entity is Line)
+                        {
+                            Line line = (Line)entity;
+                            lineLengths.Add(line.Length);
+                        }
+                    }
+
+                    // Assuming there are at least two lines in the block, otherwise, handle the exception
+                    if (lineLengths.Count >= 2)
+                    {
+                        // User inputs (example, you would retrieve these from your config or user input)
+                        int length = (int)lineLengths[0];
+                        int width = (int)lineLengths[1];
+
+                        double c = placepoint.Y;
+                        double lx = placepoint.X;
+                        double ly = placepoint.Y;
+
+                        double fold = foldlength;
+                        double fold1 = fold - thick;
+                        double off = thick * 2;
+                        double len = length + fold1 + lx;
+                        double wid = width + fold1;
+
+                        if(inches == "y")
+                        {
+                            if (width >= 650)
+                            {
+                                
+                                Point3d p1 = new Point3d(lx + fold1, ly, 0);
+                                Point3d p2 = new Point3d(len - off, ly, 0);
+                                Point3d p3 = new Point3d(p2.X, fold1 + ly, 0);
+                                Point3d p4 = new Point3d(p2.X + fold1, p3.Y, 0);
+                                Point3d p5 = new Point3d(p4.X, wid - off + ly, 0);
+                                Point3d p6 = new Point3d(p2.X, p5.Y, 0);
+                                Point3d p7 = new Point3d(p2.X, p5.Y + fold1, 0);
+                                Point3d p8 = new Point3d(p1.X, p7.Y, 0);
+                                Point3d p9 = new Point3d(p1.X, p5.Y, 0);
+                                Point3d p10 = new Point3d(lx, p5.Y, 0);
+                                Point3d p11 = new Point3d(lx, p3.Y, 0);
+                                Point3d p12 = new Point3d(p1.X, p3.Y, 0);
+
+                                // For inches 
+                                Point3d p13 = new Point3d(lx, p3.Y + inchclear - thick, 0);
+                                Point3d p14 = new Point3d(lx + fold1 + inchx - thick, p13.Y, 0);
+                                Point3d p15 = new Point3d(p14.X, p13.Y + inchy, 0); 
+                                Point3d p16 = new Point3d(lx, p15.Y, 0);
+                                Point3d p17 = new Point3d(lx, (width / 2) - (inchy / 2) + ly + fold1, 0); 
+                                Point3d p18 = new Point3d(lx, p17.Y + inchy, 0); 
+                                Point3d p19 = new Point3d(lx, width - thick - inchclear - inchy + ly + fold1, 0); 
+                                Point3d p20 = new Point3d(lx, p19.Y + inchy, 0);
+
+                                Point3d p21 = new Point3d(p1.X, p13.Y, 0);
+                                Point3d p22 = new Point3d(p1.X, p15.Y, 0);
+                                Point3d p23 = new Point3d(p1.X, p17.Y, 0);
+                                Point3d p24 = new Point3d(p1.X, p18.Y, 0);
+                                Point3d p25 = new Point3d(p1.X, p19.Y, 0);
+                                Point3d p26 = new Point3d(p1.X, p20.Y, 0);
+
+                                // Drawing rectangle
+                                Line line1 = new Line(p1, p2);
+                                Line line2 = new Line(p2, p3);
+                                Line line3 = new Line(p3, p4);
+                                Line line4 = new Line(p4, p5);
+                                Line line5 = new Line(p5, p6);
+                                Line line6 = new Line(p6, p7);
+                                Line line7 = new Line(p7, p8);
+                                Line line8 = new Line(p8, p9);
+                                Line line9 = new Line(p9, p10);
+                                Line line11 = new Line(p11, p12);
+                                Line line12 = new Line(p12, p1);
+                                Line line17 = new Line(p11, p13);
+                                Line line18 = new Line(p13, p14);
+                                Line line19 = new Line(p14, p15);
+                                Line line20 = new Line(p15, p16);
+                                Line line21 = new Line(p16, p17);
+
+                                Line line22 = new Line(p13, p14);
+                                modelSpace.AppendEntity(line22);
+                                tr.AddNewlyCreatedDBObject(line22, true);
+                                Line line23 = new Line(p14, p15);
+                                modelSpace.AppendEntity(line23);
+                                tr.AddNewlyCreatedDBObject(line23, true);
+                                Line line24 = new Line(p15, p16);
+                                modelSpace.AppendEntity(line24);
+                                tr.AddNewlyCreatedDBObject(line24, true);
+                                Vector3d moveVector = new Vector3d(0,p17.Y - p13.Y, 0);
+                                line22.TransformBy(Matrix3d.Displacement(moveVector));
+                                line23.TransformBy(Matrix3d.Displacement(moveVector));
+                                line24.TransformBy(Matrix3d.Displacement(moveVector));
+                                Line line25 = new Line(p18, p19);
+                                modelSpace.AppendEntity(line25);
+                                tr.AddNewlyCreatedDBObject(line25, true);
+                                Line line26 = new Line(p13, p14);
+                                modelSpace.AppendEntity(line26);
+                                tr.AddNewlyCreatedDBObject(line26, true);
+                                Line line27 = new Line(p14, p15);
+                                modelSpace.AppendEntity(line27);
+                                tr.AddNewlyCreatedDBObject(line27, true);
+                                Line line28 = new Line(p15, p16);
+                                modelSpace.AppendEntity(line28);
+                                tr.AddNewlyCreatedDBObject(line28, true);
+                                Vector3d moveVector2 = new Vector3d(0, p19.Y - p13.Y, 0);
+                                line26.TransformBy(Matrix3d.Displacement(moveVector2));
+                                line27.TransformBy(Matrix3d.Displacement(moveVector2));
+                                line28.TransformBy(Matrix3d.Displacement(moveVector2));
+                                Line line29 = new Line(p20, p10);
+                                modelSpace.AppendEntity(line29);
+                                tr.AddNewlyCreatedDBObject(line29, true);
+                                Line line13 = new Line(p12, p3);
+                                modelSpace.AppendEntity(line13);
+                                tr.AddNewlyCreatedDBObject(line13, true);
+                                line13.ColorIndex = 12;
+                                Line line14 = new Line(p3, p6);
+                                modelSpace.AppendEntity(line14);
+                                tr.AddNewlyCreatedDBObject(line14, true);
+                                line14.ColorIndex = 12;
+                                Line line15 = new Line(p6, p9);
+                                modelSpace.AppendEntity(line15);
+                                tr.AddNewlyCreatedDBObject(line15, true);
+                                line15.ColorIndex = 12;
+                                Line line30 = new Line(p12, p21);
+                                modelSpace.AppendEntity(line30);
+                                tr.AddNewlyCreatedDBObject(line30, true);
+                                line30.ColorIndex = 12;
+                                Line line31 = new Line(p22, p23);
+                                modelSpace.AppendEntity(line31);
+                                tr.AddNewlyCreatedDBObject(line31, true);
+                                line31.ColorIndex = 12;
+                                Line line32 = new Line(p24, p25);
+                                modelSpace.AppendEntity(line32);
+                                tr.AddNewlyCreatedDBObject(line32, true);
+                                line32.ColorIndex = 12;
+                                Line line33 = new Line(p26, p9);
+                                modelSpace.AppendEntity(line33);
+                                tr.AddNewlyCreatedDBObject(line33, true);
+                                line33.ColorIndex = 12;
+                                // Add lines to model space
+                                modelSpace.AppendEntity(line1);
+                                modelSpace.AppendEntity(line2);
+                                modelSpace.AppendEntity(line3);
+                                modelSpace.AppendEntity(line4);
+                                modelSpace.AppendEntity(line5);
+                                modelSpace.AppendEntity(line6);
+                                modelSpace.AppendEntity(line7);
+                                modelSpace.AppendEntity(line8);
+                                modelSpace.AppendEntity(line9);
+                                modelSpace.AppendEntity(line11);
+                                modelSpace.AppendEntity(line12);
+                                modelSpace.AppendEntity(line17);
+                                modelSpace.AppendEntity(line18);
+                                modelSpace.AppendEntity(line19);
+                                modelSpace.AppendEntity(line20);
+                                modelSpace.AppendEntity(line21);
+
+                                // Commit the transaction
+                                tr.AddNewlyCreatedDBObject(line1, true);
+                                tr.AddNewlyCreatedDBObject(line2, true);
+                                tr.AddNewlyCreatedDBObject(line3, true);
+                                tr.AddNewlyCreatedDBObject(line4, true);
+                                tr.AddNewlyCreatedDBObject(line5, true);
+                                tr.AddNewlyCreatedDBObject(line6, true);
+                                tr.AddNewlyCreatedDBObject(line7, true);
+                                tr.AddNewlyCreatedDBObject(line8, true);
+                                tr.AddNewlyCreatedDBObject(line9, true);
+                                tr.AddNewlyCreatedDBObject(line11, true);
+                                tr.AddNewlyCreatedDBObject(line12, true);
+                                tr.AddNewlyCreatedDBObject(line17, true);
+                                tr.AddNewlyCreatedDBObject(line18, true);
+                                tr.AddNewlyCreatedDBObject(line19, true);
+                                tr.AddNewlyCreatedDBObject(line20, true);
+                                tr.AddNewlyCreatedDBObject(line21, true);
+                            }
+                            else if (width >=200)
+                            {
+
+                            }
+                            else
+                            {
+
+                            }
+                        }
+                        else
+                        {
+                            if (width >= 650)
+                            {
+
+                            }
+                            else if (width >= 200)
+                            {
+
+                            }
+                            else
+                            {
+
+                            }
+                        }
+                    }
+                    else
+                    {
+                        editor.WriteMessage("\nBlock does not contain enough lines.");
+                    }
+                }
+                else
+                {
+                    editor.WriteMessage("\nBlock not found.");
+                }
+
+                tr.Commit();
+            }
+           
+        }
 
         private bool IsRectangleWithin(Extents3d outer, Extents3d inner)
         {
             return outer.MinPoint.X <= inner.MinPoint.X && outer.MinPoint.Y <= inner.MinPoint.Y &&
                    outer.MaxPoint.X >= inner.MaxPoint.X && outer.MaxPoint.Y >= inner.MaxPoint.Y;
+        }
+
+        public void Terminate()
+        {
+            
         }
 
     }
