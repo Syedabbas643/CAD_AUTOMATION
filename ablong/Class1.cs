@@ -34,6 +34,8 @@ using System.Threading;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Windows.Documents;
+using System.Windows.Shapes;
+using Path = System.IO.Path;
 
 namespace CAD_AUTOMATION
 {
@@ -2011,7 +2013,7 @@ namespace CAD_AUTOMATION
             }
         }
 
-        [CommandMethod("GaMeR")]
+        [CommandMethod("DOOR")]
         public static void HelloAutoCAD()
         {
             // Initialize AutoCAD application
@@ -2084,6 +2086,31 @@ namespace CAD_AUTOMATION
                 MessageBox.Show(ex.Message);
             }
             
+
+        }
+
+        [CommandMethod("GaMeR")]
+        public static void HelloAutoCAD2()
+        {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            Editor editor = doc.Editor;
+            PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
+            PromptPointResult pointResult = editor.GetPoint(pointOptions);
+
+            if (pointResult.Status != PromptStatus.OK)
+            {
+                return;
+            }
+            Point3d descPoint = pointResult.Value;
+            Form1 myForm = new Form1(descPoint);
+            myForm.ShowDialog();
+
 
         }
 
@@ -2173,23 +2200,23 @@ namespace CAD_AUTOMATION
                         double len = length + fold1 + lx;
                         double wid = width + fold1;
 
-                        if(inches == "y")
+                        Point3d p1 = new Point3d(lx + fold1, ly, 0);
+                        Point3d p2 = new Point3d(len - off, ly, 0);
+                        Point3d p3 = new Point3d(p2.X, fold1 + ly, 0);
+                        Point3d p4 = new Point3d(p2.X + fold1, p3.Y, 0);
+                        Point3d p5 = new Point3d(p4.X, wid - off + ly, 0);
+                        Point3d p6 = new Point3d(p2.X, p5.Y, 0);
+                        Point3d p7 = new Point3d(p2.X, p5.Y + fold1, 0);
+                        Point3d p8 = new Point3d(p1.X, p7.Y, 0);
+                        Point3d p9 = new Point3d(p1.X, p5.Y, 0);
+                        Point3d p10 = new Point3d(lx, p5.Y, 0);
+                        Point3d p11 = new Point3d(lx, p3.Y, 0);
+                        Point3d p12 = new Point3d(p1.X, p3.Y, 0);
+
+                        if (inches == "y")
                         {
                             if (width >= 650)
                             {
-                                
-                                Point3d p1 = new Point3d(lx + fold1, ly, 0);
-                                Point3d p2 = new Point3d(len - off, ly, 0);
-                                Point3d p3 = new Point3d(p2.X, fold1 + ly, 0);
-                                Point3d p4 = new Point3d(p2.X + fold1, p3.Y, 0);
-                                Point3d p5 = new Point3d(p4.X, wid - off + ly, 0);
-                                Point3d p6 = new Point3d(p2.X, p5.Y, 0);
-                                Point3d p7 = new Point3d(p2.X, p5.Y + fold1, 0);
-                                Point3d p8 = new Point3d(p1.X, p7.Y, 0);
-                                Point3d p9 = new Point3d(p1.X, p5.Y, 0);
-                                Point3d p10 = new Point3d(lx, p5.Y, 0);
-                                Point3d p11 = new Point3d(lx, p3.Y, 0);
-                                Point3d p12 = new Point3d(p1.X, p3.Y, 0);
 
                                 // For inches 
                                 Point3d p13 = new Point3d(lx, p3.Y + inchclear - thick, 0);
@@ -2322,30 +2349,394 @@ namespace CAD_AUTOMATION
                                 tr.AddNewlyCreatedDBObject(line20, true);
                                 tr.AddNewlyCreatedDBObject(line21, true);
                             }
-                            else if (width >=200)
+                            else if (width >=225)
                             {
+                               
 
+                                // For inches 
+                                Point3d p13 = new Point3d(lx, p3.Y + inchclear - thick, 0);
+                                Point3d p14 = new Point3d(lx + fold1 + inchx - thick, p13.Y, 0);
+                                Point3d p15 = new Point3d(p14.X, p13.Y + inchy, 0);
+                                Point3d p16 = new Point3d(lx, p15.Y, 0);
+                                Point3d p17 = new Point3d(lx, (width / 2) - (inchy / 2) + ly + fold1, 0);
+                                Point3d p18 = new Point3d(lx, p17.Y + inchy, 0);
+                                Point3d p19 = new Point3d(lx, width - thick - inchclear - inchy + ly + fold1, 0);
+                                Point3d p20 = new Point3d(lx, p19.Y + inchy, 0);
+
+                                Point3d p21 = new Point3d(p1.X, p13.Y, 0);
+                                Point3d p22 = new Point3d(p1.X, p15.Y, 0);
+                                Point3d p23 = new Point3d(p1.X, p17.Y, 0);
+                                Point3d p24 = new Point3d(p1.X, p18.Y, 0);
+                                Point3d p25 = new Point3d(p1.X, p19.Y, 0);
+                                Point3d p26 = new Point3d(p1.X, p20.Y, 0);
+
+                                // Drawing rectangle
+                                Line line1 = new Line(p1, p2);
+                                Line line2 = new Line(p2, p3);
+                                Line line3 = new Line(p3, p4);
+                                Line line4 = new Line(p4, p5);
+                                Line line5 = new Line(p5, p6);
+                                Line line6 = new Line(p6, p7);
+                                Line line7 = new Line(p7, p8);
+                                Line line8 = new Line(p8, p9);
+                                Line line9 = new Line(p9, p10);
+                                Line line11 = new Line(p11, p12);
+                                Line line12 = new Line(p12, p1);
+                                Line line17 = new Line(p11, p13);
+                                Line line18 = new Line(p13, p14);
+                                Line line19 = new Line(p14, p15);
+                                Line line20 = new Line(p15, p16);
+                                Line line21 = new Line(p16, p17);
+
+                                //Line line22 = new Line(p13, p14);
+                                //modelSpace.AppendEntity(line22);
+                                //tr.AddNewlyCreatedDBObject(line22, true);
+                                //Line line23 = new Line(p14, p15);
+                                //modelSpace.AppendEntity(line23);
+                                //tr.AddNewlyCreatedDBObject(line23, true);
+                                //Line line24 = new Line(p15, p16);
+                                //modelSpace.AppendEntity(line24);
+                                //tr.AddNewlyCreatedDBObject(line24, true);
+                                //Vector3d moveVector = new Vector3d(0, p17.Y - p13.Y, 0);
+                                //line22.TransformBy(Matrix3d.Displacement(moveVector));
+                                //line23.TransformBy(Matrix3d.Displacement(moveVector));
+                                //line24.TransformBy(Matrix3d.Displacement(moveVector));
+                                //Line line25 = new Line(p18, p19);
+                                //modelSpace.AppendEntity(line25);
+                                //tr.AddNewlyCreatedDBObject(line25, true);
+                                Line line26 = new Line(p13, p14);
+                                modelSpace.AppendEntity(line26);
+                                tr.AddNewlyCreatedDBObject(line26, true);
+                                Line line27 = new Line(p14, p15);
+                                modelSpace.AppendEntity(line27);
+                                tr.AddNewlyCreatedDBObject(line27, true);
+                                Line line28 = new Line(p15, p16);
+                                modelSpace.AppendEntity(line28);
+                                tr.AddNewlyCreatedDBObject(line28, true);
+                                Vector3d moveVector2 = new Vector3d(0, p19.Y - p13.Y, 0);
+                                line26.TransformBy(Matrix3d.Displacement(moveVector2));
+                                line27.TransformBy(Matrix3d.Displacement(moveVector2));
+                                line28.TransformBy(Matrix3d.Displacement(moveVector2));
+                                Line line29 = new Line(p20, p10);
+                                modelSpace.AppendEntity(line29);
+                                tr.AddNewlyCreatedDBObject(line29, true);
+                                Line line13 = new Line(p12, p3);
+                                modelSpace.AppendEntity(line13);
+                                tr.AddNewlyCreatedDBObject(line13, true);
+                                line13.ColorIndex = 12;
+                                Line line14 = new Line(p3, p6);
+                                modelSpace.AppendEntity(line14);
+                                tr.AddNewlyCreatedDBObject(line14, true);
+                                line14.ColorIndex = 12;
+                                Line line15 = new Line(p6, p9);
+                                modelSpace.AppendEntity(line15);
+                                tr.AddNewlyCreatedDBObject(line15, true);
+                                line15.ColorIndex = 12;
+                                Line line30 = new Line(p12, p21);
+                                modelSpace.AppendEntity(line30);
+                                tr.AddNewlyCreatedDBObject(line30, true);
+                                line30.ColorIndex = 12;
+                                Line line31 = new Line(p22, p25);
+                                modelSpace.AppendEntity(line31);
+                                tr.AddNewlyCreatedDBObject(line31, true);
+                                line31.ColorIndex = 12;
+                                //Line line32 = new Line(p24, p25);
+                                //modelSpace.AppendEntity(line32);
+                                //tr.AddNewlyCreatedDBObject(line32, true);
+                                //line32.ColorIndex = 12;
+                                Line line33 = new Line(p26, p9);
+                                modelSpace.AppendEntity(line33);
+                                tr.AddNewlyCreatedDBObject(line33, true);
+                                line33.ColorIndex = 12;
+                                // Add lines to model space
+                                modelSpace.AppendEntity(line1);
+                                modelSpace.AppendEntity(line2);
+                                modelSpace.AppendEntity(line3);
+                                modelSpace.AppendEntity(line4);
+                                modelSpace.AppendEntity(line5);
+                                modelSpace.AppendEntity(line6);
+                                modelSpace.AppendEntity(line7);
+                                modelSpace.AppendEntity(line8);
+                                modelSpace.AppendEntity(line9);
+                                modelSpace.AppendEntity(line11);
+                                modelSpace.AppendEntity(line12);
+                                modelSpace.AppendEntity(line17);
+                                modelSpace.AppendEntity(line18);
+                                modelSpace.AppendEntity(line19);
+                                modelSpace.AppendEntity(line20);
+                                modelSpace.AppendEntity(line21);
+
+                                // Commit the transaction
+                                tr.AddNewlyCreatedDBObject(line1, true);
+                                tr.AddNewlyCreatedDBObject(line2, true);
+                                tr.AddNewlyCreatedDBObject(line3, true);
+                                tr.AddNewlyCreatedDBObject(line4, true);
+                                tr.AddNewlyCreatedDBObject(line5, true);
+                                tr.AddNewlyCreatedDBObject(line6, true);
+                                tr.AddNewlyCreatedDBObject(line7, true);
+                                tr.AddNewlyCreatedDBObject(line8, true);
+                                tr.AddNewlyCreatedDBObject(line9, true);
+                                tr.AddNewlyCreatedDBObject(line11, true);
+                                tr.AddNewlyCreatedDBObject(line12, true);
+                                tr.AddNewlyCreatedDBObject(line17, true);
+                                tr.AddNewlyCreatedDBObject(line18, true);
+                                tr.AddNewlyCreatedDBObject(line19, true);
+                                tr.AddNewlyCreatedDBObject(line20, true);
+                                tr.AddNewlyCreatedDBObject(line21, true);
                             }
                             else
                             {
 
+                                // Drawing rectangle
+                                Line line1 = new Line(p1, p2);
+                                Line line2 = new Line(p2, p3);
+                                Line line3 = new Line(p3, p4);
+                                Line line4 = new Line(p4, p5);
+                                Line line5 = new Line(p5, p6);
+                                Line line6 = new Line(p6, p7);
+                                Line line7 = new Line(p7, p8);
+                                Line line8 = new Line(p8, p9);
+                                Line line9 = new Line(p9, p10);
+                                Line line11 = new Line(p11, p12);
+                                Line line12 = new Line(p12, p1);
+
+
+                                Line line13 = new Line(p12, p3);
+                                modelSpace.AppendEntity(line13);
+                                tr.AddNewlyCreatedDBObject(line13, true);
+                                line13.ColorIndex = 12;
+                                Line line14 = new Line(p3, p6);
+                                modelSpace.AppendEntity(line14);
+                                tr.AddNewlyCreatedDBObject(line14, true);
+                                line14.ColorIndex = 12;
+                                Line line15 = new Line(p6, p9);
+                                modelSpace.AppendEntity(line15);
+                                tr.AddNewlyCreatedDBObject(line15, true);
+                                line15.ColorIndex = 12;
+                                Line line16 = new Line(p9, p12);
+                                modelSpace.AppendEntity(line16);
+                                tr.AddNewlyCreatedDBObject(line16, true);
+                                line16.ColorIndex = 12;
+
+                                // Add lines to model space
+                                modelSpace.AppendEntity(line1);
+                                modelSpace.AppendEntity(line2);
+                                modelSpace.AppendEntity(line3);
+                                modelSpace.AppendEntity(line4);
+                                modelSpace.AppendEntity(line5);
+                                modelSpace.AppendEntity(line6);
+                                modelSpace.AppendEntity(line7);
+                                modelSpace.AppendEntity(line8);
+                                modelSpace.AppendEntity(line9);
+                                modelSpace.AppendEntity(line11);
+                                modelSpace.AppendEntity(line12);
+
+
+                                // Commit the transaction
+                                tr.AddNewlyCreatedDBObject(line1, true);
+                                tr.AddNewlyCreatedDBObject(line2, true);
+                                tr.AddNewlyCreatedDBObject(line3, true);
+                                tr.AddNewlyCreatedDBObject(line4, true);
+                                tr.AddNewlyCreatedDBObject(line5, true);
+                                tr.AddNewlyCreatedDBObject(line6, true);
+                                tr.AddNewlyCreatedDBObject(line7, true);
+                                tr.AddNewlyCreatedDBObject(line8, true);
+                                tr.AddNewlyCreatedDBObject(line9, true);
+                                tr.AddNewlyCreatedDBObject(line11, true);
+                                tr.AddNewlyCreatedDBObject(line12, true);
                             }
                         }
                         else
                         {
-                            if (width >= 650)
-                            {
+ 
 
-                            }
-                            else if (width >= 200)
-                            {
+                            // Drawing rectangle
+                            Line line1 = new Line(p1, p2);
+                            Line line2 = new Line(p2, p3);
+                            Line line3 = new Line(p3, p4);
+                            Line line4 = new Line(p4, p5);
+                            Line line5 = new Line(p5, p6);
+                            Line line6 = new Line(p6, p7);
+                            Line line7 = new Line(p7, p8);
+                            Line line8 = new Line(p8, p9);
+                            Line line9 = new Line(p9, p10);
+                            Line line11 = new Line(p11, p12);
+                            Line line12 = new Line(p12, p1);
+                            
 
-                            }
-                            else
-                            {
+                            Line line13 = new Line(p12, p3);
+                            modelSpace.AppendEntity(line13);
+                            tr.AddNewlyCreatedDBObject(line13, true);
+                            line13.ColorIndex = 12;
+                            Line line14 = new Line(p3, p6);
+                            modelSpace.AppendEntity(line14);
+                            tr.AddNewlyCreatedDBObject(line14, true);
+                            line14.ColorIndex = 12;
+                            Line line15 = new Line(p6, p9);
+                            modelSpace.AppendEntity(line15);
+                            tr.AddNewlyCreatedDBObject(line15, true);
+                            line15.ColorIndex = 12;
+                            Line line16 = new Line(p9, p12);
+                            modelSpace.AppendEntity(line16);
+                            tr.AddNewlyCreatedDBObject(line16, true);
+                            line16.ColorIndex = 12;
+                            
+                            // Add lines to model space
+                            modelSpace.AppendEntity(line1);
+                            modelSpace.AppendEntity(line2);
+                            modelSpace.AppendEntity(line3);
+                            modelSpace.AppendEntity(line4);
+                            modelSpace.AppendEntity(line5);
+                            modelSpace.AppendEntity(line6);
+                            modelSpace.AppendEntity(line7);
+                            modelSpace.AppendEntity(line8);
+                            modelSpace.AppendEntity(line9);
+                            modelSpace.AppendEntity(line11);
+                            modelSpace.AppendEntity(line12);
+                            
 
-                            }
+                            // Commit the transaction
+                            tr.AddNewlyCreatedDBObject(line1, true);
+                            tr.AddNewlyCreatedDBObject(line2, true);
+                            tr.AddNewlyCreatedDBObject(line3, true);
+                            tr.AddNewlyCreatedDBObject(line4, true);
+                            tr.AddNewlyCreatedDBObject(line5, true);
+                            tr.AddNewlyCreatedDBObject(line6, true);
+                            tr.AddNewlyCreatedDBObject(line7, true);
+                            tr.AddNewlyCreatedDBObject(line8, true);
+                            tr.AddNewlyCreatedDBObject(line9, true);
+                            tr.AddNewlyCreatedDBObject(line11, true);
+                            tr.AddNewlyCreatedDBObject(line12, true);
+                            
                         }
+
+                        Point3d dd1 = new Point3d(p4.X + 40, 0, 0);
+                        AlignedDimension dim1 = new AlignedDimension(p4, p5, dd1, "", ObjectId.Null);
+                        modelSpace.AppendEntity(dim1);
+                        tr.AddNewlyCreatedDBObject(dim1, true);
+
+                        Point3d dd2 = new Point3d(p2.X + fold1 + 65, 0, 0);
+                        AlignedDimension dim2 = new AlignedDimension(p2, p7, dd2, "", ObjectId.Null);
+                        modelSpace.AppendEntity(dim2);
+                        tr.AddNewlyCreatedDBObject(dim2, true);
+
+                        Point3d dd3 = new Point3d(0,p7.Y + 30, 0);
+                        AlignedDimension dim3 = new AlignedDimension(p7, p8, dd3, "", ObjectId.Null);
+                        modelSpace.AppendEntity(dim3);
+                        tr.AddNewlyCreatedDBObject(dim3, true);
+
+                        Point3d dd4 = new Point3d(0,p10.Y + fold1 + 55, 0);
+                        AlignedDimension dim4 = new AlignedDimension(p5, p10, dd4, "", ObjectId.Null);
+                        modelSpace.AppendEntity(dim4);
+                        tr.AddNewlyCreatedDBObject(dim4, true);
+
+                        AlignedDimension dim5 = new AlignedDimension(p5, p6, dd3, "", ObjectId.Null);
+                        modelSpace.AppendEntity(dim5);
+                        tr.AddNewlyCreatedDBObject(dim5, true);
+
+                        Point3d insertionPoint = p12;
+                        using (BlockReference blockRef = new BlockReference(insertionPoint, block.ObjectId))
+                        {
+                            // Add the block reference to the model space
+                            BlockTableRecord models = (BlockTableRecord)tr.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                            models.AppendEntity(blockRef);
+                            tr.AddNewlyCreatedDBObject(blockRef, true);
+
+                            DBObjectCollection explodedObjects = new DBObjectCollection();
+                            blockRef.Explode(explodedObjects);
+
+                            
+                            Point3d p99 = Point3d.Origin;
+                            bool foundLine = false;
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Line line)
+                                {
+                                    p99 = line.StartPoint;
+                                    //MessageBox.Show($"{p99.X.ToString()}-{p99.Y.ToString()}");
+                                    foundLine = true;
+                                    break;
+                                }
+                            }
+
+                            if (!foundLine)
+                            {
+                                doc.Editor.WriteMessage("\nNo lines found in the block.");
+                                return;
+                            }
+
+                            // Now use p99 as the insertion point for the exploded entities
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Entity entity)
+                                {
+                                    Vector3d offset2 = new Vector3d(insertionPoint.X - p99.X - thick, insertionPoint.Y - p99.Y - thick , 0);
+                                    entity.TransformBy(Matrix3d.Displacement(offset2));
+                                    
+                                    if (entity.ColorIndex != 10)
+                                    {
+                                        modelSpace.AppendEntity(entity);
+                                        tr.AddNewlyCreatedDBObject(entity, true);
+                                    }
+                                    
+                                }
+                            }
+
+                            blockRef.Erase();
+
+                            Point3d s1 = new Point3d(p1.X - thick, p8.Y + 200, 0);
+                            Point3d s2 = new Point3d(p2.X + thick, p8.Y + 200, 0);
+                            Point3d s3 = new Point3d(p2.X + thick, p8.Y + 200 + foldlength, 0);
+                            Point3d s4 = new Point3d(p1.X - thick, p8.Y + 200 + foldlength, 0);
+
+                            Point3d s5 = new Point3d(p4.X + 200, p4.Y - thick, 0);
+                            Point3d s6 = new Point3d(p4.X + 200, p5.Y + thick, 0);
+                            Point3d s7 = new Point3d(p4.X + 200 + foldlength, p5.Y + thick, 0);
+                            Point3d s8 = new Point3d(p4.X + 200 + foldlength, p4.Y - thick, 0);
+
+                            Line lines1 = new Line(s1, s2);
+                            modelSpace.AppendEntity(lines1);
+                            tr.AddNewlyCreatedDBObject(lines1, true);
+                            Line lines2 = new Line(s2, s3);
+                            modelSpace.AppendEntity(lines2);
+                            tr.AddNewlyCreatedDBObject(lines2, true);
+                            Line lines3 = new Line(s1, s4);
+                            modelSpace.AppendEntity(lines3);
+                            tr.AddNewlyCreatedDBObject(lines3, true);
+                            Line lines4 = new Line(s5, s6);
+                            modelSpace.AppendEntity(lines4);
+                            tr.AddNewlyCreatedDBObject(lines4, true);
+                            Line lines5 = new Line(s7, s6);
+                            modelSpace.AppendEntity(lines5);
+                            tr.AddNewlyCreatedDBObject(lines5, true);
+                            Line lines6 = new Line(s5, s8);
+                            modelSpace.AppendEntity(lines6);
+                            tr.AddNewlyCreatedDBObject(lines6, true);
+
+                            Point3d dd6 = new Point3d(0, s1.Y - 40, 0);
+                            AlignedDimension dim6 = new AlignedDimension(s1, s2, dd6, "", ObjectId.Null);
+                            modelSpace.AppendEntity(dim6);
+                            tr.AddNewlyCreatedDBObject(dim6, true);
+
+                            Point3d dd7 = new Point3d(s2.X + 40, 0, 0);
+                            AlignedDimension dim7 = new AlignedDimension(s2, s3, dd7, "", ObjectId.Null);
+                            modelSpace.AppendEntity(dim7);
+                            tr.AddNewlyCreatedDBObject(dim7, true);
+
+                            Point3d dd8 = new Point3d(s5.X - 40, 0, 0);
+                            AlignedDimension dim8 = new AlignedDimension(s5, s6, dd8, "", ObjectId.Null);
+                            modelSpace.AppendEntity(dim8);
+                            tr.AddNewlyCreatedDBObject(dim8, true);
+
+                            Point3d dd9 = new Point3d(0, s5.Y - 40, 0);
+                            AlignedDimension dim9 = new AlignedDimension(s5, s8, dd9, "", ObjectId.Null);
+                            modelSpace.AppendEntity(dim9);
+                            tr.AddNewlyCreatedDBObject(dim9, true);
+
+
+                        }
+
                     }
                     else
                     {
