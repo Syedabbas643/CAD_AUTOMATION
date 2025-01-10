@@ -33,6 +33,8 @@ using System.Runtime.InteropServices;
 using Font = System.Drawing.Font;
 using Color = System.Drawing.Color;
 using Brushes = System.Drawing.Brushes;
+using Autodesk.AutoCAD.GraphicsInterface;
+using System.ComponentModel.Design;
 
 namespace CAD_AUTOMATION
 {
@@ -44,16 +46,20 @@ namespace CAD_AUTOMATION
         double l;
         private double width;
         private double length;
-        private double thick;
+        private double shellthick;
         private int sections;
+        private string hbusbarposition;
         private double zchanneltb;
         private double zchannelside;
         private double vchannelsize;
         private double hchannelsize;
+        private double hbussize;
         private Point3d ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8;
         private Point3d pz1, pz2, pz3, pz4, pz5, pz6, pz7, pz8, pz9, pz10, pz11, pz12, pz13, pz14;
+        private int shellcolor = 140;
+        private int channelcolor = 10;
 
-        
+
 
         BlockTableRecord shellLeft;
         BlockTableRecord shellRight;
@@ -78,7 +84,6 @@ namespace CAD_AUTOMATION
             );
 
             RoundCorners(materialTabControl1, 20);
-            RoundCorners(materialTabSelector1, 10);
             RoundCorners(widthbox, 10);
             RoundCorners(heigthbox, 10);
             RoundCorners(shellthickbox, 10);
@@ -89,13 +94,80 @@ namespace CAD_AUTOMATION
         }
         private void materialButton2_Click(object sender, EventArgs e)
         {
-            if (materialTabControl1.SelectedTab.Name == "shellpage")
+            if(materialTabControl1.SelectedTab.Name.Contains("sec") && materialTabControl1.SelectedTab.Name.Contains("page"))
             {
-                int baseX = 400, baseY = 20;
+                double panelheight = 0;
+                if (hbbbox.Text == "None")
+                {
+                    panelheight = Convert.ToDouble(heigthbox.Text);
+                }
+                else if (hbbbox.Text == "Top" || hbbbox.Text == "Bottom")
+                {
+                    panelheight = Convert.ToDouble(heigthbox.Text) - Convert.ToDouble(hbbsize.Text);
+                }
+                
+
+                var sectionTabPage = materialTabControl1.SelectedTab;
+                double selectedsection = materialTabControl1.SelectedIndex;
+                var partcombobox = sectionTabPage.Controls[$"sec{selectedsection}partbox"] as ComboBox;
+                var selectedCountText = partcombobox.SelectedItem?.ToString();
+                if (int.TryParse(selectedCountText, out int selectedCount) && selectedCount > 0 && !string.IsNullOrEmpty(sectionTabPage.Controls[$"sec{selectedsection}size"].Text))
+                {
+
+                    // Divide the panel height evenly across the selected partitions
+                    double partHeight = 0;
+
+                    // Loop through the TextBoxes for the selected partitions and set their values
+                    for (int i = 1; i <= selectedCount; i++)
+                    {
+                        // Create the name of the TextBox dynamically
+                        var textBoxName = $"sec{selectedsection}part{i}";
+                        var textBox = sectionTabPage.Controls[textBoxName] as TextBox;
+
+                        // Set the value of the TextBox to the calculated part height
+                        if (textBox != null)
+                        {
+                            if(string.IsNullOrEmpty(textBox.Text))
+                            {
+                                errorlabel.Text = "Please fill all the fields";
+                                errorlabel.Visible = true;
+                                return;
+                            }
+                            partHeight += Convert.ToDouble(textBox.Text);
+                        }
+                    }
+
+                    if(partHeight != panelheight)
+                    {
+                        errorlabel.Text = "The sum of the partition heights must be equal to the panel height";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+
+
+                    
+                }
+                else
+                {
+                    errorlabel.Text = "Please fill all the fields";
+                    errorlabel.Visible = true;
+                    return;
+                }
+
+            }
+            else if (materialTabControl1.SelectedTab.Name == "shellpage")
+            {
+                int baseX = 400, baseY = 60;
                 int labelWidth = 150, labelHeight = 20;
                 int textBoxWidth = 150, textBoxHeight = 21;
-                int buttonWidth = 155, buttonHeight = 37;
                 int spacingY = 40;
+
+                if(string.IsNullOrWhiteSpace(widthbox.Text) || string.IsNullOrWhiteSpace(heigthbox.Text) || string.IsNullOrWhiteSpace(shellthickbox.Text) || string.IsNullOrWhiteSpace(hbbbox.Text) || string.IsNullOrWhiteSpace(hbbsize.Text) || string.IsNullOrWhiteSpace(sectionsbox.Text) || string.IsNullOrWhiteSpace(depthbox.Text))
+                {
+                    errorlabel.Text = "Please fill all the fields";
+                    errorlabel.Visible = true;
+                    return;
+                }
 
                 // Get the selected count from the combo box
                 if (int.TryParse(sectionsbox.SelectedItem.ToString(), out int tabCount))
@@ -123,6 +195,7 @@ namespace CAD_AUTOMATION
                                     ForeColor = SystemColors.Control,
                                     Location = new Point(baseX, baseY + (i - 1) * spacingY),
                                     Size = new Size(labelWidth, labelHeight),
+                                    Visible = false,
                                     AutoSize = true
                                 };
                                 tabPage.Controls.Add(partitionLabel);
@@ -131,7 +204,7 @@ namespace CAD_AUTOMATION
                                 TextBox partitionTextBox = new TextBox
                                 {
                                     Name = $"sec{i2}part{i}",
-                                    Text = "500",
+                                    //Text = "500",
                                     Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                     ForeColor = Color.White,
                                     BackColor = Color.FromArgb(64, 64, 64),
@@ -139,34 +212,48 @@ namespace CAD_AUTOMATION
                                     TextAlign = HorizontalAlignment.Center,
                                     MinimumSize = new Size(textBoxWidth, textBoxHeight),
                                     Location = new Point(baseX + 90, baseY + (i - 1) * spacingY),
+                                    Visible = false,
                                     Size = new Size(textBoxWidth, textBoxHeight),
                                 };
                                 tabPage.Controls.Add(partitionTextBox);
                                 RoundCorners(partitionTextBox, 10);
 
-                                MaterialSkin.Controls.MaterialCheckbox mPlateCheckbox = new MaterialSkin.Controls.MaterialCheckbox
+                                MetroFramework.Controls.MetroCheckBox metroCheckBox = new MetroFramework.Controls.MetroCheckBox
                                 {
                                     Name = $"mp{i2}part{i}",
-                                    Text = "Mounting plate",
-                                    Depth = 0,
-                                    ForeColor = Color.White,
-                                    Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold),
-                                    TextAlign = ContentAlignment.TopLeft,
-                                    CheckAlign = ContentAlignment.TopCenter,
+                                    BackColor = System.Drawing.Color.FromArgb(35, 35, 35),
+                                    CustomBackground = true,
+                                    CustomForeColor = true,
+                                    FlatStyle = System.Windows.Forms.FlatStyle.Popup,
+                                    FontSize = MetroFramework.MetroLinkSize.Tall,
+                                    ForeColor = System.Drawing.Color.White,
                                     Location = new Point(baseX + 90 + 165, baseY + (i - 1) * spacingY - 5),
-                                    Margin = new Padding(0),
-                                    MouseLocation = new Point(-1, -1),
-                                    MouseState = MaterialSkin.MouseState.HOVER,
-                                    Ripple = true,
-                                    Size = new Size(buttonWidth, buttonHeight),
-                                    UseVisualStyleBackColor = true
+                                    Size = new System.Drawing.Size(174, 24),
+                                    Style = MetroFramework.MetroColorStyle.Green,
+                                    TabIndex = 19,
+                                    Text = "Mounting plate",
+                                    Theme = MetroFramework.MetroThemeStyle.Dark,
+                                    Visible = false,
+                                    UseVisualStyleBackColor = false
                                 };
-                                tabPage.Controls.Add(mPlateCheckbox);
 
-
+                                // Add MetroCheckBox to the TabPage
+                                tabPage.Controls.Add(metroCheckBox);
+                                //MessageBox.Show($"Label Name: {partitionLabel.Name}, TextBox Name: {partitionTextBox.Name}, CheckBox Name: {metroCheckBox.Name}", "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                             }
-
+                            // Add Section Size Label and TextBox at the top
+                            Label partLabel1 = new Label
+                            {
+                                Name = $"labelname{i2}",
+                                Text = $"Section - {i2} Details",
+                                Font = new System.Drawing.Font("Bookman Old Style", 14.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0))),
+                                ForeColor = SystemColors.Control,
+                                Location = new Point(40, 20),
+                                Size = new System.Drawing.Size(134, 22),
+                                AutoSize = true
+                            };
+                            tabPage.Controls.Add(partLabel1);
                             // Add Section Size Label and TextBox at the top
                             Label sectionSizeLabel = new Label
                             {
@@ -174,7 +261,7 @@ namespace CAD_AUTOMATION
                                 Text = "Section size",
                                 Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
                                 ForeColor = SystemColors.Control,
-                                Location = new Point(40, 20),
+                                Location = new Point(40, 60),
                                 Size = new Size(labelWidth, labelHeight),
                                 AutoSize = true
                             };
@@ -183,14 +270,14 @@ namespace CAD_AUTOMATION
                             TextBox sectionSizeTextBox = new TextBox
                             {
                                 Name = $"sec{i2}size",
-                                Text = "500",
+                                //Text = "500",
                                 Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                 ForeColor = Color.White,
                                 BackColor = Color.FromArgb(64, 64, 64),
                                 BorderStyle = BorderStyle.None,
                                 TextAlign = HorizontalAlignment.Center,
                                 MinimumSize = new Size(textBoxWidth, textBoxHeight),
-                                Location = new Point(170, 20),
+                                Location = new Point(170, 60),
                                 Size = new Size(textBoxWidth, textBoxHeight),
                             };
                             tabPage.Controls.Add(sectionSizeTextBox);
@@ -203,41 +290,64 @@ namespace CAD_AUTOMATION
                                 Text = "Partitions",
                                 Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
                                 ForeColor = SystemColors.Control,
-                                Location = new Point(40, 70),
+                                Location = new Point(40, 100),
                                 Size = new Size(labelWidth, labelHeight),
                                 AutoSize = true
                             };
                             tabPage.Controls.Add(partLabel);
 
-                            // Create Material ComboBox
-                            MaterialSkin.Controls.MaterialComboBox partitionComboBox = new MaterialSkin.Controls.MaterialComboBox
+                            MetroFramework.Controls.MetroComboBox Partitonsbox = new MetroFramework.Controls.MetroComboBox
                             {
                                 Name = $"sec{i2}partbox",
-                                AutoResize = false,
-                                BackColor = Color.White,
-                                Depth = 0,
-                                DrawMode = DrawMode.OwnerDrawVariable,
-                                DropDownHeight = 147,
-                                DropDownStyle = ComboBoxStyle.DropDownList,
-                                DropDownWidth = 100,
-                                Font = new Font("Microsoft Sans Serif", 14F, FontStyle.Bold, GraphicsUnit.Pixel),
-                                ForeColor = Color.White,
+                                FontSize = MetroFramework.MetroLinkSize.Tall,
                                 FormattingEnabled = true,
-                                IntegralHeight = false,
                                 ItemHeight = 29,
-                                Items = { "1", "2", "3", "4", "5", "6", "7", "8" },
-                                Location = new Point(170, 60),
-                                MaxDropDownItems = 5,
-                                MouseState = MaterialSkin.MouseState.OUT,
-                                Size = new Size(149, 35),
-                                StartIndex = 0,
-                                TabIndex = 15,
-                                UseAccent = true,
-                                UseTallSize = false
+                                Location = new Point(170, 90),
+                                Size = new System.Drawing.Size(149, 35),
+                                TabIndex = 18,
+                                Theme = MetroFramework.MetroThemeStyle.Dark
                             };
-                            tabPage.Controls.Add(partitionComboBox);
 
-                            tabPage.BackColor = Color.FromArgb(45, 45, 45);
+                            // Add items to the ComboBox
+                            Partitonsbox.Items.AddRange(new object[]
+                            {
+                                "1", "2", "3", "4", "5", "6", "7", "8"
+                            });
+
+                            Partitonsbox.SelectedIndexChanged += (s, e5) =>
+                            {
+                                if (int.TryParse(Partitonsbox.SelectedItem.ToString(), out int selectedCount))
+                                {
+                                    int tabIndex = materialTabControl1.SelectedIndex;
+
+                                    for (int i = 1; i <= 8; i++)
+                                    {
+                                        var label = tabPage.Controls[$"labelSecPart{i}"] as Label;
+                                        var textBox = tabPage.Controls[$"sec{tabIndex}part{i}"] as TextBox;
+                                        var checkBox = tabPage.Controls[$"mp{tabIndex}part{i}"] as MetroFramework.Controls.MetroCheckBox;
+
+                                        //MessageBox.Show($"Label: {(label != null ? label.Name : "null")}, TextBox: {(textBox != null ? textBox.Name : "null")}, CheckBox: {(checkBox != null ? checkBox.Name : "null")}", "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                        bool isVisible = i <= selectedCount;
+                                        if (label != null) 
+                                        {
+                                            label.Visible = isVisible;
+                                        }
+                                        if (textBox != null) 
+                                        {
+                                         textBox.Visible = isVisible;
+                                        }
+                                        if (checkBox != null)
+                                        {
+                                            checkBox.Visible = isVisible;
+                                        }
+                                    }
+                                }
+                            };
+                            // Add the ComboBox to the desired container (e.g., a Form or Panel)
+                            tabPage.Controls.Add(Partitonsbox);
+
+
+                            tabPage.BackColor = Color.FromArgb(35, 35, 35);
                             materialTabControl1.TabPages.Add(tabPage);
                         }
                     }
@@ -250,35 +360,67 @@ namespace CAD_AUTOMATION
                         }
                     }
 
-                    int currentTabIndex = materialTabControl1.SelectedIndex;
-                    if (currentTabIndex < materialTabControl1.TabPages.Count - 1)
-                    {
-                        materialTabControl1.SelectedIndex = currentTabIndex + 1;
-                    }
-                    else
-                    {
-                        drawbutton.Enabled = true;
-                    }
                 }
                 else
                 {
                     MessageBox.Show("Please select a valid number from the dropdown.", "Invalid Input", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
+            
+                
+            int currentTabIndex = materialTabControl1.SelectedIndex;
+            if (currentTabIndex < materialTabControl1.TabPages.Count - 1)
+            {
+                    materialTabControl1.SelectedIndex = currentTabIndex + 1;
+            }
             else
             {
-                // If not in maintab, navigate to the next tab
-                int currentTabIndex = materialTabControl1.SelectedIndex;
-                if (currentTabIndex < materialTabControl1.TabPages.Count - 1)
+                double panellength = 0;
+                panellength = Convert.ToDouble(widthbox.Text);
+                var tabPages = materialTabControl1.TabPages;
+                double seccount = Convert.ToDouble(sectionsbox.Text);
+                double totalSectionLength = 0;
+
+                for (int i = 1; i <= seccount; i++)
                 {
-                    materialTabControl1.SelectedIndex = currentTabIndex + 1;
+                    var tabPage = tabPages[$"sec{i}page"];
+                    if (tabPage != null)
+                    {
+                        // Find the secsize textbox within the tab
+                        var sectionSizeTextBox = tabPage.Controls[$"sec{i}size"] as TextBox;
+
+                        if (sectionSizeTextBox != null && double.TryParse(sectionSizeTextBox.Text, out double sectionSize))
+                        {
+                            totalSectionLength += sectionSize; // Add the value to the total
+                        }
+                        else
+                        {
+                            errorlabel.Text = $"Section {i} size is invalid or missing.";
+                            errorlabel.Visible = true;
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        
+                        errorlabel.Text = $"Tab for Section {i} not found.";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+
                 }
-                else
+
+                if (panellength != totalSectionLength)
                 {
-                    drawbutton.Enabled = true;
+                    errorlabel.Text = "The sum of the Section sizes must be equal to the panel length";
+                    errorlabel.Visible = true;
+                    return;
                 }
+
+                drawbutton.Enabled = true;
             }
 
+            errorlabel.Visible = false;
         }
         private void backbutton_Click(object sender, EventArgs e)
         {
@@ -333,10 +475,15 @@ namespace CAD_AUTOMATION
 
                 width = Convert.ToDouble(heigthbox.Text);
                 length = Convert.ToDouble(widthbox.Text);
-                thick = Convert.ToDouble(shellthickbox.Text);
+                shellthick = Convert.ToDouble(shellthickbox.Text);
                 sections = Convert.ToInt32(sectionsbox.Text);
-                zchanneltb = Convert.ToDouble(config["top_bottom_shell_size"]);
-                zchannelside = Convert.ToDouble(config["side_shell_size"]);
+                zchanneltb = Convert.ToDouble(config["top_bottom_shell_size"]) - shellthick;
+                zchannelside = Convert.ToDouble(config["side_shell_size"]) - shellthick;
+                vchannelsize = Convert.ToDouble(config["vertical_channel_size"]);
+                hchannelsize = Convert.ToDouble(config["horizontal_channel_size"]);
+                hbusbarposition = hbbbox.Text;
+                hbussize = Convert.ToDouble(hbbsize.Text);
+
 
                 ps1 = new Point3d(l, 0, 0);
                 ps2 = new Point3d(l + length, 0, 0);
@@ -348,20 +495,20 @@ namespace CAD_AUTOMATION
                 ps8 = new Point3d(ps5.X, ps7.Y, 0);
 
                 // Z Channel Points
-                pz1 = new Point3d(l + thick, zchanneltb, 0);
+                pz1 = new Point3d(l + shellthick, zchanneltb, 0);
                 pz2 = new Point3d(pz1.X, width - zchanneltb, 0);
                 pz3 = new Point3d(pz1.X + zchannelside, pz2.Y, 0);
                 pz4 = new Point3d(pz3.X, pz1.Y, 0);
-                pz5 = new Point3d(l + length - thick, pz1.Y, 0);
+                pz5 = new Point3d(l + length - shellthick, pz1.Y, 0);
                 pz6 = new Point3d(pz5.X, width - zchanneltb, 0);
                 pz7 = new Point3d(pz5.X - zchannelside, pz6.Y, 0);
                 pz8 = new Point3d(pz7.X, pz1.Y, 0);
-                pz9 = new Point3d(pz1.X + thick, pz1.Y, 0);
+                pz9 = new Point3d(pz1.X + shellthick, pz1.Y, 0);
                 pz10 = new Point3d(pz9.X, pz2.Y, 0);
-                pz11 = new Point3d(pz3.X - thick, pz2.Y, 0);
+                pz11 = new Point3d(pz3.X - shellthick, pz2.Y, 0);
                 pz12 = new Point3d(pz11.X, pz1.Y, 0);
-                pz13 = new Point3d(pz1.X, pz2.Y + zchanneltb - thick, 0);
-                pz14 = new Point3d(l - thick + length, pz1.Y, 0);
+                pz13 = new Point3d(pz1.X, pz2.Y + zchanneltb - shellthick, 0);
+                pz14 = new Point3d(l - shellthick + length, pz1.Y, 0);
 
 
                 using (Transaction trans = db.TransactionManager.StartTransaction())
@@ -394,33 +541,33 @@ namespace CAD_AUTOMATION
                     blockTable.Add(shellBottom);
                     trans.AddNewlyCreatedDBObject(shellBottom, true);
 
-                    Line linez1 = new Line(pz11, pz3) { ColorIndex = 6 };
+                    Line linez1 = new Line(pz11, pz3) { ColorIndex = shellcolor };
                     shellLeft.AppendEntity(linez1);
                     trans.AddNewlyCreatedDBObject(linez1, true);
-                    Line linez2 = new Line(pz11, pz3) { ColorIndex = 6 };
+                    Line linez2 = new Line(pz11, pz3) { ColorIndex = shellcolor };
                     shellRight.AppendEntity(linez2);
                     trans.AddNewlyCreatedDBObject(linez2, true);
                     Vector3d linez2move = pz12.GetVectorTo(pz8);
                     linez2.TransformBy(Matrix3d.Displacement(linez2move));
-                    Line linez3 = new Line(pz12, pz4) { ColorIndex = 6 };
+                    Line linez3 = new Line(pz12, pz4) { ColorIndex = shellcolor };
                     shellLeft.AppendEntity(linez3);
                     trans.AddNewlyCreatedDBObject(linez3, true);
-                    Line linez4 = new Line(pz11, pz12) { ColorIndex = 6 };
+                    Line linez4 = new Line(pz11, pz12) { ColorIndex = shellcolor };
                     shellLeft.AppendEntity(linez4);
                     trans.AddNewlyCreatedDBObject(linez4, true);
-                    Line linez5 = new Line(pz3, pz7) { ColorIndex = 6 };
+                    Line linez5 = new Line(pz3, pz7) { ColorIndex = shellcolor };
                     shellTop.AppendEntity(linez5);
                     trans.AddNewlyCreatedDBObject(linez5, true);
-                    Line linez6 = new Line(pz9, pz10) { ColorIndex = 6 };
+                    Line linez6 = new Line(pz9, pz10) { ColorIndex = shellcolor };
                     shellRight.AppendEntity(linez6);
                     trans.AddNewlyCreatedDBObject(linez6, true);
                     Vector3d linez6move = pz1.GetVectorTo(pz8);
                     linez6.TransformBy(Matrix3d.Displacement(linez6move));
 
                     // Add lines to shellLeft block
-                    Line lineP4 = new Line(ps4, ps1) { ColorIndex = 6 };
-                    Line lineP13 = new Line(ps1, ps5) { ColorIndex = 6 };
-                    Line lineP14 = new Line(ps4, ps8) { ColorIndex = 6 };
+                    Line lineP4 = new Line(ps4, ps1) { ColorIndex = shellcolor };
+                    Line lineP13 = new Line(ps1, ps5) { ColorIndex = shellcolor };
+                    Line lineP14 = new Line(ps4, ps8) { ColorIndex = shellcolor };
                     shellLeft.AppendEntity(lineP4);
                     shellLeft.AppendEntity(lineP13);
                     shellLeft.AppendEntity(lineP14);
@@ -429,9 +576,9 @@ namespace CAD_AUTOMATION
                     trans.AddNewlyCreatedDBObject(lineP14, true);
 
                     // Add lines to shellRight block
-                    Line lineP2 = new Line(ps2, ps3) { ColorIndex = 6 };
-                    Line lineP15 = new Line(ps7, ps3) { ColorIndex = 6 };
-                    Line lineP16 = new Line(ps2, ps6) { ColorIndex = 6 };
+                    Line lineP2 = new Line(ps2, ps3) { ColorIndex = shellcolor };
+                    Line lineP15 = new Line(ps7, ps3) { ColorIndex = shellcolor };
+                    Line lineP16 = new Line(ps2, ps6) { ColorIndex = shellcolor };
                     shellRight.AppendEntity(lineP2);
                     shellRight.AppendEntity(lineP15);
                     shellRight.AppendEntity(lineP16);
@@ -440,10 +587,10 @@ namespace CAD_AUTOMATION
                     trans.AddNewlyCreatedDBObject(lineP16, true);
 
                     // Add lines to shellTop block
-                    Line lineP3 = new Line(ps3, ps4) { ColorIndex = 6 };
-                    Line lineP11 = new Line(ps7, ps3) { ColorIndex = 6 };
-                    Line lineP10 = new Line(ps4, ps8) { ColorIndex = 6 };
-                    Line lineP18 = new Line(new Point3d(ps4.X + thick, ps4.Y - thick,0), new Point3d(ps3.X - thick, ps3.Y - thick,0)) { ColorIndex = 6 };
+                    Line lineP3 = new Line(ps3, ps4) { ColorIndex = shellcolor };
+                    Line lineP11 = new Line(ps7, ps3) { ColorIndex = shellcolor };
+                    Line lineP10 = new Line(ps4, ps8) { ColorIndex = shellcolor };
+                    Line lineP18 = new Line(new Point3d(ps4.X + shellthick, ps4.Y - shellthick,0), new Point3d(ps3.X - shellthick, ps3.Y - shellthick,0)) { ColorIndex = shellcolor };
                     shellTop.AppendEntity(lineP10);
                     shellTop.AppendEntity(lineP3);
                     shellTop.AppendEntity(lineP11);
@@ -454,11 +601,11 @@ namespace CAD_AUTOMATION
                     trans.AddNewlyCreatedDBObject(lineP18, true);
 
                     // Add lines to shellBottom block
-                    Line lineP1 = new Line(ps1, ps2) { ColorIndex = 6 };
-                    Line lineP5 = new Line(ps5, ps6) { ColorIndex = 6 };
-                    Line lineP12 = new Line(ps2, ps6) { ColorIndex = 6 };
-                    Line lineP9 = new Line(ps1, ps5) { ColorIndex = 6 };
-                    Line lineP17 = new Line(new Point3d(ps1.X + thick,ps1.Y + thick,0), new Point3d(ps2.X - thick,ps2.Y + thick,0)) { ColorIndex = 6 };
+                    Line lineP1 = new Line(ps1, ps2) { ColorIndex = shellcolor };
+                    Line lineP5 = new Line(ps5, ps6) { ColorIndex = shellcolor };
+                    Line lineP12 = new Line(ps2, ps6) { ColorIndex = shellcolor };
+                    Line lineP9 = new Line(ps1, ps5) { ColorIndex = shellcolor };
+                    Line lineP17 = new Line(new Point3d(ps1.X + shellthick,ps1.Y + shellthick,0), new Point3d(ps2.X - shellthick,ps2.Y + shellthick,0)) { ColorIndex = shellcolor };
                     shellBottom.AppendEntity(lineP1);
                     shellBottom.AppendEntity(lineP5);
                     shellBottom.AppendEntity(lineP12);
@@ -470,7 +617,7 @@ namespace CAD_AUTOMATION
                     trans.AddNewlyCreatedDBObject(lineP9, true);
                     trans.AddNewlyCreatedDBObject(lineP17, true);
 
-                    DBObjectCollection offsetCurvesP2 = lineP2.GetOffsetCurves(thick);
+                    DBObjectCollection offsetCurvesP2 = lineP2.GetOffsetCurves(shellthick);
                     foreach (DBObject obj in offsetCurvesP2)
                     {
                         Line offsetLine = obj as Line;
@@ -482,7 +629,7 @@ namespace CAD_AUTOMATION
                         }
                     }
 
-                    DBObjectCollection offsetCurvesP3 = lineP4.GetOffsetCurves(thick);
+                    DBObjectCollection offsetCurvesP3 = lineP4.GetOffsetCurves(shellthick);
                     foreach (DBObject obj in offsetCurvesP3)
                     {
                         Line offsetLine = obj as Line;
@@ -511,6 +658,109 @@ namespace CAD_AUTOMATION
                     modelSpace.AppendEntity(shellBottomRef);
                     trans.AddNewlyCreatedDBObject(shellBottomRef, true);
 
+                    if (hbusbarposition == "Top")
+                    {
+                        double leftpoint = l + zchannelside + shellthick;
+                        double rightpoint = l + length - zchannelside - shellthick;
+
+
+                        Point3d l1 = new Point3d(leftpoint, pz2.Y, 0);
+                        Point3d l2 = new Point3d(leftpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                        Point3d l3 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                        Point3d l4 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+
+                        Point3d r1 = new Point3d(rightpoint, pz2.Y, 0);
+                        Point3d r2 = new Point3d(rightpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                        Point3d r3 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                        Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+
+                        drawline(trans, shellLeft, l1, l2,shellcolor);
+                        drawline(trans, shellLeft, l2, l3, shellcolor);
+                        drawline(trans, shellLeft, l3, l4, shellcolor);
+
+                        drawline(trans, shellRight, r1, r2, shellcolor);
+                        drawline(trans, shellRight, r2, r3, shellcolor);
+                        drawline(trans, shellRight, r3, r4, shellcolor);
+
+                        drawline(trans, shellTop, new Point3d(l1.X ,l1.Y -shellthick,0), new Point3d(r1.X, r1.Y - shellthick, 0), shellcolor);
+
+                        BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                        blockTable.Add(hbbchannel);
+                        trans.AddNewlyCreatedDBObject(hbbchannel, true);
+
+                        drawline(trans, hbbchannel, l3, l4, channelcolor);
+                        drawline(trans, hbbchannel, r3, r4, channelcolor);
+                        drawline(trans, hbbchannel, r3, l3, channelcolor);
+                        //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                        drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
+                        drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y + shellthick, 0), new Point3d(r4.X, r4.Y + shellthick, 0), channelcolor);
+
+                        BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                        modelSpace.AppendEntity(hbbchannelref);
+                        trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+
+                        ps4 = new Point3d(ps4.X, ps4.Y - hbussize, 0);
+                        pz2 = new Point3d(pz2.X, pz2.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        pz3 = new Point3d(pz3.X, pz3.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        pz6 = new Point3d(pz6.X, pz6.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        pz7 = new Point3d(pz7.X, pz7.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+
+                        width = width - hbussize;
+
+                    }
+                    else if (hbusbarposition == "Bottom")
+                    {
+                        double leftpoint = l + zchannelside + shellthick;
+                        double rightpoint = l + length - zchannelside - shellthick;
+
+
+                        Point3d l1 = new Point3d(leftpoint, pz1.Y, 0);
+                        Point3d l2 = new Point3d(leftpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                        Point3d l3 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                        Point3d l4 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+
+                        Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
+                        Point3d r2 = new Point3d(rightpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                        Point3d r3 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                        Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+
+                        drawline(trans, shellLeft, l1, l2, shellcolor);
+                        drawline(trans, shellLeft, l2, l3, shellcolor);
+                        drawline(trans, shellLeft, l3, l4, shellcolor);
+
+                        drawline(trans, shellRight, r1, r2, shellcolor);
+                        drawline(trans, shellRight, r2, r3, shellcolor);
+                        drawline(trans, shellRight, r3, r4, shellcolor);
+
+                        drawline(trans, shellBottom, new Point3d(l1.X, l1.Y + shellthick, 0), new Point3d(r1.X, r1.Y + shellthick, 0), shellcolor);
+
+                        BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                        blockTable.Add(hbbchannel);
+                        trans.AddNewlyCreatedDBObject(hbbchannel, true);
+
+                        drawline(trans, hbbchannel, l3, l4, channelcolor);
+                        drawline(trans, hbbchannel, r3, r4, channelcolor);
+                        drawline(trans, hbbchannel, r3, l3, channelcolor);
+                        //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                        drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y + shellthick, 0), new Point3d(r3.X, r3.Y + shellthick, 0), channelcolor);
+                        drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y - shellthick, 0), new Point3d(r4.X, r4.Y - shellthick, 0), channelcolor);
+
+                        BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                        modelSpace.AppendEntity(hbbchannelref);
+                        trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+
+                        //ps4 = new Point3d(ps4.X, ps4.Y - hbussize - shellthick, 0);
+                        ps1 = new Point3d(ps1.X, ps1.Y + hbussize, 0);
+                        //pz2 = new Point3d(pz2.X, pz2.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        pz1 = new Point3d(pz1.X, pz1.Y + hbussize - zchanneltb + (vchannelsize / 2) - shellthick, 0);
+                        pz4 = new Point3d(pz4.X, pz4.Y + hbussize - zchanneltb + (vchannelsize / 2) - shellthick, 0);
+                        //pz3 = new Point3d(pz3.X, pz3.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        //pz6 = new Point3d(pz6.X, pz6.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+                        //pz7 = new Point3d(pz7.X, pz7.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
+
+                        width = width - hbussize;
+                    }
+                    
                     for (int i = 1; i <= sections; i++)
                     {
                         string secPosition;
@@ -539,21 +789,21 @@ namespace CAD_AUTOMATION
                         if (tabControl != null && tabControl is TabControl materialTabControl2)
                         {
                             // Locate the specific tab page for this section
-                                TabPage targetTab = materialTabControl2.TabPages.Cast<TabPage>()
-                                    .FirstOrDefault(tab => tab.Name == $"sec{i}page");
+                            TabPage targetTab = materialTabControl2.TabPages.Cast<TabPage>()
+                                .FirstOrDefault(tab => tab.Name == $"sec{i}page");
 
-                                if (targetTab != null)
-                                {
-                                    
-                                    // Find the control by name within the specific tab
-                                    sectionTextBox = targetTab.Controls.Find(controlName, true).FirstOrDefault() as TextBox;
+                            if (targetTab != null)
+                            {
 
-                                }
-                                else
-                                {
-                                    MessageBox.Show($"Tab section-{i} not found.");
-                                }
-                            
+                                // Find the control by name within the specific tab
+                                sectionTextBox = targetTab.Controls.Find(controlName, true).FirstOrDefault() as TextBox;
+
+                            }
+                            else
+                            {
+                                MessageBox.Show($"Tab section-{i} not found.");
+                            }
+
 
                         }
 
@@ -583,8 +833,49 @@ namespace CAD_AUTOMATION
         {
             BlockTableRecord leftchannel = null;
             BlockTableRecord rightchannel = null;
-            vchannelsize = Convert.ToDouble(config["vertical_channel_size"]);
-            hchannelsize = Convert.ToDouble(config["horizontal_channel_size"]);
+            BlockTableRecord topchannel = null;
+            BlockTableRecord bottomchannel = null;
+            int topcolor = 0;
+            int bottomcolor = 0;
+
+            if (hbbbox.Text == "None")
+            {
+                topchannel = shellTop;
+                bottomchannel = shellBottom;
+                topcolor = shellcolor;
+                bottomcolor = shellcolor;
+            }
+            else if (hbbbox.Text == "Top")
+            {
+                if (blockTable.Has("hbb_1"))
+                {
+                    topchannel = (BlockTableRecord)blockTable["hbb_1"].GetObject(OpenMode.ForWrite);
+                    bottomchannel = shellBottom;
+                    topcolor = channelcolor;
+                    bottomcolor = shellcolor;
+                }
+                else
+                {
+                    MessageBox.Show("Cant find Block, please try in a new file");
+                    return;
+                }
+            }
+            else if (hbbbox.Text == "Bottom")
+            {
+                if (blockTable.Has("hbb_1"))
+                {
+                    topchannel = shellTop;
+                    bottomchannel = (BlockTableRecord)blockTable["hbb_1"].GetObject(OpenMode.ForWrite);
+                    topcolor = shellcolor;
+                    bottomcolor = channelcolor;
+                }
+                else
+                {
+                    MessageBox.Show("Cant find Block, please try in a new file");
+                    return;
+                }
+            }
+
             double[] partSizes = new double[8]; // Array to store part sizes
             double partitioncount = 0;
 
@@ -632,10 +923,7 @@ namespace CAD_AUTOMATION
                                 partSizes[i - 1] = Convert.ToDouble(partTextBox.Text);
                                 
                             }
-                            else
-                            {
-                                MessageBox.Show($"Part {i} found but TextBox is empty.");
-                            }
+                            
                         }
                         else
                         {
@@ -656,32 +944,33 @@ namespace CAD_AUTOMATION
 
             if (position == "full")
             {
+
                 leftchannel = shellLeft;
                 rightchannel = shellRight;
 
-                Point3d cz1 = new Point3d(pz3.X, pz2.Y - thick, 0);
-                Point3d cz6 = new Point3d(pz7.X, pz2.Y - thick, 0);
-                Point3d czb1 = new Point3d(pz3.X, pz1.Y + thick, 0);
-                Point3d czb6 = new Point3d(pz7.X, pz1.Y + thick, 0);
+                Point3d cz1 = new Point3d(pz3.X, pz2.Y - shellthick, 0);
+                Point3d cz6 = new Point3d(pz7.X, pz2.Y - shellthick, 0);
+                Point3d czb1 = new Point3d(pz3.X, pz1.Y + shellthick, 0);
+                Point3d czb6 = new Point3d(pz7.X, pz1.Y + shellthick, 0);
 
-                Line linect1 = new Line(pz3, cz1) { ColorIndex = 6 };
-                shellTop.AppendEntity(linect1);
-                trans.AddNewlyCreatedDBObject(linect1, true);
-                Line linect2 = new Line(cz6, cz1) { ColorIndex = 6 };
-                shellTop.AppendEntity(linect2);
+                //Line linect1 = new Line(pz3, cz1) { ColorIndex = shellcolor };
+                //topchannel.AppendEntity(linect1);
+                //trans.AddNewlyCreatedDBObject(linect1, true);
+                Line linect2 = new Line(cz6, cz1) { ColorIndex = topcolor };
+                topchannel.AppendEntity(linect2);
                 trans.AddNewlyCreatedDBObject(linect2, true);
-                Line linect7 = new Line(cz6, pz7) { ColorIndex = 6 };
-                shellTop.AppendEntity(linect7);
+                Line linect7 = new Line(cz6, pz7) { ColorIndex = topcolor };
+                topchannel.AppendEntity(linect7);
                 trans.AddNewlyCreatedDBObject(linect7, true);
 
-                Line linecb1 = new Line(pz4, czb1) { ColorIndex = 6 };
-                shellBottom.AppendEntity(linecb1);
-                trans.AddNewlyCreatedDBObject(linecb1, true);
-                Line linecb2 = new Line(czb1, czb6) { ColorIndex = 6 };
-                shellBottom.AppendEntity(linecb2);
+                ///Line linecb1 = new Line(pz4, czb1) { ColorIndex = shellcolor };
+                ///bottomchannel.AppendEntity(linecb1);
+                //trans.AddNewlyCreatedDBObject(linecb1, true);
+                Line linecb2 = new Line(czb1, czb6) { ColorIndex = bottomcolor };
+                bottomchannel.AppendEntity(linecb2);
                 trans.AddNewlyCreatedDBObject(linecb2, true);
-                Line linecb7 = new Line(czb6, pz8) { ColorIndex = 6 };
-                shellBottom.AppendEntity(linecb7);
+                Line linecb7 = new Line(czb6, pz8) { ColorIndex = bottomcolor };
+                bottomchannel.AppendEntity(linecb7);
                 trans.AddNewlyCreatedDBObject(linecb7, true);
             }
             else if (position == "first")
@@ -691,29 +980,29 @@ namespace CAD_AUTOMATION
                 blockTable.Add(rightchannel);
                 trans.AddNewlyCreatedDBObject(rightchannel, true);
 
-                Point3d cz1 = new Point3d(pz3.X, pz2.Y - thick, 0);
-                Point3d cz2 = new Point3d(l + sectionsize - (vchannelsize/2) ,pz2.Y - thick, 0);
+                Point3d cz1 = new Point3d(pz3.X, pz2.Y - shellthick, 0);
+                Point3d cz2 = new Point3d(l + sectionsize - (vchannelsize/2) ,pz2.Y - shellthick, 0);
                 Point3d cz3 = new Point3d(l + sectionsize - (vchannelsize / 2), pz2.Y, 0);
                 Point3d cz6 = new Point3d(l + sectionsize, pz2.Y, 0);
 
-                Point3d czb1 = new Point3d(pz4.X, pz1.Y + thick, 0);
-                Point3d czb2 = new Point3d(l + sectionsize - (vchannelsize / 2),pz1.Y + thick, 0);
+                Point3d czb1 = new Point3d(pz4.X, pz1.Y + shellthick, 0);
+                Point3d czb2 = new Point3d(l + sectionsize - (vchannelsize / 2),pz1.Y + shellthick, 0);
                 Point3d czb3 = new Point3d(l + sectionsize - (vchannelsize / 2),pz1.Y, 0);
                 Point3d czb6 = new Point3d(l + sectionsize, pz1.Y, 0);
 
-                drawline(trans, shellTop, pz3, cz1, 6);
-                drawline(trans, shellTop, cz1, cz2, 6);
-                drawline(trans, shellTop, cz2, cz3, 6);
-                drawline(trans, shellTop, cz3, cz6, 6);
+                //drawline(trans, topchannel, pz3, cz1, 6);
+                drawline(trans, topchannel, cz1, cz2, topcolor);
+                drawline(trans, topchannel, cz2, cz3, topcolor);
+                drawline(trans, topchannel, cz3, cz6, topcolor);
 
-                drawline(trans, shellBottom, pz4, czb1, 6);
-                drawline(trans, shellBottom, czb1, czb2, 6);
-                drawline(trans, shellBottom, czb2, czb3, 6);
-                drawline(trans, shellBottom, czb3, czb6, 6);
+                //drawline(trans, bottomchannel, pz4, czb1, 6);
+                drawline(trans, bottomchannel, czb1, czb2, bottomcolor);
+                drawline(trans, bottomchannel, czb2, czb3, bottomcolor);
+                drawline(trans, bottomchannel, czb3, czb6, bottomcolor);
 
-                drawline(trans, rightchannel, cz6, new Point3d(cz3.X + thick,cz6.Y,0));
-                drawline(trans, rightchannel, czb6, new Point3d(czb3.X + thick, czb6.Y, 0));
-                drawline(trans, rightchannel, new Point3d(cz3.X + thick, cz6.Y, 0), new Point3d(czb3.X + thick, czb6.Y, 0));
+                drawline(trans, rightchannel, cz6, new Point3d(cz3.X + shellthick,cz6.Y,0),channelcolor);
+                drawline(trans, rightchannel, czb6, new Point3d(czb3.X + shellthick, czb6.Y, 0), channelcolor);
+                drawline(trans, rightchannel, new Point3d(cz3.X + shellthick, cz6.Y, 0), new Point3d(czb3.X + shellthick, czb6.Y, 0), channelcolor);
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), rightchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
@@ -782,39 +1071,39 @@ namespace CAD_AUTOMATION
 
                 Point3d cz1 = new Point3d(l + sec, pz2.Y, 0);
                 Point3d cz2 = new Point3d(l + sec + (vchannelsize /2), pz2.Y, 0);
-                Point3d cz3 = new Point3d(l + sec +(vchannelsize / 2), pz2.Y- thick, 0);
-                Point3d cz4 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz2.Y - thick, 0);
+                Point3d cz3 = new Point3d(l + sec +(vchannelsize / 2), pz2.Y- shellthick, 0);
+                Point3d cz4 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz2.Y - shellthick, 0);
                 Point3d cz5 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz2.Y, 0);
                 Point3d cz6 = new Point3d(l + sec + sectionsize, pz2.Y, 0);
 
                 Point3d czb1 = new Point3d(l + sec, pz1.Y, 0);
                 Point3d czb2 = new Point3d(l + sec + (vchannelsize / 2), pz1.Y, 0);
-                Point3d czb3 = new Point3d(l + sec + (vchannelsize / 2), pz1.Y + thick, 0);
-                Point3d czb4 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz1.Y + thick, 0);
+                Point3d czb3 = new Point3d(l + sec + (vchannelsize / 2), pz1.Y + shellthick, 0);
+                Point3d czb4 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz1.Y + shellthick, 0);
                 Point3d czb5 = new Point3d(l + sec + sectionsize - (vchannelsize / 2), pz1.Y, 0);
                 Point3d czb6 = new Point3d(l + sec + sectionsize, pz1.Y, 0);
 
-                drawline(trans, shellTop, pz3, cz1, 6);
-                drawline(trans, shellTop, cz1, cz2, 6);
-                drawline(trans, shellTop, cz2, cz3, 6);
-                drawline(trans, shellTop, cz3, cz4, 6);
-                drawline(trans, shellTop, cz4, cz5, 6);
-                drawline(trans, shellTop, cz5, cz6, 6);
+                drawline(trans, topchannel, pz3, cz1, topcolor);
+                drawline(trans, topchannel, cz1, cz2, topcolor);
+                drawline(trans, topchannel, cz2, cz3, topcolor);
+                drawline(trans, topchannel, cz3, cz4, topcolor);
+                drawline(trans, topchannel, cz4, cz5, topcolor);
+                drawline(trans, topchannel, cz5, cz6, topcolor);
 
-                drawline(trans, shellBottom, pz4, czb1, 6);
-                drawline(trans, shellBottom, czb1, czb2, 6);
-                drawline(trans, shellBottom, czb2, czb3, 6);
-                drawline(trans, shellBottom, czb3, czb4, 6);
-                drawline(trans, shellBottom, czb4, czb5, 6);
-                drawline(trans, shellBottom, czb5, czb6, 6);
+                drawline(trans, bottomchannel, pz4, czb1, bottomcolor);
+                drawline(trans, bottomchannel, czb1, czb2, bottomcolor);
+                drawline(trans, bottomchannel, czb2, czb3, bottomcolor);
+                drawline(trans, bottomchannel, czb3, czb4, bottomcolor);
+                drawline(trans, bottomchannel, czb4, czb5, bottomcolor);
+                drawline(trans, bottomchannel, czb5, czb6, bottomcolor);
 
-                drawline(trans, leftchannel, cz1, new Point3d(cz2.X - thick, cz1.Y, 0));
-                drawline(trans, leftchannel, czb1, new Point3d(czb2.X - thick, czb1.Y, 0));
-                drawline(trans, leftchannel, new Point3d(cz2.X - thick, cz1.Y, 0), new Point3d(czb2.X - thick, czb1.Y, 0));
+                drawline(trans, leftchannel, cz1, new Point3d(cz2.X - shellthick, cz1.Y, 0), channelcolor);
+                drawline(trans, leftchannel, czb1, new Point3d(czb2.X - shellthick, czb1.Y, 0), channelcolor);
+                drawline(trans, leftchannel, new Point3d(cz2.X - shellthick, cz1.Y, 0), new Point3d(czb2.X - shellthick, czb1.Y, 0), channelcolor);
 
-                drawline(trans, rightchannel, cz6, new Point3d(cz5.X + thick, cz6.Y, 0));
-                drawline(trans, rightchannel, czb6, new Point3d(czb5.X + thick, czb6.Y, 0));
-                drawline(trans, rightchannel, new Point3d(cz5.X + thick, cz6.Y, 0), new Point3d(czb5.X + thick, czb6.Y, 0));
+                drawline(trans, rightchannel, cz6, new Point3d(cz5.X + shellthick, cz6.Y, 0), channelcolor);
+                drawline(trans, rightchannel, czb6, new Point3d(czb5.X + shellthick, czb6.Y, 0), channelcolor);
+                drawline(trans, rightchannel, new Point3d(cz5.X + shellthick, cz6.Y, 0), new Point3d(czb5.X + shellthick, czb6.Y, 0), channelcolor);
 
                 //BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), leftchannel.ObjectId);
                 //modelSpace.AppendEntity(shellLeftRef);
@@ -840,29 +1129,29 @@ namespace CAD_AUTOMATION
                 }
                 rightchannel = shellRight;
 
-                Point3d cz1 = new Point3d(pz7.X, pz2.Y - thick, 0);
-                Point3d cz2 = new Point3d(l + length - sectionsize + (vchannelsize/2), pz2.Y - thick, 0);
+                Point3d cz1 = new Point3d(pz7.X, pz2.Y - shellthick, 0);
+                Point3d cz2 = new Point3d(l + length - sectionsize + (vchannelsize/2), pz2.Y - shellthick, 0);
                 Point3d cz3 = new Point3d(l + length - sectionsize + (vchannelsize/2), pz2.Y, 0);
                 Point3d cz6 = new Point3d(l + length - sectionsize, pz2.Y, 0);
 
-                Point3d czb1 = new Point3d(pz8.X, pz1.Y + thick, 0);
-                Point3d czb2 = new Point3d(l + length - sectionsize + (vchannelsize / 2), pz1.Y + thick, 0);
+                Point3d czb1 = new Point3d(pz8.X, pz1.Y + shellthick, 0);
+                Point3d czb2 = new Point3d(l + length - sectionsize + (vchannelsize / 2), pz1.Y + shellthick, 0);
                 Point3d czb3 = new Point3d(l + length - sectionsize + (vchannelsize / 2), pz1.Y, 0);
                 Point3d czb6 = new Point3d(l + length - sectionsize, pz1.Y, 0);
 
-                drawline(trans, shellTop, pz7, cz1, 6);
-                drawline(trans, shellTop, cz1, cz2, 6);
-                drawline(trans, shellTop, cz2, cz3, 6);
-                drawline(trans, shellTop, cz3, cz6, 6);
+                //drawline(trans, topchannel, pz7, cz1, 6);
+                drawline(trans, topchannel, cz1, cz2, topcolor);
+                drawline(trans, topchannel, cz2, cz3, topcolor);
+                drawline(trans, topchannel, cz3, cz6, topcolor);
 
-                drawline(trans, shellBottom, pz8, czb1, 6);
-                drawline(trans, shellBottom, czb1, czb2, 6);
-                drawline(trans, shellBottom, czb2, czb3, 6);
-                drawline(trans, shellBottom, czb3, czb6, 6);
+                //drawline(trans, bottomchannel, pz8, czb1, 6);
+                drawline(trans, bottomchannel, czb1, czb2, bottomcolor);
+                drawline(trans, bottomchannel, czb2, czb3, bottomcolor);
+                drawline(trans, bottomchannel, czb3, czb6, bottomcolor);
 
-                drawline(trans, leftchannel, cz6, new Point3d(cz3.X - thick, cz6.Y, 0));
-                drawline(trans, leftchannel, czb6, new Point3d(czb3.X - thick, czb6.Y, 0));
-                drawline(trans, leftchannel, new Point3d(cz3.X - thick, cz6.Y, 0), new Point3d(czb3.X - thick, czb6.Y, 0));
+                drawline(trans, leftchannel, cz6, new Point3d(cz3.X - shellthick, cz6.Y, 0), channelcolor);
+                drawline(trans, leftchannel, czb6, new Point3d(czb3.X - shellthick, czb6.Y, 0), channelcolor);
+                drawline(trans, leftchannel, new Point3d(cz3.X - shellthick, cz6.Y, 0), new Point3d(czb3.X - shellthick, czb6.Y, 0), channelcolor);
 
                 //BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), leftchannel.ObjectId);
                 //modelSpace.AppendEntity(shellLeftRef);
@@ -887,9 +1176,12 @@ namespace CAD_AUTOMATION
             double rightpoint = 0;
             BlockTableRecord topchannel = null;
             BlockTableRecord bottomchannel = null;
+            int leftcolor = 0;
+            int rightcolor = 0;
 
             // Calculate cumulative section size dynamically
             double cumulativeSize = 0;
+
             int currentSec = Convert.ToInt32(secnumber);
 
             Control tabControl = this.Controls.Find("materialTabControl1", true).FirstOrDefault();
@@ -929,23 +1221,31 @@ namespace CAD_AUTOMATION
             switch (secposition)
             {
                 case "full":
-                    leftpoint = l + zchannelside + thick;
-                    rightpoint = l + secsize - zchannelside - thick;
+                    leftpoint = l + zchannelside + shellthick;
+                    rightpoint = l + secsize - zchannelside - shellthick;
+                    leftcolor = shellcolor;
+                    rightcolor = shellcolor;
                     break;
 
                 case "first":
-                    leftpoint = l + zchannelside + thick;
+                    leftpoint = l + zchannelside + shellthick;
                     rightpoint = l + secsize - (vchannelsize / 2);
+                    leftcolor = shellcolor;
+                    rightcolor = channelcolor;
                     break;
 
                 case "mid":
                     leftpoint = l + cumulativeSize + (vchannelsize / 2);
                     rightpoint = leftpoint + secsize - vchannelsize;
+                    leftcolor = channelcolor;
+                    rightcolor = channelcolor;
                     break;
 
                 case "last":
                     leftpoint = l + cumulativeSize + (vchannelsize / 2);
-                    rightpoint = l + cumulativeSize + secsize - zchannelside - thick;
+                    rightpoint = l + cumulativeSize + secsize - zchannelside - shellthick;
+                    leftcolor = channelcolor;
+                    rightcolor = shellcolor;
                     break;
 
                 default:
@@ -960,37 +1260,37 @@ namespace CAD_AUTOMATION
                 Point3d l6 = new Point3d(leftpoint, pz2.Y, 0);
                 Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
                 Point3d r6 = new Point3d(rightpoint, pz2.Y, 0);
-                drawline(trans, leftchannel, l1, l6);
-                drawline(trans, rightchannel, r1, r6);
+                drawline(trans, leftchannel, l1, l6,leftcolor);
+                drawline(trans, rightchannel, r1, r6,rightcolor);
             }
             else if(partposition == "first")
             {
                 Point3d l1 = new Point3d(leftpoint, pz1.Y, 0);
                 Point3d l2 = new Point3d(leftpoint, ps1.Y + partsize - (hchannelsize/2), 0);
-                Point3d l3 = new Point3d(leftpoint - thick, ps1.Y + partsize - (hchannelsize / 2), 0);
-                Point3d l4 = new Point3d(leftpoint - thick, ps1.Y + partsize, 0);
+                Point3d l3 = new Point3d(leftpoint - shellthick, ps1.Y + partsize - (hchannelsize / 2), 0);
+                Point3d l4 = new Point3d(leftpoint - shellthick, ps1.Y + partsize, 0);
 
                 Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
                 Point3d r2 = new Point3d(rightpoint, ps1.Y + partsize - (hchannelsize / 2), 0);
-                Point3d r3 = new Point3d(rightpoint + thick, ps1.Y + partsize - (hchannelsize / 2), 0);
-                Point3d r4 = new Point3d(rightpoint + thick, ps1.Y + partsize, 0);
+                Point3d r3 = new Point3d(rightpoint + shellthick, ps1.Y + partsize - (hchannelsize / 2), 0);
+                Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + partsize, 0);
 
-                drawline(trans, leftchannel, l1, l2);
-                drawline(trans, leftchannel, l2, l3);
-                drawline(trans, leftchannel, l3, l4);
+                drawline(trans, leftchannel, l1, l2, leftcolor);
+                drawline(trans, leftchannel, l2, l3, leftcolor);
+                drawline(trans, leftchannel, l3, l4, leftcolor);
 
-                drawline(trans, rightchannel, r1, r2);
-                drawline(trans, rightchannel, r2, r3);
-                drawline(trans, rightchannel, r3, r4);
+                drawline(trans, rightchannel, r1, r2, rightcolor);
+                drawline(trans, rightchannel, r2, r3, rightcolor);
+                drawline(trans, rightchannel, r3, r4, rightcolor);
 
                 topchannel = new BlockTableRecord { Name = $"h{secnumber}_1" };
                 blockTable.Add(topchannel);
                 trans.AddNewlyCreatedDBObject(topchannel, true);
 
-                drawline(trans, topchannel, l3, l4);
-                drawline(trans, topchannel, r3, r4);
-                drawline(trans, topchannel, r3, l3);
-                drawline(trans, topchannel, new Point3d(l3.X,l3.Y + thick,0),new Point3d(r3.X,r3.Y + thick,0));
+                drawline(trans, topchannel, l3, l4,channelcolor);
+                drawline(trans, topchannel, r3, r4, channelcolor);
+                drawline(trans, topchannel, r3, l3, channelcolor);
+                drawline(trans, topchannel, new Point3d(l3.X,l3.Y + shellthick,0),new Point3d(r3.X,r3.Y + shellthick,0), channelcolor);
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
@@ -1000,6 +1300,10 @@ namespace CAD_AUTOMATION
             {
 
                 double sec = 0;
+                //if (hbbbox.Text == "Bottom")
+                //{
+                //    sec = hbussize;
+                //}
                 int partNum = Convert.ToInt32(partnumber);
                 string leftsec = $"h{secnumber}_"  + (partNum - 1).ToString();
                 string rightsec = $"h{secnumber}_" + (partNum).ToString();
@@ -1065,41 +1369,41 @@ namespace CAD_AUTOMATION
                 }
 
 
-                Point3d l1 = new Point3d(leftpoint - thick, ps1.Y + sec, 0);
-                Point3d l2 = new Point3d(leftpoint - thick, ps1.Y + sec + (hchannelsize/2), 0);
+                Point3d l1 = new Point3d(leftpoint - shellthick, ps1.Y + sec, 0);
+                Point3d l2 = new Point3d(leftpoint - shellthick, ps1.Y + sec + (hchannelsize/2), 0);
                 Point3d l3 = new Point3d(leftpoint, ps1.Y + sec + (hchannelsize / 2), 0);
                 Point3d l4 = new Point3d(leftpoint, ps1.Y + sec+ partsize - (hchannelsize / 2), 0);
-                Point3d l5 = new Point3d(leftpoint - thick, ps1.Y + sec + partsize - (hchannelsize / 2), 0);
-                Point3d l6 = new Point3d(leftpoint - thick, ps1.Y + sec + partsize, 0);
+                Point3d l5 = new Point3d(leftpoint - shellthick, ps1.Y + sec + partsize - (hchannelsize / 2), 0);
+                Point3d l6 = new Point3d(leftpoint - shellthick, ps1.Y + sec + partsize, 0);
 
-                Point3d r1 = new Point3d(rightpoint + thick, ps1.Y + sec, 0);
-                Point3d r2 = new Point3d(rightpoint + thick, ps1.Y + sec + (hchannelsize / 2), 0);
+                Point3d r1 = new Point3d(rightpoint + shellthick, ps1.Y + sec, 0);
+                Point3d r2 = new Point3d(rightpoint + shellthick, ps1.Y + sec + (hchannelsize / 2), 0);
                 Point3d r3 = new Point3d(rightpoint, ps1.Y + sec + (hchannelsize / 2), 0);
                 Point3d r4 = new Point3d(rightpoint, ps1.Y + sec + partsize - (hchannelsize / 2), 0);
-                Point3d r5 = new Point3d(rightpoint + thick, ps1.Y + sec + partsize - (hchannelsize / 2), 0);
-                Point3d r6 = new Point3d(rightpoint + thick, ps1.Y + sec + partsize, 0);
+                Point3d r5 = new Point3d(rightpoint + shellthick, ps1.Y + sec + partsize - (hchannelsize / 2), 0);
+                Point3d r6 = new Point3d(rightpoint + shellthick, ps1.Y + sec + partsize, 0);
 
-                drawline(trans, leftchannel, l1, l2);
-                drawline(trans, leftchannel, l2, l3);
-                drawline(trans, leftchannel, l3, l4);
-                drawline(trans, leftchannel, l4, l5);
-                drawline(trans, leftchannel, l5, l6);
+                drawline(trans, leftchannel, l1, l2, leftcolor);
+                drawline(trans, leftchannel, l2, l3, leftcolor);
+                drawline(trans, leftchannel, l3, l4, leftcolor);
+                drawline(trans, leftchannel, l4, l5, leftcolor);
+                drawline(trans, leftchannel, l5, l6, leftcolor);
 
-                drawline(trans, rightchannel, r1, r2);
-                drawline(trans, rightchannel, r2, r3);
-                drawline(trans, rightchannel, r3, r4);
-                drawline(trans, rightchannel, r4, r5);
-                drawline(trans, rightchannel, r5, r6);
+                drawline(trans, rightchannel, r1, r2, rightcolor);
+                drawline(trans, rightchannel, r2, r3, rightcolor);
+                drawline(trans, rightchannel, r3, r4, rightcolor);
+                drawline(trans, rightchannel, r4, r5, rightcolor);
+                drawline(trans, rightchannel, r5, r6, rightcolor);
 
-                drawline(trans, bottomchannel, l1, l2);
-                drawline(trans, bottomchannel, l2, r2);
-                drawline(trans, bottomchannel, r2, r1);
-                drawline(trans, bottomchannel, new Point3d(l2.X, l2.Y - thick, 0), new Point3d(r2.X, r2.Y - thick, 0));
+                drawline(trans, bottomchannel, l1, l2, channelcolor);
+                drawline(trans, bottomchannel, l2, r2, channelcolor);
+                drawline(trans, bottomchannel, r2, r1, channelcolor);
+                drawline(trans, bottomchannel, new Point3d(l2.X, l2.Y - shellthick, 0), new Point3d(r2.X, r2.Y - shellthick, 0), channelcolor);
 
-                drawline(trans, topchannel, l6, l5);
-                drawline(trans, topchannel, l5, r5);
-                drawline(trans, topchannel, r5, r6);
-                drawline(trans, topchannel, new Point3d(l5.X, l5.Y + thick, 0), new Point3d(r5.X, r5.Y + thick, 0));
+                drawline(trans, topchannel, l6, l5, channelcolor);
+                drawline(trans, topchannel, l5, r5, channelcolor);
+                drawline(trans, topchannel, r5, r6, channelcolor);
+                drawline(trans, topchannel, new Point3d(l5.X, l5.Y + shellthick, 0), new Point3d(r5.X, r5.Y + shellthick, 0), channelcolor);
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
@@ -1110,21 +1414,21 @@ namespace CAD_AUTOMATION
             {
                 Point3d l1 = new Point3d(leftpoint, pz2.Y, 0);
                 Point3d l2 = new Point3d(leftpoint, ps4.Y - partsize + (hchannelsize / 2), 0);
-                Point3d l3 = new Point3d(leftpoint - thick, ps4.Y - partsize + (hchannelsize / 2), 0);
-                Point3d l4 = new Point3d(leftpoint - thick, ps4.Y - partsize, 0);
+                Point3d l3 = new Point3d(leftpoint - shellthick, ps4.Y - partsize + (hchannelsize / 2), 0);
+                Point3d l4 = new Point3d(leftpoint - shellthick, ps4.Y - partsize, 0);
 
                 Point3d r1 = new Point3d(rightpoint, pz2.Y, 0);
                 Point3d r2 = new Point3d(rightpoint, ps4.Y - partsize + (hchannelsize / 2), 0);
-                Point3d r3 = new Point3d(rightpoint + thick, ps4.Y - partsize + (hchannelsize / 2), 0);
-                Point3d r4 = new Point3d(rightpoint + thick, ps4.Y - partsize, 0);
+                Point3d r3 = new Point3d(rightpoint + shellthick, ps4.Y - partsize + (hchannelsize / 2), 0);
+                Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - partsize, 0);
 
-                drawline(trans, leftchannel, l1, l2);
-                drawline(trans, leftchannel, l2, l3);
-                drawline(trans, leftchannel, l3, l4);
+                drawline(trans, leftchannel, l1, l2,leftcolor);
+                drawline(trans, leftchannel, l2, l3, leftcolor);
+                drawline(trans, leftchannel, l3, l4, leftcolor);
 
-                drawline(trans, rightchannel, r1, r2);
-                drawline(trans, rightchannel, r2, r3);
-                drawline(trans, rightchannel, r3, r4);
+                drawline(trans, rightchannel, r1, r2,rightcolor);
+                drawline(trans, rightchannel, r2, r3, rightcolor);
+                drawline(trans, rightchannel, r3, r4, rightcolor);
 
                 int partnum = Convert.ToInt32(partnumber);
                 string leftsec = $"h{secnumber}_" + (partnum - 1).ToString();
@@ -1138,10 +1442,10 @@ namespace CAD_AUTOMATION
                     return;
                 }
 
-                drawline(trans, bottomchannel, l3, l4);
-                drawline(trans, bottomchannel, r3, r4);
-                drawline(trans, bottomchannel, r3, l3);
-                drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - thick, 0), new Point3d(r3.X, r3.Y - thick, 0));
+                drawline(trans, bottomchannel, l3, l4,channelcolor);
+                drawline(trans, bottomchannel, r3, r4, channelcolor);
+                drawline(trans, bottomchannel, r3, l3, channelcolor);
+                drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
             }
 
         }
