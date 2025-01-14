@@ -159,12 +159,8 @@ namespace CAD_AUTOMATION
                 Point3d topLeft = new Point3d(centerPoint.X - halfLength + offset, centerPoint.Y + halfWidth, centerPoint.Z);
                 Point3d bottomRight = new Point3d(centerPoint.X + halfLength - offset, centerPoint.Y - halfWidth, centerPoint.Z);
 
-                // Create the rectangle
                 Line line1 = new Line(topLeft, new Point3d(bottomRight.X, topLeft.Y, bottomRight.Z));
-                //Line line2 = new Line(new Point3d(bottomRight.X, topLeft.Y, bottomRight.Z), bottomRight);
                 Line line3 = new Line(bottomRight, new Point3d(topLeft.X, bottomRight.Y, topLeft.Z));
-                //Line line4 = new Line(new Point3d(topLeft.X, bottomRight.Y, topLeft.Z), topLeft);
-
                 Point3d arcright = new Point3d(bottomRight.X, centerPoint.Y, centerPoint.Z);
                 Point3d arcleft = new Point3d(topLeft.X, centerPoint.Y, centerPoint.Z);
 
@@ -474,7 +470,7 @@ namespace CAD_AUTOMATION
                                             if (dimStyle.Name == "BLANK SIZE")
                                             {
                                                 // Get the dimension value (dimension text)
-                                                double dimValue = dimension.Measurement;
+                                                int dimValue = Convert.ToInt32(dimension.Measurement);
 
                                                 // Store the first dimension in F and second in G
                                                 if (dimension1 == 0)

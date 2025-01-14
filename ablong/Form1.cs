@@ -44,6 +44,7 @@ namespace CAD_AUTOMATION
         private Point dragCursorPoint;
         private Point dragFormPoint;
         double l;
+        double w = 0;
         private double width;
         private double length;
         private double shellthick;
@@ -54,12 +55,20 @@ namespace CAD_AUTOMATION
         private double vchannelsize;
         private double hchannelsize;
         private double hbussize;
+        private double doorclearx;
+        private double doorcleary;
+        private double doorinchcleary;
+        private double doorinchsizex;
+        private double doorinchsizey;
+        private double doorinchholes;
         private Point3d ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8;
         private Point3d pz1, pz2, pz3, pz4, pz5, pz6, pz7, pz8, pz9, pz10, pz11, pz12, pz13, pz14;
         private int shellcolor = 140;
         private int channelcolor = 10;
-
-
+        private int doorcolor = 50;
+        private int doorNothidecolor = 2;
+        private int mpcolor = 210;
+        private int mpNothidecolor = 6;
 
         BlockTableRecord shellLeft;
         BlockTableRecord shellRight;
@@ -92,6 +101,40 @@ namespace CAD_AUTOMATION
             this.MouseMove += new MouseEventHandler(Form1_MouseMove);
             this.MouseUp += new MouseEventHandler(Form1_MouseUp);
         }
+        private void sectionsbox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))
+            {
+                e.Handled = true; // Suppress the key press
+            }
+        }
+        private void doorthickbox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar) && e.KeyChar != '.')
+            {
+                e.Handled = true;
+            }
+        }
+
+        private void paneltypebox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            label3.Visible = true;
+            label4.Visible = true;
+            label5.Visible = true;
+            label6.Visible = true;
+            label7.Visible = true;
+            label8.Visible = true;
+            label10.Visible = true;
+
+            shellthickbox.Visible = true;
+            widthbox.Visible = true;
+            heigthbox.Visible = true;
+            depthbox.Visible = true;
+            hbbbox.Visible = true;
+            hbbsize.Visible = true;
+            sectionsbox.Visible = true;
+        }
+
         private void materialButton2_Click(object sender, EventArgs e)
         {
             if(materialTabControl1.SelectedTab.Name.Contains("sec") && materialTabControl1.SelectedTab.Name.Contains("page"))
@@ -108,9 +151,27 @@ namespace CAD_AUTOMATION
                 
 
                 var sectionTabPage = materialTabControl1.SelectedTab;
-                double selectedsection = materialTabControl1.SelectedIndex;
-                var partcombobox = sectionTabPage.Controls[$"sec{selectedsection}partbox"] as ComboBox;
-                var selectedCountText = partcombobox.SelectedItem?.ToString();
+                double selectedsection = materialTabControl1.SelectedIndex - 1;
+                var partcombobox = sectionTabPage.Controls[$"sec{selectedsection}partbox"] as TextBox;
+                var selectedCountText = partcombobox.Text.ToString();
+                var doortypecombobox = sectionTabPage.Controls[$"sec{selectedsection}doortypebox"] as ComboBox;
+                var doortypeText = doortypecombobox.SelectedItem?.ToString();
+                var dooropencombobox = sectionTabPage.Controls[$"sec{selectedsection}dooropenbox"] as ComboBox;
+                var dooropenText = dooropencombobox.SelectedItem?.ToString();
+
+                if(string.IsNullOrEmpty(doortypeText))
+                {
+                    errorlabel.Text = "Please fill all the fields";
+                    errorlabel.Visible = true;
+                    return;
+                }
+                else if (doortypeText == "Door" && string.IsNullOrEmpty(dooropenText))
+                {
+                    errorlabel.Text = "Please fill all the fields";
+                    errorlabel.Visible = true;
+                    return;
+                }
+
                 if (int.TryParse(selectedCountText, out int selectedCount) && selectedCount > 0 && !string.IsNullOrEmpty(sectionTabPage.Controls[$"sec{selectedsection}size"].Text))
                 {
 
@@ -155,9 +216,18 @@ namespace CAD_AUTOMATION
                 }
 
             }
+            else if (materialTabControl1.SelectedTab.Name == "detailpage")
+            {
+                if (string.IsNullOrWhiteSpace(doorthickbox.Text) || string.IsNullOrWhiteSpace(coverthickbox.Text) || string.IsNullOrWhiteSpace(inchtypebox.Text) || string.IsNullOrWhiteSpace(mpthickbox.Text))
+                {
+                    errorlabel.Text = "Please fill all the fields";
+                    errorlabel.Visible = true;
+                    return;
+                }
+            }
             else if (materialTabControl1.SelectedTab.Name == "shellpage")
             {
-                int baseX = 400, baseY = 60;
+                int baseX = 370, baseY = 60;
                 int labelWidth = 150, labelHeight = 20;
                 int textBoxWidth = 150, textBoxHeight = 21;
                 int spacingY = 40;
@@ -170,10 +240,23 @@ namespace CAD_AUTOMATION
                 }
 
                 // Get the selected count from the combo box
-                if (int.TryParse(sectionsbox.SelectedItem.ToString(), out int tabCount))
+                if (int.TryParse(sectionsbox.Text.ToString(), out int tabCount))
                 {
-                    
-                    int currentTabCount = materialTabControl1.TabPages.Count -1;
+                    if(tabCount < 1)
+                    {
+                        errorlabel.Text = "Please select a section value greater than 0";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+
+                    if (tabCount > 30)
+                    {
+                        errorlabel.Text = "Maximum allowed sections are 30";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+
+                    int currentTabCount = materialTabControl1.TabPages.Count - 2;
                     if (currentTabCount < tabCount)
                     {
                         for (int i2 = currentTabCount +1 ; i2 <= tabCount; i2++)
@@ -181,10 +264,11 @@ namespace CAD_AUTOMATION
                             var tabPage = new TabPage
                             {
                                 Text = $"Section - {i2}", // Set tab text
+                                AutoScroll = true,
                                 Name = $"sec{i2}page", // Set unique name
                             };
                             //MessageBox.Show($"sec{i2}page");
-                            for (int i = 1; i <= 8; i++)
+                            for (int i = 1; i <= 30; i++)
                             {
                                 // Create Label
                                 Label partitionLabel = new Label
@@ -204,7 +288,7 @@ namespace CAD_AUTOMATION
                                 TextBox partitionTextBox = new TextBox
                                 {
                                     Name = $"sec{i2}part{i}",
-                                    //Text = "500",
+                                    Text = "500",
                                     Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                     ForeColor = Color.White,
                                     BackColor = Color.FromArgb(64, 64, 64),
@@ -254,14 +338,151 @@ namespace CAD_AUTOMATION
                                 AutoSize = true
                             };
                             tabPage.Controls.Add(partLabel1);
-                            // Add Section Size Label and TextBox at the top
+
+                            Label feederLabel = new Label
+                            {
+                                Name = $"feederlabel{i2}",
+                                Text = "Section Type",
+                                Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
+                                ForeColor = SystemColors.Control,
+                                Location = new Point(40, 80),
+                                Size = new Size(labelWidth, labelHeight),
+                                AutoSize = true
+                            };
+                            tabPage.Controls.Add(feederLabel);
+
+                            MetroFramework.Controls.MetroComboBox feedertypebox = new MetroFramework.Controls.MetroComboBox
+                            {
+                                Name = $"sec{i2}feedertypebox",
+                                FontSize = MetroFramework.MetroLinkSize.Tall,
+                                FormattingEnabled = true,
+                                ItemHeight = 29,
+                                Location = new Point(170, 70),
+                                Size = new System.Drawing.Size(165, 35),
+                                Theme = MetroFramework.MetroThemeStyle.Dark
+                            };
+                            feedertypebox.Items.AddRange(new object[]
+                            {
+                                "FEEDER", "Single CC", "Double CC","Single BBC", "Double BBC"
+                            });
+                            tabPage.Controls.Add(feedertypebox);
+
+                            feedertypebox.SelectedIndexChanged += (s, e6) =>
+                            {
+                                int tabIndex = materialTabControl1.SelectedIndex - 1;
+
+                                if (feedertypebox.Text == "FEEDER")
+                                {
+                                    var doortype = tabPage.Controls[$"sec{tabIndex}doortypebox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (doortype != null)
+                                    {
+                                        doortype.SelectedIndex = 1;
+                                    }
+                                    for (int i3 = 1; i3 <= 30; i3++)
+                                    {
+                                        var needmp = tabPage.Controls[$"mp{tabIndex}part{i3}"] as MetroFramework.Controls.MetroCheckBox;
+                                        if (needmp != null)
+                                        {
+                                            needmp.Checked = true;
+                                        }
+                                    }
+
+                                }
+                                else if (feedertypebox.Text == "Single BBC")
+                                {
+                                    var partbox = tabPage.Controls[$"sec{tabIndex}partbox"] as TextBox;
+                                    var doortype = tabPage.Controls[$"sec{tabIndex}doortypebox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (partbox != null)
+                                    {
+                                        partbox.Text = "1";
+                                    }
+                                    if (doortype != null)
+                                    {
+                                        doortype.SelectedIndex = 2;
+                                    }
+                                    for (int i3 = 1; i3 <= 30; i3++)
+                                    {
+                                        var needmp = tabPage.Controls[$"mp{tabIndex}part{i3}"] as MetroFramework.Controls.MetroCheckBox;
+                                        if (needmp != null)
+                                        {
+                                            needmp.Checked = false;
+                                        }
+                                    }
+                                }
+                                else if (feedertypebox.Text == "Double BBC")
+                                {
+                                    var partbox = tabPage.Controls[$"sec{tabIndex}partbox"] as TextBox;
+                                    var doortype = tabPage.Controls[$"sec{tabIndex}doortypebox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (partbox != null)
+                                    {
+                                        partbox.Text = "2";
+                                    }
+                                    if (doortype != null)
+                                    {
+                                        doortype.SelectedIndex = 2;
+                                    }
+                                    for (int i3 = 1; i3 <= 30; i3++)
+                                    {
+                                        var needmp = tabPage.Controls[$"mp{tabIndex}part{i3}"] as MetroFramework.Controls.MetroCheckBox;
+                                        if (needmp != null)
+                                        {
+                                            needmp.Checked = false;
+                                        }
+                                    }
+                                }
+                                else if (feedertypebox.Text == "Single CC")
+                                {
+                                    var partbox = tabPage.Controls[$"sec{tabIndex}partbox"] as TextBox;
+                                    var doortype = tabPage.Controls[$"sec{tabIndex}doortypebox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (partbox != null)
+                                    {
+                                        partbox.Text = "1";
+                                    }
+                                    if (doortype != null)
+                                    {
+                                        doortype.SelectedIndex = 1;
+                                    }
+                                    for (int i3 = 1; i3 <= 30; i3++)
+                                    {
+                                        var needmp = tabPage.Controls[$"mp{tabIndex}part{i3}"] as MetroFramework.Controls.MetroCheckBox;
+                                        if (needmp != null)
+                                        {
+                                            needmp.Checked = false;
+                                        }
+                                    }
+                                }
+                                else if (feedertypebox.Text == "Double CC")
+                                {
+                                    var partbox = tabPage.Controls[$"sec{tabIndex}partbox"] as TextBox;
+                                    var doortype = tabPage.Controls[$"sec{tabIndex}doortypebox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (partbox != null)
+                                    {
+                                        partbox.Text = "2";
+                                    }
+                                    if (doortype != null)
+                                    {
+                                        doortype.SelectedIndex = 1;
+                                    }
+                                    for (int i3 = 1; i3 <= 30; i3++)
+                                    {
+                                        var needmp = tabPage.Controls[$"mp{tabIndex}part{i3}"] as MetroFramework.Controls.MetroCheckBox;
+                                        if (needmp != null)
+                                        {
+                                            needmp.Checked = false;
+                                        }
+                                    }
+                                }
+                                
+                            };
+
+
                             Label sectionSizeLabel = new Label
                             {
                                 Name = $"labelSectionSize{i2}",
                                 Text = "Section size",
                                 Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
                                 ForeColor = SystemColors.Control,
-                                Location = new Point(40, 60),
+                                Location = new Point(40, 120),
                                 Size = new Size(labelWidth, labelHeight),
                                 AutoSize = true
                             };
@@ -270,17 +491,18 @@ namespace CAD_AUTOMATION
                             TextBox sectionSizeTextBox = new TextBox
                             {
                                 Name = $"sec{i2}size",
-                                //Text = "500",
+                                Text = "500",
                                 Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                 ForeColor = Color.White,
                                 BackColor = Color.FromArgb(64, 64, 64),
                                 BorderStyle = BorderStyle.None,
                                 TextAlign = HorizontalAlignment.Center,
                                 MinimumSize = new Size(textBoxWidth, textBoxHeight),
-                                Location = new Point(170, 60),
+                                Location = new Point(170, 120),
                                 Size = new Size(textBoxWidth, textBoxHeight),
                             };
                             tabPage.Controls.Add(sectionSizeTextBox);
+                            sectionSizeTextBox.KeyPress += new KeyPressEventHandler(sectionsbox_KeyPress);
                             RoundCorners(sectionSizeTextBox, 10);
 
                             // Add Section Size Label and TextBox at the top
@@ -290,37 +512,64 @@ namespace CAD_AUTOMATION
                                 Text = "Partitions",
                                 Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
                                 ForeColor = SystemColors.Control,
-                                Location = new Point(40, 100),
+                                Location = new Point(40, 170),
                                 Size = new Size(labelWidth, labelHeight),
                                 AutoSize = true
                             };
                             tabPage.Controls.Add(partLabel);
 
-                            MetroFramework.Controls.MetroComboBox Partitonsbox = new MetroFramework.Controls.MetroComboBox
+                            //MetroFramework.Controls.MetroComboBox Partitonsbox = new MetroFramework.Controls.MetroComboBox
+                            //{
+                            //    Name = $"sec{i2}partbox",
+                            //    FontSize = MetroFramework.MetroLinkSize.Tall,
+                            //    FormattingEnabled = true,
+                            //    ItemHeight = 29,
+                            //    Location = new Point(170, 90),
+                            //    Size = new System.Drawing.Size(149, 35),
+                            //    TabIndex = 18,
+                            //    Theme = MetroFramework.MetroThemeStyle.Dark
+                            //};
+
+                            //// Add items to the ComboBox
+                            //Partitonsbox.Items.AddRange(new object[]
+                            //{
+                            //    "1", "2", "3", "4", "5", "6", "7", "8"
+                            //});
+
+                            TextBox Partitonsbox = new TextBox
                             {
                                 Name = $"sec{i2}partbox",
-                                FontSize = MetroFramework.MetroLinkSize.Tall,
-                                FormattingEnabled = true,
-                                ItemHeight = 29,
-                                Location = new Point(170, 90),
-                                Size = new System.Drawing.Size(149, 35),
-                                TabIndex = 18,
-                                Theme = MetroFramework.MetroThemeStyle.Dark
+                                //Text = "500",
+                                Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
+                                ForeColor = Color.White,
+                                BackColor = Color.FromArgb(64, 64, 64),
+                                BorderStyle = BorderStyle.None,
+                                TextAlign = HorizontalAlignment.Center,
+                                MinimumSize = new Size(textBoxWidth, textBoxHeight),
+                                Location = new Point(170, 170),
+                                Size = new Size(textBoxWidth, textBoxHeight),
                             };
+                            tabPage.Controls.Add(Partitonsbox);
+                            RoundCorners(Partitonsbox, 10);
 
-                            // Add items to the ComboBox
-                            Partitonsbox.Items.AddRange(new object[]
-                            {
-                                "1", "2", "3", "4", "5", "6", "7", "8"
-                            });
+                            Partitonsbox.KeyPress += new KeyPressEventHandler(sectionsbox_KeyPress);
 
-                            Partitonsbox.SelectedIndexChanged += (s, e5) =>
+                            Partitonsbox.TextChanged += (s, e5) =>
                             {
-                                if (int.TryParse(Partitonsbox.SelectedItem.ToString(), out int selectedCount))
+                                if (int.TryParse(Partitonsbox.Text.ToString(), out int selectedCount))
                                 {
-                                    int tabIndex = materialTabControl1.SelectedIndex;
+                                    
+                                    if(selectedCount > 30)
+                                    {
+                                        errorlabel.Text = "Maximum number of partitions is 30";
+                                        errorlabel.Visible = true;
+                                        return;
+                                    }
 
-                                    for (int i = 1; i <= 8; i++)
+                                    int tabIndex = materialTabControl1.SelectedIndex -1;
+                                    //MessageBox.Show($"Selected Count: {selectedCount}, Tab Index: {tabIndex}", "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                                    for (int i = 1; i <= 30; i++)
                                     {
                                         var label = tabPage.Controls[$"labelSecPart{i}"] as Label;
                                         var textBox = tabPage.Controls[$"sec{tabIndex}part{i}"] as TextBox;
@@ -334,7 +583,7 @@ namespace CAD_AUTOMATION
                                         }
                                         if (textBox != null) 
                                         {
-                                         textBox.Visible = isVisible;
+                                            textBox.Visible = isVisible;
                                         }
                                         if (checkBox != null)
                                         {
@@ -342,9 +591,107 @@ namespace CAD_AUTOMATION
                                         }
                                     }
                                 }
+                                else
+                                {
+                                    errorlabel.Text = "Please fill all the fields with only numbers";
+                                    errorlabel.Visible = true;
+                                    return;
+                                }
                             };
                             // Add the ComboBox to the desired container (e.g., a Form or Panel)
                             tabPage.Controls.Add(Partitonsbox);
+
+                            Label doorLabel = new Label
+                            {
+                                Name = $"doortypelabel{i2}",
+                                Text = "Door / Cover",
+                                Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
+                                ForeColor = SystemColors.Control,
+                                Location = new Point(40, 220),
+                                Size = new Size(labelWidth, labelHeight),
+                                AutoSize = true
+                            };
+                            tabPage.Controls.Add(doorLabel);
+
+                            MetroFramework.Controls.MetroComboBox doortypebox = new MetroFramework.Controls.MetroComboBox
+                            {
+                                Name = $"sec{i2}doortypebox",
+                                FontSize = MetroFramework.MetroLinkSize.Tall,
+                                FormattingEnabled = true,
+                                ItemHeight = 29,
+                                Location = new Point(170, 210),
+                                Size = new System.Drawing.Size(149, 35),
+                                TabIndex = 18,
+                                Theme = MetroFramework.MetroThemeStyle.Dark
+                            };
+                            doortypebox.Items.AddRange(new object[]
+                            {
+                                "None", "Door", "Cover"
+                            });
+                            tabPage.Controls.Add(doortypebox);
+
+                            doortypebox.SelectedIndexChanged += (s, e6) =>
+                            {
+                                int tabIndex = materialTabControl1.SelectedIndex -1;
+
+                                if (doortypebox.Text == "Door")
+                                {
+                                    var label = tabPage.Controls[$"dooropenlabel{tabIndex}"] as Label;
+                                    var checkBox = tabPage.Controls[$"sec{tabIndex}dooropenbox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (label != null)
+                                    {
+                                        label.Visible = true;
+                                    }
+                                    if (checkBox != null)
+                                    {
+                                        checkBox.Visible = true;
+                                    }
+                                }
+                                else
+                                {
+                                    var label = tabPage.Controls[$"dooropenlabel{tabIndex}"] as Label;
+                                    var checkBox = tabPage.Controls[$"sec{tabIndex}dooropenbox"] as MetroFramework.Controls.MetroComboBox;
+                                    if (label != null)
+                                    {
+                                        label.Visible = false;
+                                    }
+                                    if (checkBox != null)
+                                    {
+                                        checkBox.Visible = false;
+                                    }
+                                }
+                            };
+
+                            Label dooropenLabel = new Label
+                            {
+                                Name = $"dooropenlabel{i2}",
+                                Text = "Door Open type",
+                                Font = new Font("Microsoft Sans Serif", 11.25F, FontStyle.Regular),
+                                ForeColor = SystemColors.Control,
+                                Location = new Point(40, 270),
+                                Size = new Size(labelWidth, labelHeight),
+                                Visible = false,
+                                AutoSize = true
+                            };
+                            tabPage.Controls.Add(dooropenLabel);
+
+                            MetroFramework.Controls.MetroComboBox dooropenbox = new MetroFramework.Controls.MetroComboBox
+                            {
+                                Name = $"sec{i2}dooropenbox",
+                                FontSize = MetroFramework.MetroLinkSize.Tall,
+                                FormattingEnabled = true,
+                                ItemHeight = 29,
+                                Location = new Point(170, 260),
+                                Size = new System.Drawing.Size(149, 35),
+                                Visible = false,
+                                Theme = MetroFramework.MetroThemeStyle.Dark
+                            };
+                            dooropenbox.Items.AddRange(new object[]
+                            {
+                                "Left open", "Rigth open"
+                            });
+                            tabPage.Controls.Add(dooropenbox);
+
 
 
                             tabPage.BackColor = Color.FromArgb(35, 35, 35);
@@ -363,7 +710,9 @@ namespace CAD_AUTOMATION
                 }
                 else
                 {
-                    MessageBox.Show("Please select a valid number from the dropdown.", "Invalid Input", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    errorlabel.Text = "Please fill all the fields with only numbers";
+                    errorlabel.Visible = true;
+                    return;
                 }
             }
             
@@ -876,7 +1225,8 @@ namespace CAD_AUTOMATION
                 }
             }
 
-            double[] partSizes = new double[8]; // Array to store part sizes
+            double[] partSizes = new double[30]; // Array to store part sizes
+            bool[] needmp = new bool[30];
             double partitioncount = 0;
 
             string partboxName = $"sec{secnumber}partbox";
@@ -893,7 +1243,7 @@ namespace CAD_AUTOMATION
                 {
                     // Find the ComboBox inside the tab
                     Control[] foundControls = targetTab.Controls.Find(partboxName, true);
-                    if (foundControls.Length > 0 && foundControls[0] is ComboBox partitionBox)
+                    if (foundControls.Length > 0 && foundControls[0] is TextBox partitionBox)
                     {
                         // Retrieve the selected text from the ComboBox
                         if (!string.IsNullOrWhiteSpace(partitionBox.Text))
@@ -911,7 +1261,7 @@ namespace CAD_AUTOMATION
                         MessageBox.Show($"Partition box '{partboxName}' not found or not a ComboBox.");
                     }
 
-                    for (int i = 1; i <= 8; i++)
+                    for (int i = 1; i <= 30; i++)
                     {
                         string partName = $"sec{secnumber}part{i}";
                         Control[] foundControls2 = targetTab.Controls.Find(partName, true);
@@ -929,6 +1279,19 @@ namespace CAD_AUTOMATION
                         {
                             MessageBox.Show($"Control '{partName}' not found or not a TextBox.");
                         }
+
+                        string partName2 = $"mp{secnumber}part{i}";
+                        Control[] foundControls3 = targetTab.Controls.Find(partName2, true);
+
+                        if (foundControls3.Length > 0 && foundControls3[0] is CheckBox partcheckBox)
+                        {
+                           needmp[i - 1] = partcheckBox.Checked;
+                        }
+                        else
+                        {
+                            MessageBox.Show($"Control '{partName}' not found or not a TextBox.");
+                        }
+
                     }
                 }
                 else
@@ -1167,10 +1530,10 @@ namespace CAD_AUTOMATION
                                            i == partitioncount - 1 ? "last" : "mid";
 
                 string partitionIndex = (i + 1).ToString(); // Partition index starts from 1
-                drawpartitions(trans, blockTable, modelSpace, leftchannel, rightchannel, partSizes[i], partitionPosition, partitionIndex, secnumber, position,sectionsize);
+                drawpartitions(trans, blockTable, modelSpace, leftchannel, rightchannel, partSizes[i], partitionPosition, partitionIndex, secnumber, position, sectionsize, needmp[i]);
             }
         }
-        private void drawpartitions(Transaction trans, BlockTable blockTable, BlockTableRecord modelSpace, BlockTableRecord leftchannel, BlockTableRecord rightchannel, double partsize, string partposition, string partnumber,string secnumber, string secposition,double secsize)
+        private void drawpartitions(Transaction trans, BlockTable blockTable, BlockTableRecord modelSpace, BlockTableRecord leftchannel, BlockTableRecord rightchannel, double partsize, string partposition, string partnumber,string secnumber, string secposition,double secsize, bool needmp)
         {
             double leftpoint = 0;
             double rightpoint = 0;
@@ -1178,6 +1541,8 @@ namespace CAD_AUTOMATION
             BlockTableRecord bottomchannel = null;
             int leftcolor = 0;
             int rightcolor = 0;
+            double insertpointdoorX = 0;
+            double insertpointdoorY = 0;
 
             // Calculate cumulative section size dynamically
             double cumulativeSize = 0;
@@ -1208,6 +1573,7 @@ namespace CAD_AUTOMATION
                         {
                             MessageBox.Show($"Control {controlName} not found or empty in section-{i}.");
                         }
+
                     }
                     else
                     {
@@ -1225,6 +1591,7 @@ namespace CAD_AUTOMATION
                     rightpoint = l + secsize - zchannelside - shellthick;
                     leftcolor = shellcolor;
                     rightcolor = shellcolor;
+                    insertpointdoorX = l;
                     break;
 
                 case "first":
@@ -1232,6 +1599,7 @@ namespace CAD_AUTOMATION
                     rightpoint = l + secsize - (vchannelsize / 2);
                     leftcolor = shellcolor;
                     rightcolor = channelcolor;
+                    insertpointdoorX = l;
                     break;
 
                 case "mid":
@@ -1239,6 +1607,7 @@ namespace CAD_AUTOMATION
                     rightpoint = leftpoint + secsize - vchannelsize;
                     leftcolor = channelcolor;
                     rightcolor = channelcolor;
+                    insertpointdoorX = l + cumulativeSize;
                     break;
 
                 case "last":
@@ -1246,6 +1615,7 @@ namespace CAD_AUTOMATION
                     rightpoint = l + cumulativeSize + secsize - zchannelside - shellthick;
                     leftcolor = channelcolor;
                     rightcolor = shellcolor;
+                    insertpointdoorX = l + cumulativeSize;
                     break;
 
                 default:
@@ -1262,6 +1632,7 @@ namespace CAD_AUTOMATION
                 Point3d r6 = new Point3d(rightpoint, pz2.Y, 0);
                 drawline(trans, leftchannel, l1, l6,leftcolor);
                 drawline(trans, rightchannel, r1, r6,rightcolor);
+                insertpointdoorY = ps1.Y;
             }
             else if(partposition == "first")
             {
@@ -1295,6 +1666,7 @@ namespace CAD_AUTOMATION
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
                 trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                insertpointdoorY = ps1.Y;
             }
             else if(partposition == "mid")
             {
@@ -1408,6 +1780,7 @@ namespace CAD_AUTOMATION
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
                 trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                insertpointdoorY = ps1.Y + sec;
 
             }
             else if (partposition == "last")
@@ -1446,10 +1819,591 @@ namespace CAD_AUTOMATION
                 drawline(trans, bottomchannel, r3, r4, channelcolor);
                 drawline(trans, bottomchannel, r3, l3, channelcolor);
                 drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
+
+                insertpointdoorY = ps4.Y - partsize;
+            }
+
+            string doortype = null;
+            string dooropen = null;
+
+            if (tabControl != null && tabControl is TabControl materialTabControl3)
+            {
+                 TabPage targetTab = materialTabControl3.TabPages.Cast<TabPage>()
+                        .FirstOrDefault(tab => tab.Name == $"sec{secnumber}page");
+
+                if (targetTab != null)
+                {
+                    string controlName = $"sec{secnumber}doortypebox";
+
+                        // Find the control by name within the specific tab
+                    ComboBox doortypeBox = targetTab.Controls.Find(controlName, true).FirstOrDefault() as ComboBox;
+
+                    if (doortypeBox != null && !string.IsNullOrWhiteSpace(doortypeBox.Text))
+                    {
+                        doortype = doortypeBox.Text;
+                    }
+                    string controlName2 = $"sec{secnumber}dooropenbox";
+
+                    // Find the control by name within the specific tab
+                    ComboBox dooropenBox = targetTab.Controls.Find(controlName2, true).FirstOrDefault() as ComboBox;
+
+                    if (dooropenBox != null && !string.IsNullOrWhiteSpace(dooropenBox.Text))
+                    {
+                        dooropen = dooropenBox.Text;
+                    }
+
+                }
+                else
+                {
+                        MessageBox.Show($"Tab section-{secnumber} not found.");
+                }
+                
+
+            }
+
+            drawdoor(trans, blockTable, modelSpace, new Point3d(insertpointdoorX, insertpointdoorY, 0),leftchannel,rightchannel, secsize, secnumber, partsize, partnumber,doortype,dooropen,leftcolor,rightcolor);
+
+            if (needmp)
+            {
+                drawmp(trans, blockTable, modelSpace, new Point3d(insertpointdoorX, insertpointdoorY, 0), leftpoint, rightpoint, secsize, secnumber,secposition, partsize, partnumber);
             }
 
         }
+        private void drawmp(Transaction trans, BlockTable blockTable, BlockTableRecord modelSpace, Point3d insertionpointdoor, double leftpoint, double rightpoint, double sectionsize, string secnumber,string secposition, double partsize, string partnumber)
+        {
+            double mptopclear = Convert.ToDouble(config["mounting_plate_top_clearence"]);
+            double mpbottomclear = Convert.ToDouble(config["mounting_plate_bottom_clearence"]);
+            double mpsideclear = Convert.ToDouble(config["mounting_plate_side_clearence"]);
+            double oblongclearx = Convert.ToDouble(config["mounting_plate_oblong_clearence_x"]);
+            double oblongcleary = Convert.ToDouble(config["mounting_plate_oblong_clearence_y"]);
+            double mpthick = Convert.ToDouble(mpthickbox.Text);
 
+            Point3d mp1 = new Point3d(leftpoint + mpsideclear, insertionpointdoor.Y + mpbottomclear, 0);
+            Point3d mp2 = new Point3d(rightpoint - mpsideclear, insertionpointdoor.Y + mpbottomclear, 0);
+            Point3d mp3 = new Point3d(rightpoint - mpsideclear, insertionpointdoor.Y - mptopclear + partsize, 0);
+            Point3d mp4 = new Point3d(leftpoint + mpsideclear, insertionpointdoor.Y - mptopclear + partsize, 0);
+
+            Point3d ob1 = new Point3d(mp1.X + oblongclearx, mp1.Y + oblongcleary, 0);
+            Point3d ob2 = new Point3d(mp2.X - oblongclearx, mp1.Y + oblongcleary, 0);
+            Point3d ob3 = new Point3d(mp2.X - oblongclearx, mp3.Y - oblongcleary, 0);
+            Point3d ob4 = new Point3d(mp1.X + oblongclearx, mp3.Y - oblongcleary, 0);
+
+            BlockTableRecord mpblock = new BlockTableRecord { Name = $"mp{secnumber}_{partnumber}" };
+            blockTable.Add(mpblock);
+            trans.AddNewlyCreatedDBObject(mpblock, true);
+
+            drawline(trans, mpblock, mp1, mp2, mpcolor);
+            drawline(trans, mpblock, mp2, mp3, mpcolor);
+            drawline(trans, mpblock, mp3, mp4, mpcolor);
+            drawline(trans, mpblock, mp4, mp1, mpcolor);
+            drawline(trans, mpblock, new Point3d(mp1.X,mp1.Y +mpthick,0 ), new Point3d(mp2.X, mp2.Y + mpthick, 0), mpcolor);
+            drawline(trans, mpblock, new Point3d(mp3.X, mp3.Y - mpthick, 0), new Point3d(mp4.X, mp4.Y - mpthick, 0), mpcolor);
+
+            drawoblong(trans,mpblock,ob1,mpNothidecolor);
+            drawoblong(trans, mpblock, ob2, mpNothidecolor);
+            drawoblong(trans, mpblock, ob3, mpNothidecolor);
+            drawoblong(trans, mpblock, ob4, mpNothidecolor);
+
+            BlockReference shellLeftRef = new BlockReference(new Point3d(0,0,0), mpblock.ObjectId);
+            modelSpace.AppendEntity(shellLeftRef);
+            trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+        }
+        private void drawdoor(Transaction trans, BlockTable blockTable, BlockTableRecord modelSpace,Point3d insertionpointdoor,BlockTableRecord leftchannel, BlockTableRecord rigthchannel, double sectionsize, string secnumber, double partsize, string partnumber, string doortype , string dooropen,int leftcolor, int rightcolor)
+        {
+            doorclearx = Convert.ToDouble(config["door&cover_clearence_x"]);
+            doorcleary = Convert.ToDouble(config["door&cover_clearence_y"]);
+            doorinchcleary = Convert.ToDouble(config["step_inches_clearence_y"]);
+            doorinchsizex = Convert.ToDouble(config["step_inches_size_x"]);
+            doorinchsizey = Convert.ToDouble(config["step_inches_size_y"]);
+            doorinchholes = Convert.ToDouble(config["step_inches_holes_radius"]);
+
+            if (doortype == "Cover")
+            {
+                double doorwidth = sectionsize - (doorclearx * 2);
+                double doorheight = partsize - (doorcleary * 2);
+                double doorthick = Convert.ToDouble(coverthickbox.Text);
+                double coverlockx = Convert.ToDouble(config["coverlock_clearence_x"]);
+                double coverlocky = Convert.ToDouble(config["coverlock_clearence_y"]);
+                double coverlockradius = Convert.ToDouble(config["cover_lock_radius"]);
+
+                if (doorheight > 650)
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
+                    Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
+                    Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
+                    Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
+                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight/2), 0);
+                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    drawline(trans, doorblock, d4, d1, doorcolor);
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    drawline(trans, doorblock, d8, d5, doorcolor);
+
+                    DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+
+                    Point3dCollection rectangle = CreateRectangle(-coverlockradius-0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                    AddRectangle(trans,leftchannel,rectangle,new Point3d(0,0,0),new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
+                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), leftcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+
+                    BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                }
+                else if(doorheight > 250)
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
+                    Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
+                    Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
+                    Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
+                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    drawline(trans, doorblock, d4, d1, doorcolor);
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    drawline(trans, doorblock, d8, d5, doorcolor);
+
+                    DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                    //DrawCircle(trans, doorblock, c5, coverlockradius, doorcolor);
+                    //DrawCircle(trans, doorblock, c6, coverlockradius, doorcolor);
+
+                    Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
+                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+
+                    BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                }
+                else
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    drawline(trans, doorblock, d4, d1, doorcolor);
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    drawline(trans, doorblock, d8, d5, doorcolor);
+
+                    DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                    DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+
+                    Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0),leftcolor);
+                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+
+                    BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                }
+                
+
+                
+            }
+            else if (doortype == "Door")
+            {
+                double doorwidth = sectionsize - (doorclearx * 2);
+                double doorheight = partsize - (doorcleary * 2);
+                double doorthick = Convert.ToDouble(doorthickbox.Text);
+                double doorlockx = Convert.ToDouble(config["doorlock_clearence_x"]);
+                double doorlocky = Convert.ToDouble(config["doorlock_clearence_y"]);
+                double doorlockradius = Convert.ToDouble(config["door_lock_radius"]);
+
+                if (doorheight > 650)
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c2 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorlocky, 0);
+                    Point3d c3 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - doorlocky, 0);
+                    Point3d c6 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    
+
+                    if (inchtypebox.Text == "Step Inches")
+                    {
+                        Point3d d9 = new Point3d(doorclearx, doorcleary + doorinchcleary, 0);
+                        Point3d d101 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchcleary, 0);
+                        Point3d d102 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchsizey + doorinchcleary, 0);
+                        Point3d d103 = new Point3d(doorclearx, doorcleary + doorinchsizey + doorinchcleary, 0);
+
+                        Point3d d10 = new Point3d(doorclearx, doorcleary + (doorheight / 2) - (doorinchsizey / 2), 0);
+
+                        Point3d d11 = new Point3d(doorclearx, doorcleary + doorheight - doorinchcleary - doorinchsizey, 0);
+
+                        drawline(trans, doorblock, d9, d1, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d9.X+ doorthick,d9.Y,0), d5, doorcolor);
+                        Line lineinch1 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch2 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch3 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        drawline(trans, doorblock, d103, d10, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d103.X + doorthick, d103.Y, 0), new Point3d(d10.X + doorthick, d10.Y, 0), doorcolor);
+                        Line lineinch4 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch5 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch6 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        lineinch4.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        lineinch5.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        lineinch6.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        drawline(trans, doorblock, new Point3d(d10.X,d10.Y + doorinchsizey,0), d11, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d10.X + doorthick, d10.Y + doorinchsizey, 0), new Point3d(d11.X + doorthick, d11.Y, 0), doorcolor);
+                        Line lineinch7 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch8 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch9 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        lineinch7.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch8.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch9.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        drawline(trans, doorblock, new Point3d(d11.X, d11.Y + doorinchsizey, 0), d4, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d11.X + doorthick, d11.Y + doorinchsizey, 0), d8, doorcolor);
+
+                        if (dooropen == "Rigth open")
+                        {
+                            Point3d h1 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorinchcleary + (doorinchsizey / 2), 0);
+                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - doorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, rigthchannel, h1, doorinchholes, rightcolor);
+                            DrawCircle(trans, rigthchannel, h2, doorinchholes, rightcolor);
+                            DrawCircle(trans, rigthchannel, h3, doorinchholes, rightcolor);
+
+                        }
+                        else
+                        {
+                            Point3d h1 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorinchcleary + (doorinchsizey / 2), 0);
+                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - doorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, leftchannel, h1, doorinchholes, leftcolor);
+                            DrawCircle(trans, leftchannel, h2, doorinchholes, leftcolor);
+                            DrawCircle(trans, leftchannel, h3, doorinchholes, leftcolor);
+
+                        }
+
+                    }
+                    else
+                    {
+                        drawline(trans, doorblock, d4, d1, doorcolor);
+                        drawline(trans, doorblock, d8, d5, doorcolor);
+                    }
+
+                    AddRectangleWithFillet(trans,doorblock,c2,(doorlockradius*2), (doorlockradius * 2), 6, doorNothidecolor);
+                    AddRectangleWithFillet(trans, doorblock, c3, (doorlockradius * 2), (doorlockradius * 2), 6, doorNothidecolor);
+                    AddRectangleWithFillet(trans, doorblock, c6, (doorlockradius * 2), (doorlockradius * 2), 6, doorNothidecolor);
+
+                    if (dooropen == "Rigth open")
+                    {
+                        
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+
+                        // Define the mirroring axis (vertical line through the insertion point)
+                        Line3d mirrorLine = new Line3d(
+                            new Point3d(insertionpointdoor.X + (sectionsize/2), insertionpointdoor.Y, insertionpointdoor.Z),
+                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z) // A vertical direction vector
+                        );
+
+                        // Apply the mirroring transformation
+                        Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Add the mirrored block reference to the model space
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+                    else
+                    {
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+
+                }
+                else if (doorheight > 250)
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c2 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorlocky, 0);
+                    Point3d c3 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - doorlocky, 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    //drawline(trans, doorblock, d4, d1, doorcolor);
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    //drawline(trans, doorblock, d8, d5, doorcolor);
+
+                    if (inchtypebox.Text == "Step Inches")
+                    {
+                        Point3d d9 = new Point3d(doorclearx, doorcleary + doorinchcleary, 0);
+                        Point3d d101 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchcleary, 0);
+                        Point3d d102 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchsizey + doorinchcleary, 0);
+                        Point3d d103 = new Point3d(doorclearx, doorcleary + doorinchsizey + doorinchcleary, 0);
+
+                        //Point3d d10 = new Point3d(doorclearx, doorcleary + (doorheight / 2) - (doorinchsizey / 2), 0);
+
+                        Point3d d11 = new Point3d(doorclearx, doorcleary + doorheight - doorinchcleary - doorinchsizey, 0);
+
+                        drawline(trans, doorblock, d9, d1, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d9.X + doorthick, d9.Y, 0), d5, doorcolor);
+                        Line lineinch1 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch2 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch3 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        drawline(trans, doorblock, d103, d11, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d103.X + doorthick, d103.Y, 0), new Point3d(d11.X + doorthick, d11.Y, 0), doorcolor);
+                        Line lineinch7 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch8 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch9 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        lineinch7.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch8.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch9.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        drawline(trans, doorblock, new Point3d(d11.X, d11.Y + doorinchsizey, 0), d4, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d11.X + doorthick, d11.Y + doorinchsizey, 0), d8, doorcolor);
+                        if (dooropen == "Rigth open")
+                        {
+                            Point3d h1 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2),insertionpointdoor.Y + doorcleary + doorinchcleary + (doorinchsizey / 2), 0);
+                            //Point3d h2 = new Point3d(doorclearx + doorwidth - (doorinchsizex / 2), doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - doorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, rigthchannel, h1, doorinchholes, rightcolor);
+                            //DrawCircle(trans, rigthchannel, h2, doorinchholes, rightcolor);
+                            DrawCircle(trans, rigthchannel, h3, doorinchholes, rightcolor);
+
+                        }
+                        else
+                        {
+                            Point3d h1 = new Point3d(insertionpointdoor.X +doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorinchcleary + (doorinchsizey / 2), 0);
+                            //Point3d h2 = new Point3d(doorclearx + (doorinchsizex / 2), doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X+ doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - doorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, leftchannel, h1, doorinchholes, leftcolor);
+                            //DrawCircle(trans, leftchannel, h2, doorinchholes, leftcolor);
+                            DrawCircle(trans, leftchannel, h3, doorinchholes, leftcolor);
+
+                        }
+
+                    }
+                    else
+                    {
+                        drawline(trans, doorblock, d4, d1, doorcolor);
+                        drawline(trans, doorblock, d8, d5, doorcolor);
+                    }
+
+                    AddRectangleWithFillet(trans, doorblock, c2, (doorlockradius * 2), (doorlockradius * 2), 6, doorNothidecolor);
+                    AddRectangleWithFillet(trans, doorblock, c3, (doorlockradius * 2), (doorlockradius * 2), 6, doorNothidecolor);
+
+                    if (dooropen == "Rigth open")
+                    {
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+
+                        // Define the mirroring axis (vertical line through the insertion point)
+                        Line3d mirrorLine = new Line3d(
+                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y, insertionpointdoor.Z),
+                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z)
+                        );
+
+                        // Apply the mirroring transformation
+                        Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Add the mirrored block reference to the model space
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+                    else
+                    {
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+                }
+                else
+                {
+                    Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
+                    Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
+                    Point3d d3 = new Point3d(doorclearx + doorwidth, doorcleary + doorheight, 0);
+                    Point3d d4 = new Point3d(doorclearx, doorcleary + doorheight, 0);
+                    Point3d d5 = new Point3d(doorclearx + doorthick, doorcleary + doorthick, 0);
+                    Point3d d6 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorthick, 0);
+                    Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
+                    Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
+
+                    Point3d c6 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                    BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
+                    blockTable.Add(doorblock);
+                    trans.AddNewlyCreatedDBObject(doorblock, true);
+
+                    drawline(trans, doorblock, d1, d2, doorcolor);
+                    drawline(trans, doorblock, d2, d3, doorcolor);
+                    drawline(trans, doorblock, d3, d4, doorcolor);
+                    drawline(trans, doorblock, d4, d1, doorcolor);
+                    drawline(trans, doorblock, d5, d6, doorcolor);
+                    drawline(trans, doorblock, d6, d7, doorcolor);
+                    drawline(trans, doorblock, d7, d8, doorcolor);
+                    drawline(trans, doorblock, d8, d5, doorcolor);
+
+                    if (inchtypebox.Text == "Step Inches")
+                    {
+                        Point3d d9 = new Point3d(doorclearx, doorcleary + doorinchcleary, 0);
+                        Point3d d101 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchcleary, 0);
+                        Point3d d102 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchsizey + doorinchcleary, 0);
+                        Point3d d103 = new Point3d(doorclearx, doorcleary + doorinchsizey + doorinchcleary, 0);
+
+                        Point3d d10 = new Point3d(doorclearx, doorcleary + (doorheight / 2) - (doorinchsizey / 2), 0);
+
+                        //Point3d d11 = new Point3d(doorclearx, doorcleary + doorheight - doorinchcleary - doorinchsizey, 0);
+
+                        drawline(trans, doorblock, d10, d1, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d10.X + doorthick, d10.Y, 0), d5, doorcolor);
+                        Line lineinch4 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch5 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch6 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        lineinch4.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        lineinch5.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        lineinch6.TransformBy(Matrix3d.Displacement(d10 - d9));
+                        drawline(trans, doorblock, new Point3d(d10.X, d10.Y + doorinchsizey, 0), d4, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d10.X + doorthick, d10.Y + doorinchsizey, 0), d8, doorcolor);
+
+                        if (dooropen == "Rigth open")
+                        {
+                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
+                            DrawCircle(trans, rigthchannel, h2, doorinchholes, rightcolor);
+                        }
+                        else
+                        {
+                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
+                            DrawCircle(trans, leftchannel, h2, doorinchholes, leftcolor);
+                        }
+                    }
+                    else
+                    {
+                        drawline(trans, doorblock, d4, d1, doorcolor);
+                        drawline(trans, doorblock, d8, d5, doorcolor);
+                    }
+
+                    AddRectangleWithFillet(trans, doorblock, c6, (doorlockradius * 2), (doorlockradius * 2), 6, doorNothidecolor);
+
+                    if (dooropen == "Rigth open")
+                    {
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+
+                        Line3d mirrorLine = new Line3d(
+                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y, insertionpointdoor.Z),
+                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z)
+                        );
+
+                        // Apply the mirroring transformation
+                        Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Add the mirrored block reference to the model space
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+                    else
+                    {
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                    }
+                }
+            }
+
+        }
         private Line drawline(Transaction trans, BlockTableRecord block, Point3d p1, Point3d p2, int? color = null)
         {
             
@@ -1465,6 +2419,154 @@ namespace CAD_AUTOMATION
 
             // Return the created line
             return line;
+        }
+        private void drawoblong(Transaction trans, BlockTableRecord block, Point3d insertpoint, int? color = null)
+        {
+            double oblongsizex = Convert.ToDouble(config["mounting_plate_oblong_size_x"]);
+            double oblongsizey = Convert.ToDouble(config["mounting_plate_oblong_size_y"]);
+
+            Point3d centerPoint = insertpoint;
+
+            double halfLength = oblongsizex / 2.0;
+            double halfWidth = oblongsizey / 2.0;
+            double offset = halfWidth;
+
+            Point3d topLeft = new Point3d(centerPoint.X - halfLength + offset, centerPoint.Y + halfWidth, centerPoint.Z);
+            Point3d bottomRight = new Point3d(centerPoint.X + halfLength - offset, centerPoint.Y - halfWidth, centerPoint.Z);
+
+            Line line1 = new Line(topLeft, new Point3d(bottomRight.X, topLeft.Y, bottomRight.Z));
+            Line line3 = new Line(bottomRight, new Point3d(topLeft.X, bottomRight.Y, topLeft.Z));
+            Point3d arcright = new Point3d(bottomRight.X, centerPoint.Y, centerPoint.Z);
+            Point3d arcleft = new Point3d(topLeft.X, centerPoint.Y, centerPoint.Z);
+
+            Arc arc1 = new Arc(arcright, offset, 1.5 * Math.PI, 0.5 * Math.PI);
+            Arc arc2 = new Arc(arcleft, offset, 0.5 * Math.PI, 1.5 * Math.PI);
+
+            if (color.HasValue)
+            {
+                line1.ColorIndex = color.Value;
+                line3.ColorIndex = color.Value;
+                arc1.ColorIndex = color.Value;
+                arc2.ColorIndex = color.Value;
+            }
+            
+            block.AppendEntity(line1);
+            block.AppendEntity(arc1);
+            block.AppendEntity(line3);
+            block.AppendEntity(arc2);
+
+            trans.AddNewlyCreatedDBObject(line1, true);
+            trans.AddNewlyCreatedDBObject(arc1, true);
+            trans.AddNewlyCreatedDBObject(line3, true);
+            trans.AddNewlyCreatedDBObject(arc2, true);
+
+        }
+        private Circle DrawCircle(Transaction trans, BlockTableRecord block, Point3d center, double radius, int? color = null)
+        {
+            // Create a new Circle object
+            Circle circle = new Circle
+            {
+                Center = center, // Set the center point
+                Radius = radius  // Set the radius
+            };
+
+            // Apply the color if provided
+            if (color.HasValue)
+            {
+                circle.ColorIndex = color.Value;
+            }
+
+            // Add the circle to the block table record and the transaction
+            block.AppendEntity(circle);
+            trans.AddNewlyCreatedDBObject(circle, true);
+
+            // Return the created circle
+            return circle;
+        }
+        private Point3dCollection CreateRectangle(double x1, double y1, double x2, double y2)
+        {
+            return new Point3dCollection
+        {
+            new Point3d(x1, y1, 0),
+            new Point3d(x2, y1, 0),
+            new Point3d(x2, y2, 0),
+            new Point3d(x1, y2, 0),
+            new Point3d(x1, y1, 0)
+        };
+        }
+        private void AddRectangle(Transaction trans,BlockTableRecord block, Point3dCollection vertices, Point3d basePoint, Point3d moveTo, int? color = null)
+        {
+            Polyline3d rectangle = new Polyline3d(Poly3dType.SimplePoly, vertices, true);
+            if (color.HasValue)
+            {
+                rectangle.ColorIndex = color.Value;
+            }
+            rectangle.TransformBy(Matrix3d.Displacement(moveTo - basePoint));
+            block.AppendEntity(rectangle);
+            trans.AddNewlyCreatedDBObject(rectangle, true);
+        }
+        private void AddRectangleWithFillet(Transaction trans, BlockTableRecord block, Point3d basePoint, double width, double height, double filletRadius, int? color = null)
+        {
+            // Calculate corner points of the rectangle
+            Point3d p1 = new Point3d(basePoint.X - (width / 2) +filletRadius, basePoint.Y - (height / 2), basePoint.Z);
+            Point3d p2 = new Point3d(basePoint.X + (width / 2) - filletRadius, basePoint.Y - (height / 2), basePoint.Z);
+            Point3d p3 = new Point3d(basePoint.X + (width / 2), basePoint.Y - (height / 2) + filletRadius, basePoint.Z);
+            Point3d p4 = new Point3d(basePoint.X + (width / 2), basePoint.Y + (height / 2) - filletRadius, basePoint.Z);
+            Point3d p5 = new Point3d(basePoint.X - (width / 2) + filletRadius, basePoint.Y + (height / 2), basePoint.Z);
+            Point3d p6 = new Point3d(basePoint.X + (width / 2) - filletRadius, basePoint.Y + (height / 2), basePoint.Z);
+            Point3d p7 = new Point3d(basePoint.X - (width / 2), basePoint.Y + (height / 2) - filletRadius, basePoint.Z);
+            Point3d p8 = new Point3d(basePoint.X - (width / 2), basePoint.Y - (height / 2) + filletRadius, basePoint.Z);
+
+
+            // Define arc center points
+            Point3d c1 = new Point3d(p1.X, p1.Y + filletRadius, p1.Z);
+            Point3d c2 = new Point3d(p2.X , p2.Y + filletRadius, p2.Z);
+            Point3d c3 = new Point3d(p6.X , p6.Y - filletRadius, p6.Z);
+            Point3d c4 = new Point3d(p5.X , p5.Y - filletRadius, p5.Z);
+
+            // Create lines and arcs
+            using (Line line1 = new Line(p1, p2))
+            using (Line line2 = new Line(p3, p4))
+            using (Line line3 = new Line(p5, p6))
+            using (Line line4 = new Line(p7, p8))
+            using (Arc arc1 = new Arc(c1, filletRadius, Math.PI, 1.5 * Math.PI))
+            using (Arc arc2 = new Arc(c2, filletRadius, 1.5 * Math.PI, 2 * Math.PI))
+            using (Arc arc3 = new Arc(c3, filletRadius, 0, 0.5 * Math.PI))
+            using (Arc arc4 = new Arc(c4, filletRadius, 0.5 * Math.PI, Math.PI))
+            {
+                // Apply color if specified
+                if (color.HasValue)
+                {
+                    line1.ColorIndex = color.Value;
+                    line2.ColorIndex = color.Value;
+                    line3.ColorIndex = color.Value;
+                    line4.ColorIndex = color.Value;
+                    arc1.ColorIndex = color.Value;
+                    arc2.ColorIndex = color.Value;
+                    arc3.ColorIndex = color.Value;
+                    arc4.ColorIndex = color.Value;
+                }
+
+                // Add entities to the block table record
+                block.AppendEntity(line1);
+                block.AppendEntity(arc1);
+                block.AppendEntity(line2);
+                block.AppendEntity(arc2);
+                block.AppendEntity(line3);
+                block.AppendEntity(arc3);
+                block.AppendEntity(line4);
+                block.AppendEntity(arc4);
+
+                // Register them in the transaction
+                trans.AddNewlyCreatedDBObject(line1, true);
+                trans.AddNewlyCreatedDBObject(line2, true);
+                trans.AddNewlyCreatedDBObject(line3, true);
+                trans.AddNewlyCreatedDBObject(line4, true);
+                trans.AddNewlyCreatedDBObject(arc1, true);
+                trans.AddNewlyCreatedDBObject(arc2, true);
+                trans.AddNewlyCreatedDBObject(arc3, true);
+                trans.AddNewlyCreatedDBObject(arc4, true);
+            }
         }
         private void button1_Click(object sender, EventArgs e)
         {

@@ -34,7 +34,9 @@
             this.label2 = new System.Windows.Forms.Label();
             this.materialTabControl1 = new MaterialSkin.Controls.MaterialTabControl();
             this.shellpage = new System.Windows.Forms.TabPage();
-            this.sectionsbox = new MetroFramework.Controls.MetroComboBox();
+            this.sectionsbox = new System.Windows.Forms.TextBox();
+            this.label10 = new System.Windows.Forms.Label();
+            this.hbbsize = new System.Windows.Forms.TextBox();
             this.label9 = new System.Windows.Forms.Label();
             this.hbbbox = new MetroFramework.Controls.MetroComboBox();
             this.label8 = new System.Windows.Forms.Label();
@@ -47,14 +49,25 @@
             this.shellthickbox = new System.Windows.Forms.TextBox();
             this.heigthbox = new System.Windows.Forms.TextBox();
             this.widthbox = new System.Windows.Forms.TextBox();
+            this.detailpage = new System.Windows.Forms.TabPage();
+            this.label14 = new System.Windows.Forms.Label();
+            this.coverthickbox = new System.Windows.Forms.TextBox();
+            this.inchtypebox = new MetroFramework.Controls.MetroComboBox();
+            this.label12 = new System.Windows.Forms.Label();
+            this.label13 = new System.Windows.Forms.Label();
+            this.doorthickbox = new System.Windows.Forms.TextBox();
+            this.label11 = new System.Windows.Forms.Label();
             this.drawbutton = new MaterialSkin.Controls.MaterialButton();
             this.nextbutton = new MaterialSkin.Controls.MaterialButton();
             this.backbutton = new MaterialSkin.Controls.MaterialButton();
             this.errorlabel = new System.Windows.Forms.Label();
-            this.label10 = new System.Windows.Forms.Label();
-            this.hbbsize = new System.Windows.Forms.TextBox();
+            this.label15 = new System.Windows.Forms.Label();
+            this.mpthickbox = new System.Windows.Forms.TextBox();
+            this.paneltypebox = new MetroFramework.Controls.MetroComboBox();
+            this.label16 = new System.Windows.Forms.Label();
             this.materialTabControl1.SuspendLayout();
             this.shellpage.SuspendLayout();
+            this.detailpage.SuspendLayout();
             this.SuspendLayout();
             // 
             // button1
@@ -120,6 +133,7 @@
             // materialTabControl1
             // 
             this.materialTabControl1.Controls.Add(this.shellpage);
+            this.materialTabControl1.Controls.Add(this.detailpage);
             this.materialTabControl1.Depth = 0;
             this.materialTabControl1.Location = new System.Drawing.Point(35, 53);
             this.materialTabControl1.MouseState = MaterialSkin.MouseState.HOVER;
@@ -132,9 +146,11 @@
             // shellpage
             // 
             this.shellpage.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
+            this.shellpage.Controls.Add(this.paneltypebox);
+            this.shellpage.Controls.Add(this.label16);
+            this.shellpage.Controls.Add(this.sectionsbox);
             this.shellpage.Controls.Add(this.label10);
             this.shellpage.Controls.Add(this.hbbsize);
-            this.shellpage.Controls.Add(this.sectionsbox);
             this.shellpage.Controls.Add(this.label9);
             this.shellpage.Controls.Add(this.hbbbox);
             this.shellpage.Controls.Add(this.label8);
@@ -156,35 +172,51 @@
             // 
             // sectionsbox
             // 
-            this.sectionsbox.FontSize = MetroFramework.MetroLinkSize.Tall;
-            this.sectionsbox.FormattingEnabled = true;
-            this.sectionsbox.ItemHeight = 29;
-            this.sectionsbox.Items.AddRange(new object[] {
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10",
-            "11",
-            "12",
-            "13",
-            "14",
-            "15",
-            "16",
-            "17",
-            "18",
-            "19",
-            "20"});
-            this.sectionsbox.Location = new System.Drawing.Point(578, 64);
+            this.sectionsbox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.sectionsbox.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.sectionsbox.Cursor = System.Windows.Forms.Cursors.Default;
+            this.sectionsbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.sectionsbox.ForeColor = System.Drawing.Color.White;
+            this.sectionsbox.Location = new System.Drawing.Point(577, 121);
+            this.sectionsbox.Margin = new System.Windows.Forms.Padding(5);
+            this.sectionsbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.sectionsbox.Name = "sectionsbox";
-            this.sectionsbox.Size = new System.Drawing.Size(149, 35);
-            this.sectionsbox.TabIndex = 18;
-            this.sectionsbox.Theme = MetroFramework.MetroThemeStyle.Dark;
+            this.sectionsbox.Size = new System.Drawing.Size(150, 21);
+            this.sectionsbox.TabIndex = 21;
+            this.sectionsbox.Text = "3";
+            this.sectionsbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.sectionsbox.Visible = false;
+            this.sectionsbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
+            // 
+            // label10
+            // 
+            this.label10.AutoSize = true;
+            this.label10.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label10.ForeColor = System.Drawing.SystemColors.Control;
+            this.label10.Location = new System.Drawing.Point(444, 215);
+            this.label10.Name = "label10";
+            this.label10.Size = new System.Drawing.Size(85, 18);
+            this.label10.TabIndex = 20;
+            this.label10.Text = "HBB Heigth";
+            this.label10.Visible = false;
+            // 
+            // hbbsize
+            // 
+            this.hbbsize.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.hbbsize.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.hbbsize.Cursor = System.Windows.Forms.Cursors.Default;
+            this.hbbsize.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.hbbsize.ForeColor = System.Drawing.Color.White;
+            this.hbbsize.Location = new System.Drawing.Point(578, 212);
+            this.hbbsize.Margin = new System.Windows.Forms.Padding(5);
+            this.hbbsize.MinimumSize = new System.Drawing.Size(150, 20);
+            this.hbbsize.Name = "hbbsize";
+            this.hbbsize.Size = new System.Drawing.Size(150, 21);
+            this.hbbsize.TabIndex = 19;
+            this.hbbsize.Text = "200";
+            this.hbbsize.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.hbbsize.Visible = false;
+            this.hbbsize.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
             // 
             // label9
             // 
@@ -206,33 +238,36 @@
             "None",
             "Top",
             "Bottom"});
-            this.hbbbox.Location = new System.Drawing.Point(578, 109);
+            this.hbbbox.Location = new System.Drawing.Point(578, 159);
             this.hbbbox.Name = "hbbbox";
             this.hbbbox.Size = new System.Drawing.Size(149, 35);
             this.hbbbox.TabIndex = 16;
             this.hbbbox.Theme = MetroFramework.MetroThemeStyle.Dark;
+            this.hbbbox.Visible = false;
             // 
             // label8
             // 
             this.label8.AutoSize = true;
             this.label8.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label8.ForeColor = System.Drawing.SystemColors.Control;
-            this.label8.Location = new System.Drawing.Point(444, 74);
+            this.label8.Location = new System.Drawing.Point(444, 124);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(66, 18);
             this.label8.TabIndex = 14;
             this.label8.Text = "Sections";
+            this.label8.Visible = false;
             // 
             // label7
             // 
             this.label7.AutoSize = true;
             this.label7.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label7.ForeColor = System.Drawing.SystemColors.Control;
-            this.label7.Location = new System.Drawing.Point(444, 119);
+            this.label7.Location = new System.Drawing.Point(444, 169);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(97, 18);
             this.label7.TabIndex = 12;
             this.label7.Text = "HBB Position";
+            this.label7.Visible = false;
             // 
             // depthbox
             // 
@@ -241,57 +276,64 @@
             this.depthbox.Cursor = System.Windows.Forms.Cursors.Default;
             this.depthbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.depthbox.ForeColor = System.Drawing.Color.White;
-            this.depthbox.Location = new System.Drawing.Point(179, 165);
+            this.depthbox.Location = new System.Drawing.Point(179, 215);
             this.depthbox.Margin = new System.Windows.Forms.Padding(5);
             this.depthbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.depthbox.Name = "depthbox";
             this.depthbox.Size = new System.Drawing.Size(150, 21);
             this.depthbox.TabIndex = 10;
+            this.depthbox.Text = "350";
             this.depthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.depthbox.Visible = false;
+            this.depthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
             // 
             // label6
             // 
             this.label6.AutoSize = true;
             this.label6.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label6.ForeColor = System.Drawing.SystemColors.Control;
-            this.label6.Location = new System.Drawing.Point(50, 165);
+            this.label6.Location = new System.Drawing.Point(50, 215);
             this.label6.Name = "label6";
             this.label6.Size = new System.Drawing.Size(47, 18);
             this.label6.TabIndex = 9;
             this.label6.Text = "Depth";
+            this.label6.Visible = false;
             // 
             // label5
             // 
             this.label5.AutoSize = true;
             this.label5.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label5.ForeColor = System.Drawing.SystemColors.Control;
-            this.label5.Location = new System.Drawing.Point(50, 208);
+            this.label5.Location = new System.Drawing.Point(50, 258);
             this.label5.Name = "label5";
             this.label5.Size = new System.Drawing.Size(80, 18);
             this.label5.TabIndex = 8;
             this.label5.Text = "Shell Thick";
+            this.label5.Visible = false;
             // 
             // label4
             // 
             this.label4.AutoSize = true;
             this.label4.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label4.ForeColor = System.Drawing.SystemColors.Control;
-            this.label4.Location = new System.Drawing.Point(50, 119);
+            this.label4.Location = new System.Drawing.Point(50, 169);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(50, 18);
             this.label4.TabIndex = 7;
             this.label4.Text = "Heigth";
+            this.label4.Visible = false;
             // 
             // label3
             // 
             this.label3.AutoSize = true;
             this.label3.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label3.ForeColor = System.Drawing.SystemColors.Control;
-            this.label3.Location = new System.Drawing.Point(50, 76);
+            this.label3.Location = new System.Drawing.Point(50, 126);
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(102, 18);
             this.label3.TabIndex = 6;
             this.label3.Text = "Width / Length";
+            this.label3.Visible = false;
             // 
             // shellthickbox
             // 
@@ -300,13 +342,16 @@
             this.shellthickbox.Cursor = System.Windows.Forms.Cursors.Default;
             this.shellthickbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.shellthickbox.ForeColor = System.Drawing.Color.White;
-            this.shellthickbox.Location = new System.Drawing.Point(179, 206);
+            this.shellthickbox.Location = new System.Drawing.Point(179, 256);
             this.shellthickbox.Margin = new System.Windows.Forms.Padding(5);
             this.shellthickbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.shellthickbox.Name = "shellthickbox";
             this.shellthickbox.Size = new System.Drawing.Size(150, 21);
             this.shellthickbox.TabIndex = 5;
+            this.shellthickbox.Text = "2";
             this.shellthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.shellthickbox.Visible = false;
+            this.shellthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
             // 
             // heigthbox
             // 
@@ -315,13 +360,16 @@
             this.heigthbox.Cursor = System.Windows.Forms.Cursors.Default;
             this.heigthbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.heigthbox.ForeColor = System.Drawing.Color.White;
-            this.heigthbox.Location = new System.Drawing.Point(179, 117);
+            this.heigthbox.Location = new System.Drawing.Point(179, 167);
             this.heigthbox.Margin = new System.Windows.Forms.Padding(5);
             this.heigthbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.heigthbox.Name = "heigthbox";
             this.heigthbox.Size = new System.Drawing.Size(150, 21);
             this.heigthbox.TabIndex = 4;
+            this.heigthbox.Text = "1500";
             this.heigthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.heigthbox.Visible = false;
+            this.heigthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
             // 
             // widthbox
             // 
@@ -330,13 +378,128 @@
             this.widthbox.Cursor = System.Windows.Forms.Cursors.Default;
             this.widthbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.widthbox.ForeColor = System.Drawing.Color.White;
-            this.widthbox.Location = new System.Drawing.Point(179, 74);
+            this.widthbox.Location = new System.Drawing.Point(179, 124);
             this.widthbox.Margin = new System.Windows.Forms.Padding(5);
             this.widthbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.widthbox.Name = "widthbox";
             this.widthbox.Size = new System.Drawing.Size(150, 21);
             this.widthbox.TabIndex = 3;
+            this.widthbox.Text = "1500";
             this.widthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.widthbox.Visible = false;
+            this.widthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
+            // 
+            // detailpage
+            // 
+            this.detailpage.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(35)))), ((int)(((byte)(35)))), ((int)(((byte)(35)))));
+            this.detailpage.Controls.Add(this.label15);
+            this.detailpage.Controls.Add(this.mpthickbox);
+            this.detailpage.Controls.Add(this.label14);
+            this.detailpage.Controls.Add(this.coverthickbox);
+            this.detailpage.Controls.Add(this.inchtypebox);
+            this.detailpage.Controls.Add(this.label12);
+            this.detailpage.Controls.Add(this.label13);
+            this.detailpage.Controls.Add(this.doorthickbox);
+            this.detailpage.Controls.Add(this.label11);
+            this.detailpage.Location = new System.Drawing.Point(4, 22);
+            this.detailpage.Name = "detailpage";
+            this.detailpage.Padding = new System.Windows.Forms.Padding(3);
+            this.detailpage.Size = new System.Drawing.Size(825, 366);
+            this.detailpage.TabIndex = 1;
+            this.detailpage.Text = "Details";
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label14.ForeColor = System.Drawing.SystemColors.Control;
+            this.label14.Location = new System.Drawing.Point(454, 76);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(88, 18);
+            this.label14.TabIndex = 24;
+            this.label14.Text = "Cover Thick";
+            // 
+            // coverthickbox
+            // 
+            this.coverthickbox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.coverthickbox.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.coverthickbox.Cursor = System.Windows.Forms.Cursors.Default;
+            this.coverthickbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.coverthickbox.ForeColor = System.Drawing.Color.White;
+            this.coverthickbox.Location = new System.Drawing.Point(583, 74);
+            this.coverthickbox.Margin = new System.Windows.Forms.Padding(5);
+            this.coverthickbox.MinimumSize = new System.Drawing.Size(150, 20);
+            this.coverthickbox.Name = "coverthickbox";
+            this.coverthickbox.Size = new System.Drawing.Size(150, 21);
+            this.coverthickbox.TabIndex = 23;
+            this.coverthickbox.Text = "2";
+            this.coverthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.coverthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
+            // 
+            // inchtypebox
+            // 
+            this.inchtypebox.FontSize = MetroFramework.MetroLinkSize.Tall;
+            this.inchtypebox.FormattingEnabled = true;
+            this.inchtypebox.ItemHeight = 29;
+            this.inchtypebox.Items.AddRange(new object[] {
+            "Welded Inches",
+            "Step Inches",
+            "KONTACT inches"});
+            this.inchtypebox.Location = new System.Drawing.Point(184, 117);
+            this.inchtypebox.Name = "inchtypebox";
+            this.inchtypebox.Size = new System.Drawing.Size(149, 35);
+            this.inchtypebox.TabIndex = 22;
+            this.inchtypebox.Theme = MetroFramework.MetroThemeStyle.Dark;
+            // 
+            // label12
+            // 
+            this.label12.AutoSize = true;
+            this.label12.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label12.ForeColor = System.Drawing.SystemColors.Control;
+            this.label12.Location = new System.Drawing.Point(50, 127);
+            this.label12.Name = "label12";
+            this.label12.Size = new System.Drawing.Size(87, 18);
+            this.label12.TabIndex = 21;
+            this.label12.Text = "Inches Type";
+            // 
+            // label13
+            // 
+            this.label13.AutoSize = true;
+            this.label13.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label13.ForeColor = System.Drawing.SystemColors.Control;
+            this.label13.Location = new System.Drawing.Point(53, 78);
+            this.label13.Name = "label13";
+            this.label13.Size = new System.Drawing.Size(82, 18);
+            this.label13.TabIndex = 20;
+            this.label13.Text = "Door Thick";
+            // 
+            // doorthickbox
+            // 
+            this.doorthickbox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.doorthickbox.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.doorthickbox.Cursor = System.Windows.Forms.Cursors.Default;
+            this.doorthickbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.doorthickbox.ForeColor = System.Drawing.Color.White;
+            this.doorthickbox.Location = new System.Drawing.Point(182, 76);
+            this.doorthickbox.Margin = new System.Windows.Forms.Padding(5);
+            this.doorthickbox.MinimumSize = new System.Drawing.Size(150, 20);
+            this.doorthickbox.Name = "doorthickbox";
+            this.doorthickbox.Size = new System.Drawing.Size(150, 21);
+            this.doorthickbox.TabIndex = 19;
+            this.doorthickbox.Text = "2";
+            this.doorthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.doorthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
+            // 
+            // label11
+            // 
+            this.label11.AutoSize = true;
+            this.label11.Font = new System.Drawing.Font("Bookman Old Style", 14.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label11.ForeColor = System.Drawing.SystemColors.Control;
+            this.label11.Location = new System.Drawing.Point(49, 24);
+            this.label11.Name = "label11";
+            this.label11.Size = new System.Drawing.Size(210, 22);
+            this.label11.TabIndex = 18;
+            this.label11.Text = "Door / Cover Details";
             // 
             // drawbutton
             // 
@@ -407,7 +570,7 @@
             // 
             this.errorlabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.errorlabel.ForeColor = System.Drawing.Color.Red;
-            this.errorlabel.Location = new System.Drawing.Point(92, 513);
+            this.errorlabel.Location = new System.Drawing.Point(89, 513);
             this.errorlabel.Name = "errorlabel";
             this.errorlabel.Size = new System.Drawing.Size(736, 20);
             this.errorlabel.TabIndex = 9;
@@ -415,31 +578,58 @@
             this.errorlabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.errorlabel.Visible = false;
             // 
-            // label10
+            // label15
             // 
-            this.label10.AutoSize = true;
-            this.label10.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label10.ForeColor = System.Drawing.SystemColors.Control;
-            this.label10.Location = new System.Drawing.Point(444, 165);
-            this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(85, 18);
-            this.label10.TabIndex = 20;
-            this.label10.Text = "HBB Heigth";
+            this.label15.AutoSize = true;
+            this.label15.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label15.ForeColor = System.Drawing.SystemColors.Control;
+            this.label15.Location = new System.Drawing.Point(420, 125);
+            this.label15.Name = "label15";
+            this.label15.Size = new System.Drawing.Size(146, 18);
+            this.label15.TabIndex = 26;
+            this.label15.Text = "Mounting Plate Thick";
             // 
-            // hbbsize
+            // mpthickbox
             // 
-            this.hbbsize.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.hbbsize.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.hbbsize.Cursor = System.Windows.Forms.Cursors.Default;
-            this.hbbsize.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.hbbsize.ForeColor = System.Drawing.Color.White;
-            this.hbbsize.Location = new System.Drawing.Point(578, 162);
-            this.hbbsize.Margin = new System.Windows.Forms.Padding(5);
-            this.hbbsize.MinimumSize = new System.Drawing.Size(150, 20);
-            this.hbbsize.Name = "hbbsize";
-            this.hbbsize.Size = new System.Drawing.Size(150, 21);
-            this.hbbsize.TabIndex = 19;
-            this.hbbsize.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.mpthickbox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.mpthickbox.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.mpthickbox.Cursor = System.Windows.Forms.Cursors.Default;
+            this.mpthickbox.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.mpthickbox.ForeColor = System.Drawing.Color.White;
+            this.mpthickbox.Location = new System.Drawing.Point(583, 125);
+            this.mpthickbox.Margin = new System.Windows.Forms.Padding(5);
+            this.mpthickbox.MinimumSize = new System.Drawing.Size(150, 20);
+            this.mpthickbox.Name = "mpthickbox";
+            this.mpthickbox.Size = new System.Drawing.Size(150, 21);
+            this.mpthickbox.TabIndex = 25;
+            this.mpthickbox.Text = "3";
+            this.mpthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            // 
+            // paneltypebox
+            // 
+            this.paneltypebox.FontSize = MetroFramework.MetroLinkSize.Tall;
+            this.paneltypebox.FormattingEnabled = true;
+            this.paneltypebox.ItemHeight = 29;
+            this.paneltypebox.Items.AddRange(new object[] {
+            "INDOOR",
+            "OUTDOOR"});
+            this.paneltypebox.Location = new System.Drawing.Point(369, 53);
+            this.paneltypebox.Name = "paneltypebox";
+            this.paneltypebox.Size = new System.Drawing.Size(196, 35);
+            this.paneltypebox.TabIndex = 23;
+            this.paneltypebox.Theme = MetroFramework.MetroThemeStyle.Dark;
+            this.paneltypebox.SelectedIndexChanged += new System.EventHandler(this.paneltypebox_SelectedIndexChanged);
+            // 
+            // label16
+            // 
+            this.label16.AutoSize = true;
+            this.label16.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label16.ForeColor = System.Drawing.SystemColors.Control;
+            this.label16.Location = new System.Drawing.Point(235, 63);
+            this.label16.Name = "label16";
+            this.label16.Size = new System.Drawing.Size(98, 18);
+            this.label16.TabIndex = 22;
+            this.label16.Text = "PANEL TYPE";
             // 
             // Form1
             // 
@@ -464,6 +654,8 @@
             this.materialTabControl1.ResumeLayout(false);
             this.shellpage.ResumeLayout(false);
             this.shellpage.PerformLayout();
+            this.detailpage.ResumeLayout(false);
+            this.detailpage.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -493,8 +685,20 @@
         private MetroFramework.Controls.MetroComboBox hbbbox;
         private System.Windows.Forms.Label label9;
         private System.Windows.Forms.Label errorlabel;
-        private MetroFramework.Controls.MetroComboBox sectionsbox;
         private System.Windows.Forms.Label label10;
         private System.Windows.Forms.TextBox hbbsize;
+        private System.Windows.Forms.TabPage detailpage;
+        private System.Windows.Forms.Label label11;
+        private MetroFramework.Controls.MetroComboBox inchtypebox;
+        private System.Windows.Forms.Label label12;
+        private System.Windows.Forms.Label label13;
+        private System.Windows.Forms.TextBox doorthickbox;
+        private System.Windows.Forms.Label label14;
+        private System.Windows.Forms.TextBox coverthickbox;
+        private System.Windows.Forms.TextBox sectionsbox;
+        private System.Windows.Forms.Label label15;
+        private System.Windows.Forms.TextBox mpthickbox;
+        private MetroFramework.Controls.MetroComboBox paneltypebox;
+        private System.Windows.Forms.Label label16;
     }
 }
