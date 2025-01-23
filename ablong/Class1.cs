@@ -236,6 +236,101 @@ namespace CAD_AUTOMATION
                 tr.Commit();
             }
         }
+        [CommandMethod("GAMER")]
+        public static void CopyObjectsToNewDrawing()
+        {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+
+            Document activeDoc = Application.DocumentManager.MdiActiveDocument;
+            Database activeDb = activeDoc.Database;
+
+            // Prompt the user to select objects
+            PromptSelectionResult selResult = activeDoc.Editor.GetSelection();
+            if (selResult.Status != PromptStatus.OK)
+            {
+                activeDoc.Editor.WriteMessage("\nSelection canceled.");
+                return;
+            }
+
+            SelectionSet selSet = selResult.Value;
+
+            try
+            {
+                // Create a new drawing based on the template
+                Document newDoc = Application.DocumentManager.Add("acad.dwt");
+                Database newDb = newDoc.Database;
+
+                // Use a lock on the new document
+                using (DocumentLock docLock = newDoc.LockDocument())
+                {
+                    // Start a transaction in the active database
+                    using (Transaction activeTr = activeDb.TransactionManager.StartTransaction())
+                    {
+                        // Start a transaction in the new database
+                        using (Transaction newTr = newDb.TransactionManager.StartTransaction())
+                        {
+                            // Convert selected objects to ObjectIdCollection
+                            ObjectIdCollection objectIdCollection = new ObjectIdCollection(selSet.GetObjectIds());
+
+                            // Clone selected objects into the new database
+                            IdMapping idMapping = new IdMapping();
+                            activeDb.WblockCloneObjects(
+                                objectIdCollection,
+                                newDb.CurrentSpaceId,
+                                idMapping,
+                                DuplicateRecordCloning.Replace,
+                                false
+                            );
+
+                            // Open the Block Table Record for the new drawing's Model Space
+                            BlockTable newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
+                            BlockTableRecord newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+                            // Loop through the objects in the new drawing and filter out unwanted types
+                            foreach (ObjectId objId in newBtr)
+                            {
+                                Entity entity = newTr.GetObject(objId, OpenMode.ForWrite) as Entity;
+
+                                if (entity != null)
+                                {
+                                    // Check for specific linetypes to delete
+                                    string lineType = entity.Linetype;
+                                    if (lineType == "HIDDEN" || lineType == "DASHED" || lineType == "CONTINUOUS")
+                                    {
+                                        entity.Erase();
+                                        continue;
+                                    }
+
+                                    // Check for dimensions and delete
+                                    if (entity is Dimension)
+                                    {
+                                        entity.Erase();
+                                    }
+                                }
+                            }
+
+                            // Commit changes to the new database
+                            newTr.Commit();
+                        }
+
+                        // Commit changes to the active database
+                        activeTr.Commit();
+                    }
+
+                    //Application.DocumentManager.MdiActiveDocument = newDoc;
+                    // Perform a Zoom Extents in the new drawing
+                    //newDoc.Editor.Command("._ZOOM", "_E");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Application.ShowAlertDialog($"Error: {ex.Message}");
+            }
+        }
 
         [CommandMethod("MECHBOM")]
         public static void BOMcount()
@@ -2085,7 +2180,7 @@ namespace CAD_AUTOMATION
 
         }
 
-        [CommandMethod("GaMeR")]
+        [CommandMethod("PANEL_AUTOMATOR")]
         public static void HelloAutoCAD2()
         {
             if (!isEnabled)

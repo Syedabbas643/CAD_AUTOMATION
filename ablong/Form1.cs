@@ -35,6 +35,7 @@ using Color = System.Drawing.Color;
 using Brushes = System.Drawing.Brushes;
 using Autodesk.AutoCAD.GraphicsInterface;
 using System.ComponentModel.Design;
+using System.Windows.Media.Media3D;
 
 namespace CAD_AUTOMATION
 {
@@ -55,15 +56,20 @@ namespace CAD_AUTOMATION
         private double vchannelsize;
         private double hchannelsize;
         private double hbussize;
+        private double tops = 0;
+        private double sides = 0;
         private double doorclearx;
         private double doorcleary;
         private double doorinchcleary;
         private double doorinchsizex;
         private double doorinchsizey;
         private double doorinchholes;
+        private double outdoordoorclearx;
+        private double outdoordoorcleary;
         private Point3d ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8;
         private Point3d pz1, pz2, pz3, pz4, pz5, pz6, pz7, pz8, pz9, pz10, pz11, pz12, pz13, pz14;
         private int shellcolor = 140;
+        private int outershellcolor = 120;
         private int channelcolor = 10;
         private int doorcolor = 50;
         private int doorNothidecolor = 2;
@@ -115,7 +121,6 @@ namespace CAD_AUTOMATION
                 e.Handled = true;
             }
         }
-
         private void paneltypebox_SelectedIndexChanged(object sender, EventArgs e)
         {
             label3.Visible = true;
@@ -124,17 +129,49 @@ namespace CAD_AUTOMATION
             label6.Visible = true;
             label7.Visible = true;
             label8.Visible = true;
-            label10.Visible = true;
-
+            
             shellthickbox.Visible = true;
             widthbox.Visible = true;
             heigthbox.Visible = true;
             depthbox.Visible = true;
             hbbbox.Visible = true;
-            hbbsize.Visible = true;
             sectionsbox.Visible = true;
         }
-
+        private void hbbpartbox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if(hbbpartbox.Text == "1")
+            {
+                hbbpart1size.Visible = true;
+                hbbpart1size.Text = widthbox.Text;
+                hbbpart2size.Visible = false;
+                label18.Visible = true;
+                label19.Visible = false;
+            }
+            else if (hbbpartbox.Text == "2")
+            {
+                hbbpart1size.Visible = true;
+                hbbpart2size.Visible = true;
+                label18.Visible = true;
+                label19.Visible = true;
+            }
+        }
+        private void hbbbox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if(hbbbox.Text == "None")
+            {
+                hbbsize.Visible = false;
+                hbbpartbox.Visible = false;
+                label10.Visible = false;
+                label17.Visible = false;
+            }
+            else if (hbbbox.Text == "Top" || hbbbox.Text == "Bottom")
+            {
+                hbbsize.Visible = true;
+                hbbpartbox.Visible = true;
+                label10.Visible = true;
+                label17.Visible = true;
+            }
+        }
         private void materialButton2_Click(object sender, EventArgs e)
         {
             if(materialTabControl1.SelectedTab.Name.Contains("sec") && materialTabControl1.SelectedTab.Name.Contains("page"))
@@ -232,11 +269,47 @@ namespace CAD_AUTOMATION
                 int textBoxWidth = 150, textBoxHeight = 21;
                 int spacingY = 40;
 
-                if(string.IsNullOrWhiteSpace(widthbox.Text) || string.IsNullOrWhiteSpace(heigthbox.Text) || string.IsNullOrWhiteSpace(shellthickbox.Text) || string.IsNullOrWhiteSpace(hbbbox.Text) || string.IsNullOrWhiteSpace(hbbsize.Text) || string.IsNullOrWhiteSpace(sectionsbox.Text) || string.IsNullOrWhiteSpace(depthbox.Text))
+                if(string.IsNullOrWhiteSpace(widthbox.Text) || string.IsNullOrWhiteSpace(heigthbox.Text) || string.IsNullOrWhiteSpace(shellthickbox.Text) || string.IsNullOrWhiteSpace(hbbbox.Text)  || string.IsNullOrWhiteSpace(sectionsbox.Text) || string.IsNullOrWhiteSpace(depthbox.Text))
                 {
                     errorlabel.Text = "Please fill all the fields";
                     errorlabel.Visible = true;
                     return;
+                }
+
+                if(hbbbox.Text == "Top" || hbbbox.Text == "Bottom")
+                {
+                    if (string.IsNullOrWhiteSpace(hbbpartbox.Text) || string.IsNullOrWhiteSpace(hbbpart1size.Text) || string.IsNullOrWhiteSpace(hbbsize.Text))
+                    {
+                        errorlabel.Text = "Please fill all the fields";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+                    if (hbbpartbox.Text == "2" && string.IsNullOrWhiteSpace(hbbpart2size.Text))
+                    {
+                        errorlabel.Text = "Please fill all the fields";
+                        errorlabel.Visible = true;
+                        return;
+                    }
+
+                    if(hbbpartbox.Text == "1")
+                    {
+                        if (Convert.ToDouble(hbbpart1size.Text) != Convert.ToDouble(widthbox.Text))
+                        {
+                            errorlabel.Text = "HBB Part 1 size cannot be greater than the panel Width";
+                            errorlabel.Visible = true;
+                            return;
+                        }
+                    }
+                    else if (hbbpartbox.Text == "2")
+                    {
+                        if (Convert.ToDouble(widthbox.Text) != (Convert.ToDouble(hbbpart1size.Text) + (Convert.ToDouble(hbbpart2size.Text)) ))
+                        {
+                            errorlabel.Text = "HBB Part 1 + Part 2 size cannot be greater than the panel Width";
+                            errorlabel.Visible = true;
+                            return;
+                        }
+                    }
+
                 }
 
                 // Get the selected count from the combo box
@@ -826,227 +899,588 @@ namespace CAD_AUTOMATION
                 length = Convert.ToDouble(widthbox.Text);
                 shellthick = Convert.ToDouble(shellthickbox.Text);
                 sections = Convert.ToInt32(sectionsbox.Text);
-                zchanneltb = Convert.ToDouble(config["top_bottom_shell_size"]) - shellthick;
-                zchannelside = Convert.ToDouble(config["side_shell_size"]) - shellthick;
                 vchannelsize = Convert.ToDouble(config["vertical_channel_size"]);
                 hchannelsize = Convert.ToDouble(config["horizontal_channel_size"]);
+                outdoordoorclearx = Convert.ToDouble(config["outdoorpanel_door&cover_clearence_x"]);
+                outdoordoorcleary = Convert.ToDouble(config["outdoorpanel_door&cover_clearence_y"]);
                 hbusbarposition = hbbbox.Text;
                 hbussize = Convert.ToDouble(hbbsize.Text);
 
-
-                ps1 = new Point3d(l, 0, 0);
-                ps2 = new Point3d(l + length, 0, 0);
-                ps3 = new Point3d(l + length, width, 0);
-                ps4 = new Point3d(l, width, 0);
-                ps5 = new Point3d(ps1.X + zchannelside, ps1.Y + zchanneltb, 0);
-                ps6 = new Point3d(ps2.X - zchannelside, ps5.Y, 0);
-                ps7 = new Point3d(ps6.X, ps3.Y - zchanneltb, 0);
-                ps8 = new Point3d(ps5.X, ps7.Y, 0);
-
-                // Z Channel Points
-                pz1 = new Point3d(l + shellthick, zchanneltb, 0);
-                pz2 = new Point3d(pz1.X, width - zchanneltb, 0);
-                pz3 = new Point3d(pz1.X + zchannelside, pz2.Y, 0);
-                pz4 = new Point3d(pz3.X, pz1.Y, 0);
-                pz5 = new Point3d(l + length - shellthick, pz1.Y, 0);
-                pz6 = new Point3d(pz5.X, width - zchanneltb, 0);
-                pz7 = new Point3d(pz5.X - zchannelside, pz6.Y, 0);
-                pz8 = new Point3d(pz7.X, pz1.Y, 0);
-                pz9 = new Point3d(pz1.X + shellthick, pz1.Y, 0);
-                pz10 = new Point3d(pz9.X, pz2.Y, 0);
-                pz11 = new Point3d(pz3.X - shellthick, pz2.Y, 0);
-                pz12 = new Point3d(pz11.X, pz1.Y, 0);
-                pz13 = new Point3d(pz1.X, pz2.Y + zchanneltb - shellthick, 0);
-                pz14 = new Point3d(l - shellthick + length, pz1.Y, 0);
-
-
                 using (Transaction trans = db.TransactionManager.StartTransaction())
-               {
-                    // Access the BlockTable and ModelSpace
+                {
+                    
                     BlockTable blockTable = (BlockTable)db.BlockTableId.GetObject(OpenMode.ForRead);
-                    BlockTableRecord modelSpace = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);
+                    BlockTableRecord modelSpace = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);    
 
-                    if(blockTable.Has("shellLeft") || blockTable.Has("shellRight") || blockTable.Has("shellTop") || blockTable.Has("shellBottom"))
+                    if (paneltypebox.Text == "INDOOR")
                     {
-                        MessageBox.Show("Block already exists. Try in a new drawing file");
-                        return;
-                    }
+                        zchanneltb = Convert.ToDouble(config["top_bottom_shell_size"]) - shellthick;
+                        zchannelside = Convert.ToDouble(config["side_shell_size"]) - shellthick;
 
-                    blockTable.UpgradeOpen();
+                        ps1 = new Point3d(l, 0, 0);
+                        ps2 = new Point3d(l + length, 0, 0);
+                        ps3 = new Point3d(l + length, width, 0);
+                        ps4 = new Point3d(l, width, 0);
+                        ps5 = new Point3d(ps1.X + zchannelside, ps1.Y + zchanneltb, 0);
+                        ps6 = new Point3d(ps2.X - zchannelside, ps5.Y, 0);
+                        ps7 = new Point3d(ps6.X, ps3.Y - zchanneltb, 0);
+                        ps8 = new Point3d(ps5.X, ps7.Y, 0);
 
-                    shellLeft = new BlockTableRecord { Name = "shellLeft" };
-                    blockTable.Add(shellLeft);
-                    trans.AddNewlyCreatedDBObject(shellLeft, true);
+                        pz1 = new Point3d(l + shellthick, zchanneltb, 0);
+                        pz2 = new Point3d(pz1.X, width - zchanneltb, 0);
+                        pz3 = new Point3d(pz1.X + zchannelside, pz2.Y, 0);
+                        pz4 = new Point3d(pz3.X, pz1.Y, 0);
+                        pz5 = new Point3d(l + length - shellthick, pz1.Y, 0);
+                        pz6 = new Point3d(pz5.X, width - zchanneltb, 0);
+                        pz7 = new Point3d(pz5.X - zchannelside, pz6.Y, 0);
+                        pz8 = new Point3d(pz7.X, pz1.Y, 0);
+                        pz9 = new Point3d(pz1.X + shellthick, pz1.Y, 0);
+                        pz10 = new Point3d(pz9.X, pz2.Y, 0);
+                        pz11 = new Point3d(pz3.X - shellthick, pz2.Y, 0);
+                        pz12 = new Point3d(pz11.X, pz1.Y, 0);
+                        pz13 = new Point3d(pz1.X, pz2.Y + zchanneltb - shellthick, 0);
+                        pz14 = new Point3d(l - shellthick + length, pz1.Y, 0);
 
-                    shellRight = new BlockTableRecord { Name = "shellRight" };
-                    blockTable.Add(shellRight);
-                    trans.AddNewlyCreatedDBObject(shellRight, true);
 
-                    shellTop = new BlockTableRecord { Name = "shellTop" };
-                    blockTable.Add(shellTop);
-                    trans.AddNewlyCreatedDBObject(shellTop, true);
-
-                    shellBottom = new BlockTableRecord { Name = "shellBottom" };
-                    blockTable.Add(shellBottom);
-                    trans.AddNewlyCreatedDBObject(shellBottom, true);
-
-                    Line linez1 = new Line(pz11, pz3) { ColorIndex = shellcolor };
-                    shellLeft.AppendEntity(linez1);
-                    trans.AddNewlyCreatedDBObject(linez1, true);
-                    Line linez2 = new Line(pz11, pz3) { ColorIndex = shellcolor };
-                    shellRight.AppendEntity(linez2);
-                    trans.AddNewlyCreatedDBObject(linez2, true);
-                    Vector3d linez2move = pz12.GetVectorTo(pz8);
-                    linez2.TransformBy(Matrix3d.Displacement(linez2move));
-                    Line linez3 = new Line(pz12, pz4) { ColorIndex = shellcolor };
-                    shellLeft.AppendEntity(linez3);
-                    trans.AddNewlyCreatedDBObject(linez3, true);
-                    Line linez4 = new Line(pz11, pz12) { ColorIndex = shellcolor };
-                    shellLeft.AppendEntity(linez4);
-                    trans.AddNewlyCreatedDBObject(linez4, true);
-                    Line linez5 = new Line(pz3, pz7) { ColorIndex = shellcolor };
-                    shellTop.AppendEntity(linez5);
-                    trans.AddNewlyCreatedDBObject(linez5, true);
-                    Line linez6 = new Line(pz9, pz10) { ColorIndex = shellcolor };
-                    shellRight.AppendEntity(linez6);
-                    trans.AddNewlyCreatedDBObject(linez6, true);
-                    Vector3d linez6move = pz1.GetVectorTo(pz8);
-                    linez6.TransformBy(Matrix3d.Displacement(linez6move));
-
-                    // Add lines to shellLeft block
-                    Line lineP4 = new Line(ps4, ps1) { ColorIndex = shellcolor };
-                    Line lineP13 = new Line(ps1, ps5) { ColorIndex = shellcolor };
-                    Line lineP14 = new Line(ps4, ps8) { ColorIndex = shellcolor };
-                    shellLeft.AppendEntity(lineP4);
-                    shellLeft.AppendEntity(lineP13);
-                    shellLeft.AppendEntity(lineP14);
-                    trans.AddNewlyCreatedDBObject(lineP4, true);
-                    trans.AddNewlyCreatedDBObject(lineP13, true);
-                    trans.AddNewlyCreatedDBObject(lineP14, true);
-
-                    // Add lines to shellRight block
-                    Line lineP2 = new Line(ps2, ps3) { ColorIndex = shellcolor };
-                    Line lineP15 = new Line(ps7, ps3) { ColorIndex = shellcolor };
-                    Line lineP16 = new Line(ps2, ps6) { ColorIndex = shellcolor };
-                    shellRight.AppendEntity(lineP2);
-                    shellRight.AppendEntity(lineP15);
-                    shellRight.AppendEntity(lineP16);
-                    trans.AddNewlyCreatedDBObject(lineP2, true);
-                    trans.AddNewlyCreatedDBObject(lineP15, true);
-                    trans.AddNewlyCreatedDBObject(lineP16, true);
-
-                    // Add lines to shellTop block
-                    Line lineP3 = new Line(ps3, ps4) { ColorIndex = shellcolor };
-                    Line lineP11 = new Line(ps7, ps3) { ColorIndex = shellcolor };
-                    Line lineP10 = new Line(ps4, ps8) { ColorIndex = shellcolor };
-                    Line lineP18 = new Line(new Point3d(ps4.X + shellthick, ps4.Y - shellthick,0), new Point3d(ps3.X - shellthick, ps3.Y - shellthick,0)) { ColorIndex = shellcolor };
-                    shellTop.AppendEntity(lineP10);
-                    shellTop.AppendEntity(lineP3);
-                    shellTop.AppendEntity(lineP11);
-                    shellTop.AppendEntity(lineP18);
-                    trans.AddNewlyCreatedDBObject(lineP3, true);
-                    trans.AddNewlyCreatedDBObject(lineP10, true);
-                    trans.AddNewlyCreatedDBObject(lineP11, true);
-                    trans.AddNewlyCreatedDBObject(lineP18, true);
-
-                    // Add lines to shellBottom block
-                    Line lineP1 = new Line(ps1, ps2) { ColorIndex = shellcolor };
-                    Line lineP5 = new Line(ps5, ps6) { ColorIndex = shellcolor };
-                    Line lineP12 = new Line(ps2, ps6) { ColorIndex = shellcolor };
-                    Line lineP9 = new Line(ps1, ps5) { ColorIndex = shellcolor };
-                    Line lineP17 = new Line(new Point3d(ps1.X + shellthick,ps1.Y + shellthick,0), new Point3d(ps2.X - shellthick,ps2.Y + shellthick,0)) { ColorIndex = shellcolor };
-                    shellBottom.AppendEntity(lineP1);
-                    shellBottom.AppendEntity(lineP5);
-                    shellBottom.AppendEntity(lineP12);
-                    shellBottom.AppendEntity(lineP9);
-                    shellBottom.AppendEntity(lineP17);
-                    trans.AddNewlyCreatedDBObject(lineP1, true);
-                    trans.AddNewlyCreatedDBObject(lineP5, true);
-                    trans.AddNewlyCreatedDBObject(lineP12, true);
-                    trans.AddNewlyCreatedDBObject(lineP9, true);
-                    trans.AddNewlyCreatedDBObject(lineP17, true);
-
-                    DBObjectCollection offsetCurvesP2 = lineP2.GetOffsetCurves(shellthick);
-                    foreach (DBObject obj in offsetCurvesP2)
-                    {
-                        Line offsetLine = obj as Line;
-                        if (offsetLine != null)
+                        if (blockTable.Has("shellLeft") || blockTable.Has("shellRight") || blockTable.Has("shellTop") || blockTable.Has("shellBottom"))
                         {
-                            // Add the offset line to the same block or space
-                            shellRight.AppendEntity(offsetLine);
-                            trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            MessageBox.Show("Block already exists. Try in a new drawing file");
+                            return;
                         }
-                    }
 
-                    DBObjectCollection offsetCurvesP3 = lineP4.GetOffsetCurves(shellthick);
-                    foreach (DBObject obj in offsetCurvesP3)
-                    {
-                        Line offsetLine = obj as Line;
-                        if (offsetLine != null)
+                        blockTable.UpgradeOpen();
+
+                        shellLeft = new BlockTableRecord { Name = "shellLeft" };
+                        blockTable.Add(shellLeft);
+                        trans.AddNewlyCreatedDBObject(shellLeft, true);
+
+                        shellRight = new BlockTableRecord { Name = "shellRight" };
+                        blockTable.Add(shellRight);
+                        trans.AddNewlyCreatedDBObject(shellRight, true);
+
+                        shellTop = new BlockTableRecord { Name = "shellTop" };
+                        blockTable.Add(shellTop);
+                        trans.AddNewlyCreatedDBObject(shellTop, true);
+
+                        shellBottom = new BlockTableRecord { Name = "shellBottom" };
+                        blockTable.Add(shellBottom);
+                        trans.AddNewlyCreatedDBObject(shellBottom, true);
+
+                        Line linez1 = new Line(pz11, pz3) { ColorIndex = shellcolor };
+                        shellLeft.AppendEntity(linez1);
+                        trans.AddNewlyCreatedDBObject(linez1, true);
+                        Line linez2 = new Line(pz11, pz3) { ColorIndex = shellcolor };
+                        shellRight.AppendEntity(linez2);
+                        trans.AddNewlyCreatedDBObject(linez2, true);
+                        Vector3d linez2move = pz12.GetVectorTo(pz8);
+                        linez2.TransformBy(Matrix3d.Displacement(linez2move));
+                        Line linez3 = new Line(pz12, pz4) { ColorIndex = shellcolor };
+                        shellLeft.AppendEntity(linez3);
+                        trans.AddNewlyCreatedDBObject(linez3, true);
+                        Line linez4 = new Line(pz11, pz12) { ColorIndex = shellcolor };
+                        shellLeft.AppendEntity(linez4);
+                        trans.AddNewlyCreatedDBObject(linez4, true);
+                        Line linez5 = new Line(pz3, pz7) { ColorIndex = shellcolor };
+                        shellTop.AppendEntity(linez5);
+                        trans.AddNewlyCreatedDBObject(linez5, true);
+                        Line linez6 = new Line(pz9, pz10) { ColorIndex = shellcolor };
+                        shellRight.AppendEntity(linez6);
+                        trans.AddNewlyCreatedDBObject(linez6, true);
+                        Vector3d linez6move = pz1.GetVectorTo(pz8);
+                        linez6.TransformBy(Matrix3d.Displacement(linez6move));
+
+                        // Add lines to shellLeft block
+                        Line lineP4 = new Line(ps4, ps1) { ColorIndex = shellcolor };
+                        Line lineP13 = new Line(ps1, ps5) { ColorIndex = shellcolor };
+                        Line lineP14 = new Line(ps4, ps8) { ColorIndex = shellcolor };
+                        shellLeft.AppendEntity(lineP4);
+                        shellLeft.AppendEntity(lineP13);
+                        shellLeft.AppendEntity(lineP14);
+                        trans.AddNewlyCreatedDBObject(lineP4, true);
+                        trans.AddNewlyCreatedDBObject(lineP13, true);
+                        trans.AddNewlyCreatedDBObject(lineP14, true);
+
+                        // Add lines to shellRight block
+                        Line lineP2 = new Line(ps2, ps3) { ColorIndex = shellcolor };
+                        Line lineP15 = new Line(ps7, ps3) { ColorIndex = shellcolor };
+                        Line lineP16 = new Line(ps2, ps6) { ColorIndex = shellcolor };
+                        shellRight.AppendEntity(lineP2);
+                        shellRight.AppendEntity(lineP15);
+                        shellRight.AppendEntity(lineP16);
+                        trans.AddNewlyCreatedDBObject(lineP2, true);
+                        trans.AddNewlyCreatedDBObject(lineP15, true);
+                        trans.AddNewlyCreatedDBObject(lineP16, true);
+
+                        // Add lines to shellTop block
+                        Line lineP3 = new Line(ps3, ps4) { ColorIndex = shellcolor };
+                        Line lineP11 = new Line(ps7, ps3) { ColorIndex = shellcolor };
+                        Line lineP10 = new Line(ps4, ps8) { ColorIndex = shellcolor };
+                        Line lineP18 = new Line(new Point3d(ps4.X + shellthick, ps4.Y - shellthick, 0), new Point3d(ps3.X - shellthick, ps3.Y - shellthick, 0)) { ColorIndex = shellcolor };
+                        shellTop.AppendEntity(lineP10);
+                        shellTop.AppendEntity(lineP3);
+                        shellTop.AppendEntity(lineP11);
+                        shellTop.AppendEntity(lineP18);
+                        trans.AddNewlyCreatedDBObject(lineP3, true);
+                        trans.AddNewlyCreatedDBObject(lineP10, true);
+                        trans.AddNewlyCreatedDBObject(lineP11, true);
+                        trans.AddNewlyCreatedDBObject(lineP18, true);
+
+                        // Add lines to shellBottom block
+                        Line lineP1 = new Line(ps1, ps2) { ColorIndex = shellcolor };
+                        Line lineP5 = new Line(ps5, ps6) { ColorIndex = shellcolor };
+                        Line lineP12 = new Line(ps2, ps6) { ColorIndex = shellcolor };
+                        Line lineP9 = new Line(ps1, ps5) { ColorIndex = shellcolor };
+                        Line lineP17 = new Line(new Point3d(ps1.X + shellthick, ps1.Y + shellthick, 0), new Point3d(ps2.X - shellthick, ps2.Y + shellthick, 0)) { ColorIndex = shellcolor };
+                        shellBottom.AppendEntity(lineP1);
+                        shellBottom.AppendEntity(lineP5);
+                        shellBottom.AppendEntity(lineP12);
+                        shellBottom.AppendEntity(lineP9);
+                        shellBottom.AppendEntity(lineP17);
+                        trans.AddNewlyCreatedDBObject(lineP1, true);
+                        trans.AddNewlyCreatedDBObject(lineP5, true);
+                        trans.AddNewlyCreatedDBObject(lineP12, true);
+                        trans.AddNewlyCreatedDBObject(lineP9, true);
+                        trans.AddNewlyCreatedDBObject(lineP17, true);
+
+                        DBObjectCollection offsetCurvesP2 = lineP2.GetOffsetCurves(shellthick);
+                        foreach (DBObject obj in offsetCurvesP2)
                         {
-                            // Add the offset line to the same block or space
-                            shellLeft.AppendEntity(offsetLine);
-                            trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            Line offsetLine = obj as Line;
+                            if (offsetLine != null)
+                            {
+                                // Add the offset line to the same block or space
+                                shellRight.AppendEntity(offsetLine);
+                                trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            }
                         }
+
+                        DBObjectCollection offsetCurvesP3 = lineP4.GetOffsetCurves(shellthick);
+                        foreach (DBObject obj in offsetCurvesP3)
+                        {
+                            Line offsetLine = obj as Line;
+                            if (offsetLine != null)
+                            {
+                                // Add the offset line to the same block or space
+                                shellLeft.AppendEntity(offsetLine);
+                                trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            }
+                        }
+
+                        // Insert blocks into model space as block references
+                        BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), shellLeft.ObjectId);
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+
+                        BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), shellRight.ObjectId);
+                        modelSpace.AppendEntity(shellRightRef);
+                        trans.AddNewlyCreatedDBObject(shellRightRef, true);
+
+                        BlockReference shellTopRef = new BlockReference(new Point3d(0, 0, 0), shellTop.ObjectId);
+                        modelSpace.AppendEntity(shellTopRef);
+                        trans.AddNewlyCreatedDBObject(shellTopRef, true);
+
+                        BlockReference shellBottomRef = new BlockReference(new Point3d(0, 0, 0), shellBottom.ObjectId);
+                        modelSpace.AppendEntity(shellBottomRef);
+                        trans.AddNewlyCreatedDBObject(shellBottomRef, true);
                     }
+                    else if(paneltypebox.Text == "OUTDOOR")
+                    {
+                        tops = Convert.ToDouble(config["top_bottom_shell_size"]) - shellthick;
+                        sides = Convert.ToDouble(config["side_shell_size"]) - shellthick;
 
-                    // Insert blocks into model space as block references
-                    BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), shellLeft.ObjectId);
-                    modelSpace.AppendEntity(shellLeftRef);
-                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                        zchanneltb = Convert.ToDouble(config["outdoor_top_bottom_Z_channel_size"]);
+                        zchannelside = Convert.ToDouble(config["outdoor_side_Z_channel_size"]);
 
-                    BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), shellRight.ObjectId);
-                    modelSpace.AppendEntity(shellRightRef);
-                    trans.AddNewlyCreatedDBObject(shellRightRef, true);
+                        ps1 = new Point3d(l, 0, 0);
+                        ps2 = new Point3d(l + length, 0, 0);
+                        ps3 = new Point3d(l + length, width, 0);
+                        ps4 = new Point3d(l, width, 0);
 
-                    BlockReference shellTopRef = new BlockReference(new Point3d(0, 0, 0), shellTop.ObjectId);
-                    modelSpace.AppendEntity(shellTopRef);
-                    trans.AddNewlyCreatedDBObject(shellTopRef, true);
+                        ps5 = new Point3d(ps1.X + zchannelside, ps1.Y + zchanneltb, 0);
+                        ps6 = new Point3d(ps2.X - zchannelside, ps5.Y, 0);
+                        ps7 = new Point3d(ps6.X, ps3.Y - zchanneltb, 0);
+                        ps8 = new Point3d(ps5.X, ps7.Y, 0);
 
-                    BlockReference shellBottomRef = new BlockReference(new Point3d(0, 0, 0), shellBottom.ObjectId);
-                    modelSpace.AppendEntity(shellBottomRef);
-                    trans.AddNewlyCreatedDBObject(shellBottomRef, true);
+                        pz1 = new Point3d(l + shellthick, zchanneltb, 0);
+                        pz2 = new Point3d(pz1.X, width - zchanneltb, 0);
+                        pz3 = new Point3d(pz1.X + zchannelside, pz2.Y, 0);
+                        pz4 = new Point3d(pz3.X, pz1.Y, 0);
+                        pz5 = new Point3d(l + length - shellthick, pz1.Y, 0);
+                        pz6 = new Point3d(pz5.X, width - zchanneltb, 0);
+                        pz7 = new Point3d(pz5.X - zchannelside, pz6.Y, 0);
+                        pz8 = new Point3d(pz7.X, pz1.Y, 0);
+                        pz9 = new Point3d(pz1.X + shellthick, pz1.Y, 0);
+                        pz10 = new Point3d(pz9.X, pz2.Y, 0);
+                        pz11 = new Point3d(pz5.X - shellthick, pz2.Y, 0);
+                        pz12 = new Point3d(pz11.X, pz1.Y, 0);
+                        pz13 = new Point3d(pz1.X, pz2.Y + zchanneltb - shellthick, 0);
+                        pz14 = new Point3d(l - shellthick + length, pz13.Y, 0);
+                        Point3d pz15 = new Point3d(pz1.X, pz1.Y - zchanneltb + shellthick, 0);
+                        Point3d pz16 = new Point3d(l - shellthick + length, pz15.Y, 0);
+
+                        Point3d s1 = new Point3d(l, 0, 0);
+                        Point3d s2 = new Point3d(l + length, 0, 0);
+                        Point3d s3 = new Point3d(l + length, width, 0);
+                        Point3d s4 = new Point3d(l, width, 0);
+
+                        Point3d s5 = new Point3d(s1.X + sides, s1.Y + tops, 0);
+                        Point3d s6 = new Point3d(s2.X - sides, s5.Y, 0);
+                        Point3d s7 = new Point3d(s6.X, s3.Y - tops, 0);
+                        Point3d s8 = new Point3d(s5.X,s7.Y, 0);
+
+                        Point3d z1 = new Point3d(l + shellthick, tops, 0);
+                        Point3d z2 = new Point3d(z1.X, width - tops, 0);
+                        Point3d z3 = new Point3d(z1.X + sides,z2.Y, 0);
+                        Point3d z4 = new Point3d(z3.X, z1.Y, 0);
+                        Point3d z5 = new Point3d(l + length - shellthick, z1.Y, 0);
+                        Point3d z6 = new Point3d(z5.X, width - tops, 0);
+                        Point3d z7 = new Point3d(z5.X - sides, z6.Y, 0);
+                        Point3d z8 = new Point3d(z7.X, z1.Y, 0);
+                        Point3d z9 = new Point3d(z1.X + shellthick, z1.Y, 0);
+                        Point3d z10 = new Point3d(z9.X, z2.Y, 0);
+                        Point3d z11 = new Point3d(z3.X - shellthick, z2.Y, 0);
+                        Point3d z12 = new Point3d(z11.X, z1.Y, 0);
+                        Point3d z13 = new Point3d(z1.X, z2.Y + tops - shellthick, 0);
+                        Point3d z14 = new Point3d(l - shellthick + length, z1.Y, 0);
+
+
+                        if (blockTable.Has("shellLeft") || blockTable.Has("shellRight") || blockTable.Has("shellTop") || blockTable.Has("shellBottom"))
+                        {
+                            MessageBox.Show("Block already exists. Try in a new drawing file");
+                            return;
+                        }
+
+                        blockTable.UpgradeOpen();
+
+                        shellLeft = new BlockTableRecord { Name = "shellLeft" };
+                        blockTable.Add(shellLeft);
+                        trans.AddNewlyCreatedDBObject(shellLeft, true);
+
+                        shellRight = new BlockTableRecord { Name = "shellRight" };
+                        blockTable.Add(shellRight);
+                        trans.AddNewlyCreatedDBObject(shellRight, true);
+
+                        shellTop = new BlockTableRecord { Name = "shellTop" };
+                        blockTable.Add(shellTop);
+                        trans.AddNewlyCreatedDBObject(shellTop, true);
+
+                        shellBottom = new BlockTableRecord { Name = "shellBottom" };
+                        blockTable.Add(shellBottom);
+                        trans.AddNewlyCreatedDBObject(shellBottom, true);
+
+                        BlockTableRecord outshellLeft = new BlockTableRecord { Name = "outshellLeft" };
+                        blockTable.Add(outshellLeft);
+                        trans.AddNewlyCreatedDBObject(outshellLeft, true);
+
+                        BlockTableRecord outshellRight = new BlockTableRecord { Name = "outshellRight" };
+                        blockTable.Add(outshellRight);
+                        trans.AddNewlyCreatedDBObject(outshellRight, true);
+
+                        BlockTableRecord outshellTop = new BlockTableRecord { Name = "outshellTop" };
+                        blockTable.Add(outshellTop);
+                        trans.AddNewlyCreatedDBObject(outshellTop, true);
+
+                        BlockTableRecord outshellBottom = new BlockTableRecord { Name = "outshellBottom" };
+                        blockTable.Add(outshellBottom);
+                        trans.AddNewlyCreatedDBObject(outshellBottom, true);
+
+                        Line linez1 = new Line(z11, z3) { ColorIndex = outershellcolor };
+                        outshellLeft.AppendEntity(linez1);
+                        trans.AddNewlyCreatedDBObject(linez1, true);
+                        Line linez2 = new Line(z11, z3) { ColorIndex = outershellcolor };
+                        outshellRight.AppendEntity(linez2);
+                        trans.AddNewlyCreatedDBObject(linez2, true);
+                        Vector3d linez2move = z12.GetVectorTo(z8);
+                        linez2.TransformBy(Matrix3d.Displacement(linez2move));
+                        Line linez3 = new Line(z12, z4) { ColorIndex = outershellcolor };
+                        outshellLeft.AppendEntity(linez3);
+                        trans.AddNewlyCreatedDBObject(linez3, true);
+                        Line linez11 = new Line(z12, z4) { ColorIndex = outershellcolor };
+                        outshellRight.AppendEntity(linez11);
+                        trans.AddNewlyCreatedDBObject(linez11, true);
+                        Vector3d linez11move = z12.GetVectorTo(z8);
+                        linez11.TransformBy(Matrix3d.Displacement(linez11move));
+                        Line linez12 = new Line(z12, z11) { ColorIndex = outershellcolor };
+                        outshellRight.AppendEntity(linez12);
+                        trans.AddNewlyCreatedDBObject(linez12, true);
+                        Vector3d linez12move = z12.GetVectorTo(z8);
+                        linez12.TransformBy(Matrix3d.Displacement(linez12move));
+                        Line linez10 = new Line(z3, z4) { ColorIndex = outershellcolor };
+                        outshellLeft.AppendEntity(linez10);
+                        trans.AddNewlyCreatedDBObject(linez10, true);
+                        Line linez4 = new Line(z11, z12) { ColorIndex = outershellcolor };
+                        outshellLeft.AppendEntity(linez4);
+                        trans.AddNewlyCreatedDBObject(linez4, true);
+                        Line linez5 = new Line(z3, z7) { ColorIndex = outershellcolor };
+                        outshellTop.AppendEntity(linez5);
+                        trans.AddNewlyCreatedDBObject(linez5, true);
+                        Line linez6 = new Line(z9, z10) { ColorIndex = outershellcolor };
+                        outshellRight.AppendEntity(linez6);
+                        trans.AddNewlyCreatedDBObject(linez6, true);
+                        Vector3d linez6move = z1.GetVectorTo(z8);
+                        linez6.TransformBy(Matrix3d.Displacement(linez6move));
+
+                        // Add lines to shellLeft block
+                        Line lineP4 = new Line(s4, s1) { ColorIndex = outershellcolor };
+                        Line lineP13 = new Line(s1, s5) { ColorIndex = outershellcolor };
+                        Line lineP14 = new Line(s4, s8) { ColorIndex = outershellcolor };
+                        outshellLeft.AppendEntity(lineP4);
+                        outshellLeft.AppendEntity(lineP13);
+                        outshellLeft.AppendEntity(lineP14);
+                        trans.AddNewlyCreatedDBObject(lineP4, true);
+                        trans.AddNewlyCreatedDBObject(lineP13, true);
+                        trans.AddNewlyCreatedDBObject(lineP14, true);
+
+                        // Add lines to shellRight block
+                        Line lineP2 = new Line(s2, s3) { ColorIndex = outershellcolor };
+                        Line lineP15 = new Line(s7, s3) { ColorIndex = outershellcolor };
+                        Line lineP16 = new Line(s2, s6) { ColorIndex = outershellcolor };
+                        outshellRight.AppendEntity(lineP2);
+                        outshellRight.AppendEntity(lineP15);
+                        outshellRight.AppendEntity(lineP16);
+                        trans.AddNewlyCreatedDBObject(lineP2, true);
+                        trans.AddNewlyCreatedDBObject(lineP15, true);
+                        trans.AddNewlyCreatedDBObject(lineP16, true);
+
+                        // Add lines to shellTop block
+                        Line lineP3 = new Line(s3, s4) { ColorIndex = outershellcolor };
+                        Line lineP11 = new Line(s7, s3) { ColorIndex = outershellcolor };
+                        Line lineP10 = new Line(s4, s8) { ColorIndex = outershellcolor };
+                        Line lineP18 = new Line(new Point3d(s4.X + shellthick, s4.Y - shellthick, 0), new Point3d(s3.X - shellthick, s3.Y - shellthick, 0)) { ColorIndex = outershellcolor };
+                        outshellTop.AppendEntity(lineP10);
+                        outshellTop.AppendEntity(lineP3);
+                        outshellTop.AppendEntity(lineP11);
+                        outshellTop.AppendEntity(lineP18);
+                        trans.AddNewlyCreatedDBObject(lineP3, true);
+                        trans.AddNewlyCreatedDBObject(lineP10, true);
+                        trans.AddNewlyCreatedDBObject(lineP11, true);
+                        trans.AddNewlyCreatedDBObject(lineP18, true);
+                        drawline(trans, outshellTop, new Point3d(z3.X, z3.Y - shellthick, z3.Y), new Point3d(z7.X, z7.Y - shellthick, z7.Y), outershellcolor);
+
+                        // Add lines to shellBottom block
+                        Line lineP1 = new Line(s1, s2) { ColorIndex = outershellcolor };
+                        Line lineP5 = new Line(s5, s6) { ColorIndex = outershellcolor };
+                        Line lineP12 = new Line(s2, s6) { ColorIndex = outershellcolor };
+                        Line lineP9 = new Line(s1, s5) { ColorIndex = outershellcolor };
+                        Line lineP17 = new Line(new Point3d(s1.X + shellthick, s1.Y + shellthick, 0), new Point3d(s2.X - shellthick, s2.Y + shellthick, 0)) { ColorIndex = outershellcolor };
+                        outshellBottom.AppendEntity(lineP1);
+                        outshellBottom.AppendEntity(lineP5);
+                        outshellBottom.AppendEntity(lineP12);
+                        outshellBottom.AppendEntity(lineP9);
+                        outshellBottom.AppendEntity(lineP17);
+                        trans.AddNewlyCreatedDBObject(lineP1, true);
+                        trans.AddNewlyCreatedDBObject(lineP5, true);
+                        trans.AddNewlyCreatedDBObject(lineP12, true);
+                        trans.AddNewlyCreatedDBObject(lineP9, true);
+                        trans.AddNewlyCreatedDBObject(lineP17, true);
+                        drawline(trans, outshellBottom, new Point3d(z4.X,z4.Y+ shellthick,z4.Y), new Point3d(z8.X, z8.Y + shellthick, z8.Y), outershellcolor);
+
+                        DBObjectCollection offsetCurvesP2 = lineP2.GetOffsetCurves(shellthick);
+                        foreach (DBObject obj in offsetCurvesP2)
+                        {
+                            Line offsetLine = obj as Line;
+                            if (offsetLine != null)
+                            {
+                                // Add the offset line to the same block or space
+                                outshellRight.AppendEntity(offsetLine);
+                                trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            }
+                        }
+
+                        DBObjectCollection offsetCurvesP3 = lineP4.GetOffsetCurves(shellthick);
+                        foreach (DBObject obj in offsetCurvesP3)
+                        {
+                            Line offsetLine = obj as Line;
+                            if (offsetLine != null)
+                            {
+                                // Add the offset line to the same block or space
+                                outshellLeft.AppendEntity(offsetLine);
+                                trans.AddNewlyCreatedDBObject(offsetLine, true);
+                            }
+                        }
+
+                        drawline(trans, shellLeft, pz1,pz2, shellcolor);
+                        drawline(trans, shellLeft, pz2, pz3, shellcolor);
+                        drawline(trans, shellLeft, new Point3d(pz3.X - shellthick,pz3.Y,0), new Point3d(pz4.X - shellthick, pz4.Y, 0), shellcolor);
+                        drawline(trans, shellLeft, pz4, pz1, shellcolor);
+                        drawline(trans, shellLeft, pz9, pz10, shellcolor);
+
+                        drawline(trans, shellRight, pz5, pz6, shellcolor);
+                        drawline(trans, shellRight, pz6, pz7, shellcolor);
+                        drawline(trans, shellRight, new Point3d(pz7.X + shellthick, pz7.Y, 0), new Point3d(pz8.X + shellthick, pz8.Y, 0), shellcolor);
+                        drawline(trans, shellRight, pz8, pz5, shellcolor);
+                        drawline(trans, shellRight, pz11, pz12, shellcolor);
+
+                        drawline(trans, shellTop, pz2, pz13, shellcolor);
+                        drawline(trans, shellTop, pz13, pz14, shellcolor);
+                        drawline(trans, shellTop, pz14, pz6, shellcolor);
+                        drawline(trans, shellTop, pz6, pz2, shellcolor);
+
+                        drawline(trans, shellBottom, pz1, pz15, shellcolor);
+                        drawline(trans, shellBottom, pz15, pz16, shellcolor);
+                        drawline(trans, shellBottom, pz16, pz5, shellcolor);
+                        drawline(trans, shellBottom, pz1, pz5, shellcolor);
+
+                        // Insert blocks into model space as block references
+                        BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), shellLeft.ObjectId);
+                        modelSpace.AppendEntity(shellLeftRef);
+                        trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+
+                        BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), shellRight.ObjectId);
+                        modelSpace.AppendEntity(shellRightRef);
+                        trans.AddNewlyCreatedDBObject(shellRightRef, true);
+
+                        BlockReference shellTopRef = new BlockReference(new Point3d(0, 0, 0), shellTop.ObjectId);
+                        modelSpace.AppendEntity(shellTopRef);
+                        trans.AddNewlyCreatedDBObject(shellTopRef, true);
+
+                        BlockReference shellBottomRef = new BlockReference(new Point3d(0, 0, 0), shellBottom.ObjectId);
+                        modelSpace.AppendEntity(shellBottomRef);
+                        trans.AddNewlyCreatedDBObject(shellBottomRef, true);
+
+                        // Insert blocks into model space as block references
+                        BlockReference outshellLeftRef = new BlockReference(new Point3d(0, 0, 0), outshellLeft.ObjectId);
+                        modelSpace.AppendEntity(outshellLeftRef);
+                        trans.AddNewlyCreatedDBObject(outshellLeftRef, true);
+
+                        BlockReference outshellRightRef = new BlockReference(new Point3d(0, 0, 0), outshellRight.ObjectId);
+                        modelSpace.AppendEntity(outshellRightRef);
+                        trans.AddNewlyCreatedDBObject(outshellRightRef, true);
+
+                        BlockReference outshellTopRef = new BlockReference(new Point3d(0, 0, 0), outshellTop.ObjectId);
+                        modelSpace.AppendEntity(outshellTopRef);
+                        trans.AddNewlyCreatedDBObject(outshellTopRef, true);
+
+                        BlockReference outshellBottomRef = new BlockReference(new Point3d(0, 0, 0), outshellBottom.ObjectId);
+                        modelSpace.AppendEntity(outshellBottomRef);
+                        trans.AddNewlyCreatedDBObject(outshellBottomRef, true);
+                    }
 
                     if (hbusbarposition == "Top")
                     {
                         double leftpoint = l + zchannelside + shellthick;
                         double rightpoint = l + length - zchannelside - shellthick;
+                        double hbbpart1 = Convert.ToDouble(hbbpart1size.Text);
+                        
 
+                        if (hbbpartbox.Text == "1")
+                        {
+                            Point3d l1 = new Point3d(leftpoint, pz2.Y, 0);
+                            Point3d l2 = new Point3d(leftpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d l3 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d l4 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
 
-                        Point3d l1 = new Point3d(leftpoint, pz2.Y, 0);
-                        Point3d l2 = new Point3d(leftpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
-                        Point3d l3 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
-                        Point3d l4 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+                            Point3d r1 = new Point3d(rightpoint, pz2.Y, 0);
+                            Point3d r2 = new Point3d(rightpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d r3 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
 
-                        Point3d r1 = new Point3d(rightpoint, pz2.Y, 0);
-                        Point3d r2 = new Point3d(rightpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
-                        Point3d r3 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
-                        Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+                            drawline(trans, shellLeft, l1, l2, shellcolor);
+                            drawline(trans, shellLeft, l2, l3, shellcolor);
+                            drawline(trans, shellLeft, l3, l4, shellcolor);
 
-                        drawline(trans, shellLeft, l1, l2,shellcolor);
-                        drawline(trans, shellLeft, l2, l3, shellcolor);
-                        drawline(trans, shellLeft, l3, l4, shellcolor);
+                            drawline(trans, shellRight, r1, r2, shellcolor);
+                            drawline(trans, shellRight, r2, r3, shellcolor);
+                            drawline(trans, shellRight, r3, r4, shellcolor);
 
-                        drawline(trans, shellRight, r1, r2, shellcolor);
-                        drawline(trans, shellRight, r2, r3, shellcolor);
-                        drawline(trans, shellRight, r3, r4, shellcolor);
+                            drawline(trans, shellTop, new Point3d(l1.X, l1.Y - shellthick, 0), new Point3d(r1.X, r1.Y - shellthick, 0), shellcolor);
 
-                        drawline(trans, shellTop, new Point3d(l1.X ,l1.Y -shellthick,0), new Point3d(r1.X, r1.Y - shellthick, 0), shellcolor);
+                            BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                            blockTable.Add(hbbchannel);
+                            trans.AddNewlyCreatedDBObject(hbbchannel, true);
 
-                        BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
-                        blockTable.Add(hbbchannel);
-                        trans.AddNewlyCreatedDBObject(hbbchannel, true);
+                            drawline(trans, hbbchannel, l3, l4, channelcolor);
+                            drawline(trans, hbbchannel, r3, r4, channelcolor);
+                            drawline(trans, hbbchannel, r3, l3, channelcolor);
+                            //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y + shellthick, 0), new Point3d(r4.X, r4.Y + shellthick, 0), channelcolor);
 
-                        drawline(trans, hbbchannel, l3, l4, channelcolor);
-                        drawline(trans, hbbchannel, r3, r4, channelcolor);
-                        drawline(trans, hbbchannel, r3, l3, channelcolor);
-                        //drawline(trans, hbbchannel, r4, l4, channelcolor);
-                        drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
-                        drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y + shellthick, 0), new Point3d(r4.X, r4.Y + shellthick, 0), channelcolor);
+                            BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelref);
+                            trans.AddNewlyCreatedDBObject(hbbchannelref, true);
 
-                        BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
-                        modelSpace.AppendEntity(hbbchannelref);
-                        trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+                            if (paneltypebox.Text == "INDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l, ps4.Y - hbussize, 0), shellTop, hbbchannel, hbbpart1, "100", hbussize, "1", "Cover", "NO", shellcolor, channelcolor);
+                            }
+                            else if(paneltypebox.Text == "OUTDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l, ps4.Y - hbussize, 0), shellTop, hbbchannel, (hbbpart1 - (sides * 2) - (outdoordoorclearx * 2)), "100", (hbussize - tops - outdoordoorcleary), "1", "Cover", "NO", shellcolor, channelcolor);
+                            }
+                        }
+                        else if (hbbpartbox.Text == "2")
+                        {
+                            double hbbpart2 = Convert.ToDouble(hbbpart2size.Text);
+
+                            Point3d l1 = new Point3d(leftpoint, pz2.Y, 0);
+                            Point3d l2 = new Point3d(leftpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d l3 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d l4 = new Point3d(leftpoint - shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+
+                            Point3d r1 = new Point3d(rightpoint, pz2.Y, 0);
+                            Point3d r2 = new Point3d(rightpoint, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d r3 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize + (vchannelsize / 2), 0);
+                            Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - hbussize - (vchannelsize / 2), 0);
+
+                            drawline(trans, shellLeft, l1, l2, shellcolor);
+                            drawline(trans, shellLeft, l2, l3, shellcolor);
+                            drawline(trans, shellLeft, l3, l4, shellcolor);
+
+                            drawline(trans, shellRight, r1, r2, shellcolor);
+                            drawline(trans, shellRight, r2, r3, shellcolor);
+                            drawline(trans, shellRight, r3, r4, shellcolor);
+
+                            drawline(trans, shellTop, new Point3d(l1.X, l1.Y - shellthick, 0), new Point3d(r1.X, r1.Y - shellthick, 0), shellcolor);
+
+                            BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                            blockTable.Add(hbbchannel);
+                            trans.AddNewlyCreatedDBObject(hbbchannel, true);
+                            BlockTableRecord hbbchannelv = new BlockTableRecord { Name = "hbb_2" };
+                            blockTable.Add(hbbchannelv);
+                            trans.AddNewlyCreatedDBObject(hbbchannelv, true);
+
+                            Point3d l10 = new Point3d(l + hbbpart1 - (hchannelsize/2), l3.Y, 0);
+                            Point3d l11 = new Point3d(l + hbbpart1 - (hchannelsize / 2), l3.Y - shellthick, 0);
+                            Point3d l12 = new Point3d(l + hbbpart1 + (hchannelsize / 2), l3.Y, 0);
+                            Point3d l13 = new Point3d(l + hbbpart1 + (hchannelsize / 2), l3.Y - shellthick, 0);
+
+                            drawline(trans, hbbchannel, l3, l4, channelcolor);
+                            drawline(trans, hbbchannel, r3, r4, channelcolor);
+                            drawline(trans, hbbchannel, l3, l10, channelcolor);
+                            drawline(trans, hbbchannel, l10, l11, channelcolor);
+                            drawline(trans, hbbchannel, l11, l13, channelcolor);
+                            drawline(trans, hbbchannel, l12, l13, channelcolor);
+                            drawline(trans, hbbchannel, l12, r3, channelcolor);
+                            //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y + shellthick, 0), new Point3d(r4.X, r4.Y + shellthick, 0), channelcolor);
+
+                            Line hbbline1 = drawline(trans, hbbchannelv, l11, new Point3d(l + hbbpart1 - (hchannelsize / 2),l1.Y,0), channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l + hbbpart1 - (hchannelsize / 2), l1.Y, 0), new Point3d(l + hbbpart1 + (hchannelsize / 2), l1.Y, 0), channelcolor);
+                            Line hbbline2 = drawline(trans, hbbchannelv, l13, new Point3d(l + hbbpart1 + (hchannelsize / 2), l1.Y, 0), channelcolor);
+                            drawline(trans, hbbchannelv, l11, l13, channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l11.X + shellthick, l11.Y, 0), new Point3d(l + hbbpart1 - (hchannelsize / 2) + shellthick, l1.Y, 0), channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l13.X - shellthick, l13.Y, 0), new Point3d(l + hbbpart1 + (hchannelsize / 2) - shellthick, l1.Y, 0), channelcolor);
+
+                            BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelref);
+                            trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+                            BlockReference hbbchannelrefv = new BlockReference(new Point3d(0, 0, 0), hbbchannelv.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelrefv);
+                            trans.AddNewlyCreatedDBObject(hbbchannelrefv, true);
+
+                            if (paneltypebox.Text == "INDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l, ps4.Y - hbussize, 0), shellTop, hbbchannel, hbbpart1, "100", hbussize, "1", "Cover", "NO", shellcolor, channelcolor);
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + hbbpart1, ps4.Y - hbussize, 0), shellTop, hbbchannel, hbbpart2, "101", hbussize, "2", "Cover", "NO", shellcolor, channelcolor);
+                            }
+                            else if (paneltypebox.Text == "OUTDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + sides + outdoordoorclearx, ps4.Y - hbussize, 0), shellTop, hbbchannel, (hbbpart1 - (sides) - (outdoordoorclearx)), "100", (hbussize - tops - outdoordoorcleary), "1", "Cover", "NO", shellcolor, channelcolor);
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + hbbpart1, ps4.Y - hbussize, 0), shellTop, hbbchannel, (hbbpart1 - (sides) - (outdoordoorclearx)), "101", (hbussize - tops - outdoordoorcleary), "2", "Cover", "NO", shellcolor, channelcolor);
+                            }
+                        }
 
                         ps4 = new Point3d(ps4.X, ps4.Y - hbussize, 0);
                         pz2 = new Point3d(pz2.X, pz2.Y - hbussize + zchanneltb - (vchannelsize / 2) + shellthick, 0);
@@ -1061,42 +1495,126 @@ namespace CAD_AUTOMATION
                     {
                         double leftpoint = l + zchannelside + shellthick;
                         double rightpoint = l + length - zchannelside - shellthick;
+                        double hbbpart1 = Convert.ToDouble(hbbpart1size.Text);
 
+                        if (hbbpartbox.Text == "1")
+                        {
+                            Point3d l1 = new Point3d(leftpoint, pz1.Y, 0);
+                            Point3d l2 = new Point3d(leftpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d l3 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d l4 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
 
-                        Point3d l1 = new Point3d(leftpoint, pz1.Y, 0);
-                        Point3d l2 = new Point3d(leftpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
-                        Point3d l3 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
-                        Point3d l4 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+                            Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
+                            Point3d r2 = new Point3d(rightpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d r3 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
 
-                        Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
-                        Point3d r2 = new Point3d(rightpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
-                        Point3d r3 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
-                        Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+                            drawline(trans, shellLeft, l1, l2, shellcolor);
+                            drawline(trans, shellLeft, l2, l3, shellcolor);
+                            drawline(trans, shellLeft, l3, l4, shellcolor);
 
-                        drawline(trans, shellLeft, l1, l2, shellcolor);
-                        drawline(trans, shellLeft, l2, l3, shellcolor);
-                        drawline(trans, shellLeft, l3, l4, shellcolor);
+                            drawline(trans, shellRight, r1, r2, shellcolor);
+                            drawline(trans, shellRight, r2, r3, shellcolor);
+                            drawline(trans, shellRight, r3, r4, shellcolor);
 
-                        drawline(trans, shellRight, r1, r2, shellcolor);
-                        drawline(trans, shellRight, r2, r3, shellcolor);
-                        drawline(trans, shellRight, r3, r4, shellcolor);
+                            drawline(trans, shellBottom, new Point3d(l1.X, l1.Y + shellthick, 0), new Point3d(r1.X, r1.Y + shellthick, 0), shellcolor);
 
-                        drawline(trans, shellBottom, new Point3d(l1.X, l1.Y + shellthick, 0), new Point3d(r1.X, r1.Y + shellthick, 0), shellcolor);
+                            BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                            blockTable.Add(hbbchannel);
+                            trans.AddNewlyCreatedDBObject(hbbchannel, true);
 
-                        BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
-                        blockTable.Add(hbbchannel);
-                        trans.AddNewlyCreatedDBObject(hbbchannel, true);
+                            drawline(trans, hbbchannel, l3, l4, channelcolor);
+                            drawline(trans, hbbchannel, r3, r4, channelcolor);
+                            drawline(trans, hbbchannel, r3, l3, channelcolor);
+                            //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y + shellthick, 0), new Point3d(r3.X, r3.Y + shellthick, 0), channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y - shellthick, 0), new Point3d(r4.X, r4.Y - shellthick, 0), channelcolor);
 
-                        drawline(trans, hbbchannel, l3, l4, channelcolor);
-                        drawline(trans, hbbchannel, r3, r4, channelcolor);
-                        drawline(trans, hbbchannel, r3, l3, channelcolor);
-                        //drawline(trans, hbbchannel, r4, l4, channelcolor);
-                        drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y + shellthick, 0), new Point3d(r3.X, r3.Y + shellthick, 0), channelcolor);
-                        drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y - shellthick, 0), new Point3d(r4.X, r4.Y - shellthick, 0), channelcolor);
+                            BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelref);
+                            trans.AddNewlyCreatedDBObject(hbbchannelref, true);
 
-                        BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
-                        modelSpace.AppendEntity(hbbchannelref);
-                        trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+                            if (paneltypebox.Text == "INDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l, ps1.Y, 0), hbbchannel, shellBottom, hbbpart1, "100", hbussize, "1", "Cover", "NO", channelcolor, shellcolor);
+                            }
+                            else if (paneltypebox.Text == "OUTDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + sides + outdoordoorclearx, ps1.Y + tops + outdoordoorcleary, 0), hbbchannel, shellBottom, (hbbpart1 - (sides * 2) - (outdoordoorclearx * 2)), "100", (hbussize - tops - outdoordoorcleary), "1", "Cover", "NO", channelcolor, shellcolor);
+                            }
+                        }
+                        else if (hbbpartbox.Text == "2")
+                        {
+                            double hbbpart2 = Convert.ToDouble(hbbpart2size.Text);
+
+                            Point3d l1 = new Point3d(leftpoint, pz1.Y, 0);
+                            Point3d l2 = new Point3d(leftpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d l3 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d l4 = new Point3d(leftpoint - shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+
+                            Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
+                            Point3d r2 = new Point3d(rightpoint, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d r3 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize - (vchannelsize / 2), 0);
+                            Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + hbussize + (vchannelsize / 2), 0);
+
+                            drawline(trans, shellLeft, l1, l2, shellcolor);
+                            drawline(trans, shellLeft, l2, l3, shellcolor);
+                            drawline(trans, shellLeft, l3, l4, shellcolor);
+
+                            drawline(trans, shellRight, r1, r2, shellcolor);
+                            drawline(trans, shellRight, r2, r3, shellcolor);
+                            drawline(trans, shellRight, r3, r4, shellcolor);
+
+                            drawline(trans, shellBottom, new Point3d(l1.X, l1.Y + shellthick, 0), new Point3d(r1.X, r1.Y + shellthick, 0), shellcolor);
+
+                            BlockTableRecord hbbchannel = new BlockTableRecord { Name = "hbb_1" };
+                            blockTable.Add(hbbchannel);
+                            trans.AddNewlyCreatedDBObject(hbbchannel, true);
+                            BlockTableRecord hbbchannelv = new BlockTableRecord { Name = "hbb_2" };
+                            blockTable.Add(hbbchannelv);
+                            trans.AddNewlyCreatedDBObject(hbbchannelv, true);
+
+                            Point3d l10 = new Point3d(l + hbbpart1 - (hchannelsize / 2), l3.Y, 0);
+                            Point3d l11 = new Point3d(l + hbbpart1 - (hchannelsize / 2), l3.Y + shellthick, 0);
+                            Point3d l12 = new Point3d(l + hbbpart1 + (hchannelsize / 2), l3.Y, 0);
+                            Point3d l13 = new Point3d(l + hbbpart1 + (hchannelsize / 2), l3.Y + shellthick, 0);
+
+                            drawline(trans, hbbchannel, l3, l4, channelcolor);
+                            drawline(trans, hbbchannel, r3, r4, channelcolor);
+                            drawline(trans, hbbchannel, l3, l10, channelcolor);
+                            drawline(trans, hbbchannel, l10, l11, channelcolor);
+                            drawline(trans, hbbchannel, l11, l13, channelcolor);
+                            drawline(trans, hbbchannel, l12, l13, channelcolor);
+                            drawline(trans, hbbchannel, l12, r3, channelcolor);
+                            //drawline(trans, hbbchannel, r4, l4, channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l3.X, l3.Y + shellthick, 0), new Point3d(r3.X, r3.Y + shellthick, 0), channelcolor);
+                            drawline(trans, hbbchannel, new Point3d(l4.X, l4.Y - shellthick, 0), new Point3d(r4.X, r4.Y - shellthick, 0), channelcolor);
+
+                            Line hbbline1 = drawline(trans, hbbchannelv, l11, new Point3d(l + hbbpart1 - (hchannelsize / 2), l1.Y, 0), channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l + hbbpart1 - (hchannelsize / 2), l1.Y, 0), new Point3d(l + hbbpart1 + (hchannelsize / 2), l1.Y, 0), channelcolor);
+                            Line hbbline2 = drawline(trans, hbbchannelv, l13, new Point3d(l + hbbpart1 + (hchannelsize / 2), l1.Y, 0), channelcolor);
+                            drawline(trans, hbbchannelv, l11, l13, channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l11.X + shellthick, l11.Y, 0), new Point3d(l + hbbpart1 - (hchannelsize / 2) + shellthick, l1.Y, 0), channelcolor);
+                            drawline(trans, hbbchannelv, new Point3d(l13.X - shellthick, l13.Y, 0), new Point3d(l + hbbpart1 + (hchannelsize / 2) - shellthick, l1.Y, 0), channelcolor);
+
+                            BlockReference hbbchannelref = new BlockReference(new Point3d(0, 0, 0), hbbchannel.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelref);
+                            trans.AddNewlyCreatedDBObject(hbbchannelref, true);
+                            BlockReference hbbchannelrefv = new BlockReference(new Point3d(0, 0, 0), hbbchannelv.ObjectId);
+                            modelSpace.AppendEntity(hbbchannelrefv);
+                            trans.AddNewlyCreatedDBObject(hbbchannelrefv, true);
+
+                            if (paneltypebox.Text == "INDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l, ps1.Y, 0), hbbchannel, shellBottom, hbbpart1, "100", hbussize, "1", "Cover", "NO", channelcolor, shellcolor);
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + hbbpart1, ps1.Y, 0), hbbchannel, shellBottom, hbbpart2, "101", hbussize, "2", "Cover", "NO", channelcolor, shellcolor);
+                            }
+                            else if (paneltypebox.Text == "OUTDOOR")
+                            {
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + sides + outdoordoorclearx, ps1.Y + tops + outdoordoorcleary, 0), hbbchannel, shellBottom, (hbbpart1 - (sides) - (outdoordoorclearx)), "100", (hbussize - tops - outdoordoorcleary), "1", "Cover", "NO", channelcolor, shellcolor);
+                                drawdoor(trans, blockTable, modelSpace, new Point3d(l + hbbpart1, ps1.Y + tops + outdoordoorcleary, 0), hbbchannel, shellBottom, (hbbpart1 - (sides) - (outdoordoorclearx)), "101", (hbussize - tops - outdoordoorcleary), "2", "Cover", "NO", channelcolor, shellcolor);
+                            }
+                        }
 
                         //ps4 = new Point3d(ps4.X, ps4.Y - hbussize - shellthick, 0);
                         ps1 = new Point3d(ps1.X, ps1.Y + hbussize, 0);
@@ -1543,6 +2061,10 @@ namespace CAD_AUTOMATION
             int rightcolor = 0;
             double insertpointdoorX = 0;
             double insertpointdoorY = 0;
+            double insertpointmpX = 0;
+            double insertpointmpY = 0;
+            double secsizefordoor = secsize;
+            double partsizefordoor = partsize;
 
             // Calculate cumulative section size dynamically
             double cumulativeSize = 0;
@@ -1591,7 +2113,16 @@ namespace CAD_AUTOMATION
                     rightpoint = l + secsize - zchannelside - shellthick;
                     leftcolor = shellcolor;
                     rightcolor = shellcolor;
-                    insertpointdoorX = l;
+                    insertpointmpX = l;
+                    if (paneltypebox.Text == "INDOOR")
+                    {
+                        insertpointdoorX = l;
+                    }
+                    else if(paneltypebox.Text == "OUTDOOR")
+                    {
+                        insertpointdoorX = l + sides + outdoordoorclearx;
+                        secsizefordoor = secsize - (sides * 2) - (outdoordoorclearx * 2);
+                    }
                     break;
 
                 case "first":
@@ -1599,7 +2130,16 @@ namespace CAD_AUTOMATION
                     rightpoint = l + secsize - (vchannelsize / 2);
                     leftcolor = shellcolor;
                     rightcolor = channelcolor;
-                    insertpointdoorX = l;
+                    insertpointmpX = l;
+                    if (paneltypebox.Text == "INDOOR")
+                    {
+                        insertpointdoorX = l;
+                    }
+                    else if (paneltypebox.Text == "OUTDOOR")
+                    {
+                        insertpointdoorX = l + sides + outdoordoorclearx;
+                        secsizefordoor = secsize - sides - outdoordoorclearx;
+                    }
                     break;
 
                 case "mid":
@@ -1608,6 +2148,7 @@ namespace CAD_AUTOMATION
                     leftcolor = channelcolor;
                     rightcolor = channelcolor;
                     insertpointdoorX = l + cumulativeSize;
+                    insertpointmpX = l + cumulativeSize;
                     break;
 
                 case "last":
@@ -1615,7 +2156,16 @@ namespace CAD_AUTOMATION
                     rightpoint = l + cumulativeSize + secsize - zchannelside - shellthick;
                     leftcolor = channelcolor;
                     rightcolor = shellcolor;
-                    insertpointdoorX = l + cumulativeSize;
+                    insertpointmpX = l + cumulativeSize;
+                    if (paneltypebox.Text == "INDOOR")
+                    {
+                        insertpointdoorX = l + cumulativeSize;
+                    }
+                    else if (paneltypebox.Text == "OUTDOOR")
+                    {  
+                        insertpointdoorX = l + cumulativeSize;
+                        secsizefordoor = secsize - sides - outdoordoorclearx;
+                    }
                     break;
 
                 default:
@@ -1632,7 +2182,30 @@ namespace CAD_AUTOMATION
                 Point3d r6 = new Point3d(rightpoint, pz2.Y, 0);
                 drawline(trans, leftchannel, l1, l6,leftcolor);
                 drawline(trans, rightchannel, r1, r6,rightcolor);
-                insertpointdoorY = ps1.Y;
+                insertpointmpY = ps1.Y;
+                if (paneltypebox.Text == "INDOOR")
+                {
+                    insertpointdoorY = ps1.Y;
+                }
+                else if (paneltypebox.Text == "OUTDOOR")
+                {
+                    if (hbusbarposition == "Top")
+                    {
+                        insertpointdoorY = ps1.Y + tops + outdoordoorcleary;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                    else if (hbusbarposition == "Bottom")
+                    {
+                        insertpointdoorY = ps1.Y;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                    else
+                    {
+                        insertpointdoorY = ps1.Y + tops + outdoordoorcleary;
+                        partsizefordoor = partsize - (tops * 2) - (outdoordoorcleary * 2);
+                    }
+                    
+                }
             }
             else if(partposition == "first")
             {
@@ -1666,7 +2239,30 @@ namespace CAD_AUTOMATION
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
                 trans.AddNewlyCreatedDBObject(shellLeftRef, true);
-                insertpointdoorY = ps1.Y;
+                insertpointmpY = ps1.Y;
+                if (paneltypebox.Text == "INDOOR")
+                {
+                    insertpointdoorY = ps1.Y;
+                }
+                else if (paneltypebox.Text == "OUTDOOR")
+                {
+                    if (hbusbarposition == "Top")
+                    {
+                        insertpointdoorY = ps1.Y + tops + outdoordoorcleary;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                    else if (hbusbarposition == "Bottom")
+                    {
+                        insertpointdoorY = ps1.Y;
+                        partsizefordoor = partsize;
+                    }
+                    else
+                    {
+                        insertpointdoorY = ps1.Y + tops + outdoordoorcleary;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                    
+                }
             }
             else if(partposition == "mid")
             {
@@ -1781,6 +2377,7 @@ namespace CAD_AUTOMATION
                 modelSpace.AppendEntity(shellLeftRef);
                 trans.AddNewlyCreatedDBObject(shellLeftRef, true);
                 insertpointdoorY = ps1.Y + sec;
+                insertpointmpY = ps1.Y + sec;
 
             }
             else if (partposition == "last")
@@ -1819,8 +2416,29 @@ namespace CAD_AUTOMATION
                 drawline(trans, bottomchannel, r3, r4, channelcolor);
                 drawline(trans, bottomchannel, r3, l3, channelcolor);
                 drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
-
-                insertpointdoorY = ps4.Y - partsize;
+                insertpointmpY = ps4.Y - partsize;
+                if (paneltypebox.Text == "INDOOR")
+                {
+                    insertpointdoorY = ps4.Y - partsize;
+                }
+                else if (paneltypebox.Text == "OUTDOOR")
+                {
+                    if (hbusbarposition == "Top")
+                    {
+                        insertpointdoorY = ps4.Y - partsize;
+                        partsizefordoor = partsize;
+                    }
+                    else if (hbusbarposition == "Bottom")
+                    {
+                        insertpointdoorY = ps4.Y - partsize;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                    else
+                    {
+                        insertpointdoorY = ps4.Y - partsize;
+                        partsizefordoor = partsize - tops - outdoordoorcleary;
+                    }
+                }
             }
 
             string doortype = null;
@@ -1861,11 +2479,11 @@ namespace CAD_AUTOMATION
 
             }
 
-            drawdoor(trans, blockTable, modelSpace, new Point3d(insertpointdoorX, insertpointdoorY, 0),leftchannel,rightchannel, secsize, secnumber, partsize, partnumber,doortype,dooropen,leftcolor,rightcolor);
+            drawdoor(trans, blockTable, modelSpace, new Point3d(insertpointdoorX, insertpointdoorY, 0),leftchannel,rightchannel, secsizefordoor, secnumber, partsizefordoor, partnumber,doortype,dooropen,leftcolor,rightcolor);
 
             if (needmp)
             {
-                drawmp(trans, blockTable, modelSpace, new Point3d(insertpointdoorX, insertpointdoorY, 0), leftpoint, rightpoint, secsize, secnumber,secposition, partsize, partnumber);
+                drawmp(trans, blockTable, modelSpace, new Point3d(insertpointmpX, insertpointmpY, 0), leftpoint, rightpoint, secsize, secnumber,secposition, partsize, partnumber);
             }
 
         }
