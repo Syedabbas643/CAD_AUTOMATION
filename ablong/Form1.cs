@@ -70,7 +70,7 @@ namespace CAD_AUTOMATION
         private Point3d pz1, pz2, pz3, pz4, pz5, pz6, pz7, pz8, pz9, pz10, pz11, pz12, pz13, pz14;
         private int shellcolor = 140;
         private int outershellcolor = 120;
-        private int channelcolor = 10;
+        private int channelcolor = 140;
         private int doorcolor = 50;
         private int doorNothidecolor = 2;
         private int mpcolor = 210;
@@ -361,7 +361,7 @@ namespace CAD_AUTOMATION
                                 TextBox partitionTextBox = new TextBox
                                 {
                                     Name = $"sec{i2}part{i}",
-                                    Text = "500",
+                                    //Text = "500",
                                     Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                     ForeColor = Color.White,
                                     BackColor = Color.FromArgb(64, 64, 64),
@@ -564,7 +564,7 @@ namespace CAD_AUTOMATION
                             TextBox sectionSizeTextBox = new TextBox
                             {
                                 Name = $"sec{i2}size",
-                                Text = "500",
+                                //Text = "500",
                                 Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                 ForeColor = Color.White,
                                 BackColor = Color.FromArgb(64, 64, 64),
@@ -2530,9 +2530,9 @@ namespace CAD_AUTOMATION
         {
             doorclearx = Convert.ToDouble(config["door&cover_clearence_x"]);
             doorcleary = Convert.ToDouble(config["door&cover_clearence_y"]);
-            doorinchcleary = Convert.ToDouble(config["step_inches_clearence_y"]);
             doorinchsizex = Convert.ToDouble(config["step_inches_size_x"]);
             doorinchsizey = Convert.ToDouble(config["step_inches_size_y"]);
+            doorinchcleary = Convert.ToDouble(config["step_inches_clearence_y"]) - (doorinchsizey/2);
             doorinchholes = Convert.ToDouble(config["step_inches_holes_radius"]);
 
             if (doortype == "Cover")
@@ -2544,7 +2544,7 @@ namespace CAD_AUTOMATION
                 double coverlocky = Convert.ToDouble(config["coverlock_clearence_y"]);
                 double coverlockradius = Convert.ToDouble(config["cover_lock_radius"]);
 
-                if (doorheight > 650)
+                if (doorheight > 650 || ((secnumber == "100" || secnumber == "101") && doorwidth > 650))
                 {
                     Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
                     Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
@@ -2555,12 +2555,7 @@ namespace CAD_AUTOMATION
                     Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
                     Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
 
-                    Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
-                    Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
-                    Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
-                    Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
-                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight/2), 0);
-                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                    
 
                     BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
                     blockTable.Add(doorblock);
@@ -2575,26 +2570,60 @@ namespace CAD_AUTOMATION
                     drawline(trans, doorblock, d7, d8, doorcolor);
                     drawline(trans, doorblock, d8, d5, doorcolor);
 
-                    DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+                    if (secnumber == "100" || secnumber == "101")
+                    {
+                        Point3d c1 = new Point3d(doorclearx + coverlocky, doorcleary + coverlockx, 0);
+                        Point3d c2 = new Point3d(doorclearx + doorwidth - coverlocky, doorcleary + coverlockx, 0);
+                        Point3d c3 = new Point3d(doorclearx + doorwidth - coverlocky, doorcleary + doorheight - coverlockx, 0);
+                        Point3d c4 = new Point3d(doorclearx + coverlocky, doorcleary + doorheight - coverlockx, 0);
+                        Point3d c5 = new Point3d(doorclearx + doorwidth - (doorwidth / 2), doorcleary + coverlockx, 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - (doorwidth / 2), doorcleary + doorheight - coverlockx, 0);
 
-                    Point3dCollection rectangle = CreateRectangle(-coverlockradius-0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
-                    AddRectangle(trans,leftchannel,rectangle,new Point3d(0,0,0),new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
-                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
-                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), leftcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+                        DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
 
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), rightcolor);
+                    }
+                    else
+                    {
+                        Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
+                        Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
+                        Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
+                        Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
+                        Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                        DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+                    }
+                    
                     BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
                     modelSpace.AppendEntity(shellLeftRef);
                     trans.AddNewlyCreatedDBObject(shellLeftRef, true);
                 }
-                else if(doorheight > 250)
+                else if(doorheight > 250 || ((secnumber == "100" || secnumber == "101") && doorwidth > 250))
                 {
                     Point3d d1 = new Point3d(doorclearx, doorcleary, 0);
                     Point3d d2 = new Point3d(doorclearx + doorwidth, doorcleary, 0);
@@ -2605,12 +2634,7 @@ namespace CAD_AUTOMATION
                     Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
                     Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
 
-                    Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
-                    Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
-                    Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
-                    Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
-                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
-                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                    
 
                     BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
                     blockTable.Add(doorblock);
@@ -2625,18 +2649,51 @@ namespace CAD_AUTOMATION
                     drawline(trans, doorblock, d7, d8, doorcolor);
                     drawline(trans, doorblock, d8, d5, doorcolor);
 
-                    DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
-                    //DrawCircle(trans, doorblock, c5, coverlockradius, doorcolor);
-                    //DrawCircle(trans, doorblock, c6, coverlockradius, doorcolor);
+                    if (secnumber == "100" || secnumber == "101")
+                    {
+                        Point3d c1 = new Point3d(doorclearx + coverlocky, doorcleary + coverlockx, 0);
+                        Point3d c2 = new Point3d(doorclearx + doorwidth - coverlocky, doorcleary + coverlockx, 0);
+                        Point3d c3 = new Point3d(doorclearx + doorwidth - coverlocky, doorcleary + doorheight - coverlockx, 0);
+                        Point3d c4 = new Point3d(doorclearx + coverlocky, doorcleary + doorheight - coverlockx, 0);
+                        Point3d c5 = new Point3d(doorclearx + doorwidth - (doorwidth / 2), doorcleary + coverlockx, 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - (doorwidth / 2), doorcleary + doorheight - coverlockx, 0);
 
-                    Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
-                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
-                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                        DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                        //DrawCircle(trans, doorblock, c5, coverlockradius, doorcolor);
+                        //DrawCircle(trans, doorblock, c6, coverlockradius, doorcolor);
+
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                    }
+                    else
+                    {
+                        Point3d c1 = new Point3d(doorclearx + coverlockx, doorcleary + coverlocky, 0);
+                        Point3d c2 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + coverlocky, 0);
+                        Point3d c3 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - coverlocky, 0);
+                        Point3d c4 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - coverlocky, 0);
+                        Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                        DrawCircle(trans, doorblock, c1, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c2, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c3, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c4, coverlockradius, doorNothidecolor);
+                        //DrawCircle(trans, doorblock, c5, coverlockradius, doorcolor);
+                        //DrawCircle(trans, doorblock, c6, coverlockradius, doorcolor);
+
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c1.X + insertionpointdoor.X, c1.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c2.X + insertionpointdoor.X, c2.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c3.X + insertionpointdoor.X, c3.Y + insertionpointdoor.Y, 0), rightcolor);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c4.X + insertionpointdoor.X, c4.Y + insertionpointdoor.Y, 0), leftcolor);
+                    }
+                    
 
                     BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
                     modelSpace.AppendEntity(shellLeftRef);
@@ -2653,8 +2710,7 @@ namespace CAD_AUTOMATION
                     Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
                     Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
 
-                    Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
-                    Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                    
 
                     BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
                     blockTable.Add(doorblock);
@@ -2669,12 +2725,30 @@ namespace CAD_AUTOMATION
                     drawline(trans, doorblock, d7, d8, doorcolor);
                     drawline(trans, doorblock, d8, d5, doorcolor);
 
-                    DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
-                    DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+                    if(secnumber == "100" || secnumber == "101")
+                    {
+                        Point3d c5 = new Point3d(doorclearx + doorwidth - (doorwidth /2), doorcleary + coverlockx, 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - (doorwidth / 2), doorcleary + doorheight - coverlockx, 0);
 
-                    Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
-                    AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0),leftcolor);
-                    AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+                        DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), rightcolor);
+                    }
+                    else
+                    {
+                        Point3d c5 = new Point3d(doorclearx + coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+                        Point3d c6 = new Point3d(doorclearx + doorwidth - coverlockx, doorcleary + doorheight - (doorheight / 2), 0);
+
+                        DrawCircle(trans, doorblock, c5, coverlockradius, doorNothidecolor);
+                        DrawCircle(trans, doorblock, c6, coverlockradius, doorNothidecolor);
+
+                        Point3dCollection rectangle = CreateRectangle(-coverlockradius - 0.5, -coverlockradius - 0.5, coverlockradius + 0.5, coverlockradius + 0.5);
+                        AddRectangle(trans, leftchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c5.X + insertionpointdoor.X, c5.Y + insertionpointdoor.Y, 0), leftcolor);
+                        AddRectangle(trans, rigthchannel, rectangle, new Point3d(0, 0, 0), new Point3d(c6.X + insertionpointdoor.X, c6.Y + insertionpointdoor.Y, 0), rightcolor);
+                    }
 
                     BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
                     modelSpace.AppendEntity(shellLeftRef);
@@ -2939,6 +3013,8 @@ namespace CAD_AUTOMATION
                     Point3d d7 = new Point3d(doorclearx + doorwidth - doorthick, doorcleary + doorheight - doorthick, 0);
                     Point3d d8 = new Point3d(doorclearx + doorthick, doorcleary + doorheight - doorthick, 0);
 
+                    Point3d c2 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorlocky, 0);
+                    Point3d c3 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - doorlocky, 0);
                     Point3d c6 = new Point3d(doorclearx + doorwidth - doorlockx, doorcleary + doorheight - (doorheight / 2), 0);
 
                     BlockTableRecord doorblock = new BlockTableRecord { Name = $"door{secnumber}_{partnumber}" };
@@ -2948,44 +3024,63 @@ namespace CAD_AUTOMATION
                     drawline(trans, doorblock, d1, d2, doorcolor);
                     drawline(trans, doorblock, d2, d3, doorcolor);
                     drawline(trans, doorblock, d3, d4, doorcolor);
-                    drawline(trans, doorblock, d4, d1, doorcolor);
+                    //drawline(trans, doorblock, d4, d1, doorcolor);
                     drawline(trans, doorblock, d5, d6, doorcolor);
                     drawline(trans, doorblock, d6, d7, doorcolor);
                     drawline(trans, doorblock, d7, d8, doorcolor);
-                    drawline(trans, doorblock, d8, d5, doorcolor);
+                    //drawline(trans, doorblock, d8, d5, doorcolor);
 
                     if (inchtypebox.Text == "Step Inches")
                     {
-                        Point3d d9 = new Point3d(doorclearx, doorcleary + doorinchcleary, 0);
-                        Point3d d101 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchcleary, 0);
-                        Point3d d102 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchsizey + doorinchcleary, 0);
-                        Point3d d103 = new Point3d(doorclearx, doorcleary + doorinchsizey + doorinchcleary, 0);
+                        double tempdoorinchcleary = doorinchcleary - 5;
 
-                        Point3d d10 = new Point3d(doorclearx, doorcleary + (doorheight / 2) - (doorinchsizey / 2), 0);
+                        Point3d d9 = new Point3d(doorclearx, doorcleary + tempdoorinchcleary, 0);
+                        Point3d d101 = new Point3d(doorclearx + doorinchsizex, doorcleary + tempdoorinchcleary, 0);
+                        Point3d d102 = new Point3d(doorclearx + doorinchsizex, doorcleary + doorinchsizey + tempdoorinchcleary, 0);
+                        Point3d d103 = new Point3d(doorclearx, doorcleary + doorinchsizey + tempdoorinchcleary, 0);
 
-                        //Point3d d11 = new Point3d(doorclearx, doorcleary + doorheight - doorinchcleary - doorinchsizey, 0);
+                        //Point3d d10 = new Point3d(doorclearx, doorcleary + (doorheight / 2) - (doorinchsizey / 2), 0);
 
-                        drawline(trans, doorblock, d10, d1, doorcolor);
-                        drawline(trans, doorblock, new Point3d(d10.X + doorthick, d10.Y, 0), d5, doorcolor);
-                        Line lineinch4 = drawline(trans, doorblock, d9, d101, doorcolor);
-                        Line lineinch5 = drawline(trans, doorblock, d101, d102, doorcolor);
-                        Line lineinch6 = drawline(trans, doorblock, d102, d103, doorcolor);
-                        lineinch4.TransformBy(Matrix3d.Displacement(d10 - d9));
-                        lineinch5.TransformBy(Matrix3d.Displacement(d10 - d9));
-                        lineinch6.TransformBy(Matrix3d.Displacement(d10 - d9));
-                        drawline(trans, doorblock, new Point3d(d10.X, d10.Y + doorinchsizey, 0), d4, doorcolor);
-                        drawline(trans, doorblock, new Point3d(d10.X + doorthick, d10.Y + doorinchsizey, 0), d8, doorcolor);
+                        Point3d d11 = new Point3d(doorclearx, doorcleary + doorheight - tempdoorinchcleary - doorinchsizey, 0);
 
+                        drawline(trans, doorblock, d9, d1, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d9.X + doorthick, d9.Y, 0), d5, doorcolor);
+                        Line lineinch1 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch2 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch3 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        drawline(trans, doorblock, d103, d11, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d103.X + doorthick, d103.Y, 0), new Point3d(d11.X + doorthick, d11.Y, 0), doorcolor);
+                        Line lineinch7 = drawline(trans, doorblock, d9, d101, doorcolor);
+                        Line lineinch8 = drawline(trans, doorblock, d101, d102, doorcolor);
+                        Line lineinch9 = drawline(trans, doorblock, d102, d103, doorcolor);
+                        lineinch7.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch8.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        lineinch9.TransformBy(Matrix3d.Displacement(d11 - d9));
+                        drawline(trans, doorblock, new Point3d(d11.X, d11.Y + doorinchsizey, 0), d4, doorcolor);
+                        drawline(trans, doorblock, new Point3d(d11.X + doorthick, d11.Y + doorinchsizey, 0), d8, doorcolor);
                         if (dooropen == "Rigth open")
                         {
-                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
-                            DrawCircle(trans, rigthchannel, h2, doorinchholes, rightcolor);
+                            Point3d h1 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + tempdoorinchcleary + (doorinchsizey / 2), 0);
+                            //Point3d h2 = new Point3d(doorclearx + doorwidth - (doorinchsizex / 2), doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X + doorclearx + doorwidth - (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - tempdoorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, rigthchannel, h1, doorinchholes, rightcolor);
+                            //DrawCircle(trans, rigthchannel, h2, doorinchholes, rightcolor);
+                            DrawCircle(trans, rigthchannel, h3, doorinchholes, rightcolor);
+
                         }
                         else
                         {
-                            Point3d h2 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + (doorheight / 2), 0);
-                            DrawCircle(trans, leftchannel, h2, doorinchholes, leftcolor);
+                            Point3d h1 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + tempdoorinchcleary + (doorinchsizey / 2), 0);
+                            //Point3d h2 = new Point3d(doorclearx + (doorinchsizex / 2), doorcleary + (doorheight / 2), 0);
+                            Point3d h3 = new Point3d(insertionpointdoor.X + doorclearx + (doorinchsizex / 2), insertionpointdoor.Y + doorcleary + doorheight - tempdoorinchcleary - (doorinchsizey / 2), 0);
+
+                            DrawCircle(trans, leftchannel, h1, doorinchholes, leftcolor);
+                            //DrawCircle(trans, leftchannel, h2, doorinchholes, leftcolor);
+                            DrawCircle(trans, leftchannel, h3, doorinchholes, leftcolor);
+
                         }
+
                     }
                     else
                     {

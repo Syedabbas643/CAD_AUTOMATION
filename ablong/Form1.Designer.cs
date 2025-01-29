@@ -34,6 +34,12 @@
             this.label2 = new System.Windows.Forms.Label();
             this.materialTabControl1 = new MaterialSkin.Controls.MaterialTabControl();
             this.shellpage = new System.Windows.Forms.TabPage();
+            this.label19 = new System.Windows.Forms.Label();
+            this.hbbpart2size = new System.Windows.Forms.TextBox();
+            this.label18 = new System.Windows.Forms.Label();
+            this.hbbpart1size = new System.Windows.Forms.TextBox();
+            this.hbbpartbox = new MetroFramework.Controls.MetroComboBox();
+            this.label17 = new System.Windows.Forms.Label();
             this.paneltypebox = new MetroFramework.Controls.MetroComboBox();
             this.label16 = new System.Windows.Forms.Label();
             this.sectionsbox = new System.Windows.Forms.TextBox();
@@ -65,12 +71,6 @@
             this.nextbutton = new MaterialSkin.Controls.MaterialButton();
             this.backbutton = new MaterialSkin.Controls.MaterialButton();
             this.errorlabel = new System.Windows.Forms.Label();
-            this.hbbpartbox = new MetroFramework.Controls.MetroComboBox();
-            this.label17 = new System.Windows.Forms.Label();
-            this.label18 = new System.Windows.Forms.Label();
-            this.hbbpart1size = new System.Windows.Forms.TextBox();
-            this.label19 = new System.Windows.Forms.Label();
-            this.hbbpart2size = new System.Windows.Forms.TextBox();
             this.materialTabControl1.SuspendLayout();
             this.shellpage.SuspendLayout();
             this.detailpage.SuspendLayout();
@@ -182,6 +182,90 @@
             this.shellpage.TabIndex = 0;
             this.shellpage.Text = "SHELL";
             // 
+            // label19
+            // 
+            this.label19.AutoSize = true;
+            this.label19.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label19.ForeColor = System.Drawing.SystemColors.Control;
+            this.label19.Location = new System.Drawing.Point(442, 298);
+            this.label19.Name = "label19";
+            this.label19.Size = new System.Drawing.Size(113, 18);
+            this.label19.TabIndex = 29;
+            this.label19.Text = "HBB Part 1 size";
+            this.label19.Visible = false;
+            // 
+            // hbbpart2size
+            // 
+            this.hbbpart2size.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.hbbpart2size.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.hbbpart2size.Cursor = System.Windows.Forms.Cursors.Default;
+            this.hbbpart2size.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.hbbpart2size.ForeColor = System.Drawing.Color.White;
+            this.hbbpart2size.Location = new System.Drawing.Point(576, 295);
+            this.hbbpart2size.Margin = new System.Windows.Forms.Padding(5);
+            this.hbbpart2size.MinimumSize = new System.Drawing.Size(150, 20);
+            this.hbbpart2size.Name = "hbbpart2size";
+            this.hbbpart2size.Size = new System.Drawing.Size(150, 21);
+            this.hbbpart2size.TabIndex = 28;
+            this.hbbpart2size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.hbbpart2size.Visible = false;
+            // 
+            // label18
+            // 
+            this.label18.AutoSize = true;
+            this.label18.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label18.ForeColor = System.Drawing.SystemColors.Control;
+            this.label18.Location = new System.Drawing.Point(442, 258);
+            this.label18.Name = "label18";
+            this.label18.Size = new System.Drawing.Size(113, 18);
+            this.label18.TabIndex = 27;
+            this.label18.Text = "HBB Part 1 size";
+            this.label18.Visible = false;
+            // 
+            // hbbpart1size
+            // 
+            this.hbbpart1size.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.hbbpart1size.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.hbbpart1size.Cursor = System.Windows.Forms.Cursors.Default;
+            this.hbbpart1size.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.hbbpart1size.ForeColor = System.Drawing.Color.White;
+            this.hbbpart1size.Location = new System.Drawing.Point(576, 255);
+            this.hbbpart1size.Margin = new System.Windows.Forms.Padding(5);
+            this.hbbpart1size.MinimumSize = new System.Drawing.Size(150, 20);
+            this.hbbpart1size.Name = "hbbpart1size";
+            this.hbbpart1size.Size = new System.Drawing.Size(150, 21);
+            this.hbbpart1size.TabIndex = 26;
+            this.hbbpart1size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.hbbpart1size.Visible = false;
+            // 
+            // hbbpartbox
+            // 
+            this.hbbpartbox.FontSize = MetroFramework.MetroLinkSize.Tall;
+            this.hbbpartbox.FormattingEnabled = true;
+            this.hbbpartbox.ItemHeight = 29;
+            this.hbbpartbox.Items.AddRange(new object[] {
+            "1",
+            "2"});
+            this.hbbpartbox.Location = new System.Drawing.Point(576, 208);
+            this.hbbpartbox.Name = "hbbpartbox";
+            this.hbbpartbox.Size = new System.Drawing.Size(149, 35);
+            this.hbbpartbox.TabIndex = 25;
+            this.hbbpartbox.Theme = MetroFramework.MetroThemeStyle.Dark;
+            this.hbbpartbox.Visible = false;
+            this.hbbpartbox.SelectedIndexChanged += new System.EventHandler(this.hbbpartbox_SelectedIndexChanged);
+            // 
+            // label17
+            // 
+            this.label17.AutoSize = true;
+            this.label17.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label17.ForeColor = System.Drawing.SystemColors.Control;
+            this.label17.Location = new System.Drawing.Point(442, 218);
+            this.label17.Name = "label17";
+            this.label17.Size = new System.Drawing.Size(105, 18);
+            this.label17.TabIndex = 24;
+            this.label17.Text = "HBB Partitions";
+            this.label17.Visible = false;
+            // 
             // paneltypebox
             // 
             this.paneltypebox.FontSize = MetroFramework.MetroLinkSize.Tall;
@@ -221,7 +305,6 @@
             this.sectionsbox.Name = "sectionsbox";
             this.sectionsbox.Size = new System.Drawing.Size(150, 21);
             this.sectionsbox.TabIndex = 21;
-            this.sectionsbox.Text = "3";
             this.sectionsbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.sectionsbox.Visible = false;
             this.sectionsbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -251,7 +334,6 @@
             this.hbbsize.Name = "hbbsize";
             this.hbbsize.Size = new System.Drawing.Size(150, 21);
             this.hbbsize.TabIndex = 19;
-            this.hbbsize.Text = "200";
             this.hbbsize.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.hbbsize.Visible = false;
             this.hbbsize.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -321,7 +403,6 @@
             this.depthbox.Name = "depthbox";
             this.depthbox.Size = new System.Drawing.Size(150, 21);
             this.depthbox.TabIndex = 10;
-            this.depthbox.Text = "350";
             this.depthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.depthbox.Visible = false;
             this.depthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -387,7 +468,6 @@
             this.shellthickbox.Name = "shellthickbox";
             this.shellthickbox.Size = new System.Drawing.Size(150, 21);
             this.shellthickbox.TabIndex = 5;
-            this.shellthickbox.Text = "2";
             this.shellthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.shellthickbox.Visible = false;
             this.shellthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
@@ -405,7 +485,6 @@
             this.heigthbox.Name = "heigthbox";
             this.heigthbox.Size = new System.Drawing.Size(150, 21);
             this.heigthbox.TabIndex = 4;
-            this.heigthbox.Text = "1500";
             this.heigthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.heigthbox.Visible = false;
             this.heigthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -423,7 +502,6 @@
             this.widthbox.Name = "widthbox";
             this.widthbox.Size = new System.Drawing.Size(150, 21);
             this.widthbox.TabIndex = 3;
-            this.widthbox.Text = "1500";
             this.widthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.widthbox.Visible = false;
             this.widthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -471,7 +549,6 @@
             this.mpthickbox.Name = "mpthickbox";
             this.mpthickbox.Size = new System.Drawing.Size(150, 21);
             this.mpthickbox.TabIndex = 25;
-            this.mpthickbox.Text = "3";
             this.mpthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             // 
             // label14
@@ -498,7 +575,6 @@
             this.coverthickbox.Name = "coverthickbox";
             this.coverthickbox.Size = new System.Drawing.Size(150, 21);
             this.coverthickbox.TabIndex = 23;
-            this.coverthickbox.Text = "2";
             this.coverthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.coverthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
             // 
@@ -552,7 +628,6 @@
             this.doorthickbox.Name = "doorthickbox";
             this.doorthickbox.Size = new System.Drawing.Size(150, 21);
             this.doorthickbox.TabIndex = 19;
-            this.doorthickbox.Text = "2";
             this.doorthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.doorthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
             // 
@@ -643,92 +718,6 @@
             this.errorlabel.Text = "Please fill all the details";
             this.errorlabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.errorlabel.Visible = false;
-            // 
-            // hbbpartbox
-            // 
-            this.hbbpartbox.FontSize = MetroFramework.MetroLinkSize.Tall;
-            this.hbbpartbox.FormattingEnabled = true;
-            this.hbbpartbox.ItemHeight = 29;
-            this.hbbpartbox.Items.AddRange(new object[] {
-            "1",
-            "2"});
-            this.hbbpartbox.Location = new System.Drawing.Point(576, 208);
-            this.hbbpartbox.Name = "hbbpartbox";
-            this.hbbpartbox.Size = new System.Drawing.Size(149, 35);
-            this.hbbpartbox.TabIndex = 25;
-            this.hbbpartbox.Theme = MetroFramework.MetroThemeStyle.Dark;
-            this.hbbpartbox.Visible = false;
-            this.hbbpartbox.SelectedIndexChanged += new System.EventHandler(this.hbbpartbox_SelectedIndexChanged);
-            // 
-            // label17
-            // 
-            this.label17.AutoSize = true;
-            this.label17.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label17.ForeColor = System.Drawing.SystemColors.Control;
-            this.label17.Location = new System.Drawing.Point(442, 218);
-            this.label17.Name = "label17";
-            this.label17.Size = new System.Drawing.Size(105, 18);
-            this.label17.TabIndex = 24;
-            this.label17.Text = "HBB Partitions";
-            this.label17.Visible = false;
-            // 
-            // label18
-            // 
-            this.label18.AutoSize = true;
-            this.label18.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label18.ForeColor = System.Drawing.SystemColors.Control;
-            this.label18.Location = new System.Drawing.Point(442, 258);
-            this.label18.Name = "label18";
-            this.label18.Size = new System.Drawing.Size(113, 18);
-            this.label18.TabIndex = 27;
-            this.label18.Text = "HBB Part 1 size";
-            this.label18.Visible = false;
-            // 
-            // hbbpart1size
-            // 
-            this.hbbpart1size.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.hbbpart1size.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.hbbpart1size.Cursor = System.Windows.Forms.Cursors.Default;
-            this.hbbpart1size.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.hbbpart1size.ForeColor = System.Drawing.Color.White;
-            this.hbbpart1size.Location = new System.Drawing.Point(576, 255);
-            this.hbbpart1size.Margin = new System.Windows.Forms.Padding(5);
-            this.hbbpart1size.MinimumSize = new System.Drawing.Size(150, 20);
-            this.hbbpart1size.Name = "hbbpart1size";
-            this.hbbpart1size.Size = new System.Drawing.Size(150, 21);
-            this.hbbpart1size.TabIndex = 26;
-            this.hbbpart1size.Text = "750";
-            this.hbbpart1size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
-            this.hbbpart1size.Visible = false;
-            // 
-            // label19
-            // 
-            this.label19.AutoSize = true;
-            this.label19.Font = new System.Drawing.Font("Microsoft Sans Serif", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label19.ForeColor = System.Drawing.SystemColors.Control;
-            this.label19.Location = new System.Drawing.Point(442, 298);
-            this.label19.Name = "label19";
-            this.label19.Size = new System.Drawing.Size(113, 18);
-            this.label19.TabIndex = 29;
-            this.label19.Text = "HBB Part 1 size";
-            this.label19.Visible = false;
-            // 
-            // hbbpart2size
-            // 
-            this.hbbpart2size.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.hbbpart2size.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.hbbpart2size.Cursor = System.Windows.Forms.Cursors.Default;
-            this.hbbpart2size.Font = new System.Drawing.Font("Microsoft Tai Le", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.hbbpart2size.ForeColor = System.Drawing.Color.White;
-            this.hbbpart2size.Location = new System.Drawing.Point(576, 295);
-            this.hbbpart2size.Margin = new System.Windows.Forms.Padding(5);
-            this.hbbpart2size.MinimumSize = new System.Drawing.Size(150, 20);
-            this.hbbpart2size.Name = "hbbpart2size";
-            this.hbbpart2size.Size = new System.Drawing.Size(150, 21);
-            this.hbbpart2size.TabIndex = 28;
-            this.hbbpart2size.Text = "750";
-            this.hbbpart2size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
-            this.hbbpart2size.Visible = false;
             // 
             // Form1
             // 
