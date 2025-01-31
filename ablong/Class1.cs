@@ -51,7 +51,23 @@ namespace CAD_AUTOMATION
         private static double lastobwid;
         private static bool isEnabled = false;
 
+        [DllImport("user32.dll")]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        const int SW_RESTORE = 9; // Restore if minimized
+        private const int SW_MAXIMIZE = 3;
+
+        public static void BringExcelToFront(Excel.Application excelApp)
+        {
+            if (excelApp == null) return;
+
+            IntPtr excelHandle = new IntPtr(excelApp.Hwnd);
+            ShowWindow(excelHandle, SW_MAXIMIZE);
+            SetForegroundWindow(excelHandle);
+        }
         public void Initialize()
         {
             
@@ -266,6 +282,8 @@ namespace CAD_AUTOMATION
             SelectionSet selSet = selResult.Value;
             string filename = "";
             string foldername = "";
+            bool error = false;
+            string errorText = "";
 
             try
             {
@@ -370,27 +388,35 @@ namespace CAD_AUTOMATION
                                         {
                                             blockRefForWrite.Explode(explodedEntities);
 
-                                            // Add exploded entities to the BlockTableRecord (model space)
-                                            foreach (Entity explodedEntity in explodedEntities)
+                                            try
                                             {
-                                                // Check if the entity is already in the model space by checking the ObjectId
-                                                bool isAlreadyInDb = false;
-                                                foreach (ObjectId existingObjId in newBtr)
+                                                foreach (Entity explodedEntity in explodedEntities)
                                                 {
-                                                    Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
-                                                    if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                    // Check if the entity is already in the model space by checking the ObjectId
+                                                    bool isAlreadyInDb = false;
+                                                    foreach (ObjectId existingObjId in newBtr)
                                                     {
-                                                        isAlreadyInDb = true;
-                                                        break;
+                                                        Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
+                                                        if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                        {
+                                                            isAlreadyInDb = true;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if (!isAlreadyInDb)
+                                                    {
+                                                        newBtr.AppendEntity(explodedEntity);
+                                                        newTr.AddNewlyCreatedDBObject(explodedEntity, true);
                                                     }
                                                 }
-
-                                                if (!isAlreadyInDb)
-                                                {
-                                                    newBtr.AppendEntity(explodedEntity);
-                                                    newTr.AddNewlyCreatedDBObject(explodedEntity, true);
-                                                }
                                             }
+                                            catch (System.Exception ex)
+                                            {
+                                                error = true;
+                                                errorText = ex.Message;
+                                            }
+                                            
 
                                             // Erase the BlockReference after exploding, not the exploded entities
                                             blockRefForWrite.Erase();
@@ -448,9 +474,33 @@ namespace CAD_AUTOMATION
                                         }
                                     }
                                 }
-                            
 
-                            
+                            List<Entity> entitiesToDelete = new List<Entity>();
+
+                            foreach (ObjectId objId in newBtr)
+                            {
+                                Entity entity = (Entity)newTr.GetObject(objId, OpenMode.ForWrite);
+
+                                // Check if entity is already in the list of duplicates
+                                if (entity is Line line)
+                                {
+                                    // Example of checking if a duplicate line exists (you can extend this for other entity types)
+                                    foreach (Entity existingEntity in entitiesToDelete)
+                                    {
+                                        if (existingEntity is Line existingLine)
+                                        {
+                                            if (line.StartPoint == existingLine.StartPoint && line.EndPoint == existingLine.EndPoint)
+                                            {
+                                                // If duplicate, mark it for deletion
+                                                entity.Erase();
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                entitiesToDelete.Add(entity);
+                            }
+
                             newTr.Commit();
                         }
 
@@ -462,6 +512,20 @@ namespace CAD_AUTOMATION
                 //Application.DocumentManager.MdiActiveDocument = newDoc;
 
                 string originalPath = activeDb.Filename;
+
+                if (string.IsNullOrEmpty(originalPath) || originalPath.Contains(@"AppData\Local\Temp"))
+                {
+                    // Get the last known saved location using the DWGPREFIX system variable
+                    originalPath = Application.GetSystemVariable("DWGPREFIX") as string;
+
+                    // If still not found, ask the user to provide a save location
+                    if (string.IsNullOrEmpty(originalPath))
+                    {
+                        MessageBox.Show("The drawing has never been saved. Please save it first.", "Save Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+
                 string folderPath = System.IO.Path.GetDirectoryName(originalPath);
 
                 // Create folder if it doesn't exist
@@ -478,6 +542,15 @@ namespace CAD_AUTOMATION
                 Application.DocumentManager.MdiActiveDocument = newDoc2;
 
                 newDoc2.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
+                
+                //newDoc2.SendStringToExecute("._OVERKILL ", true, false, false);
+
+                if(error)
+                {
+                    MessageBox.Show($"Automation Completed with error : {errorText} ");
+                }
+               
+
             }
             catch (System.Exception ex)
             {
@@ -492,6 +565,13 @@ namespace CAD_AUTOMATION
             Zoom(new Point3d(), new Point3d(), new Point3d(), 1.01075);
         }
 
+        [CommandMethod("2")]
+        static public void overkill()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            doc.SendStringToExecute("._OVERKILL ", true, false, false);
+        }
+
         [CommandMethod("PARTS_AUTOMATOR")]
         public static void BOMcount2()
         {
@@ -504,7 +584,7 @@ namespace CAD_AUTOMATION
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-
+            string error = "";
             try
             {
                 using (Transaction tr = db.TransactionManager.StartTransaction())
@@ -566,6 +646,8 @@ namespace CAD_AUTOMATION
 
                     string filename = "";
                     string foldername = "";
+                    
+
 
                     foreach (ObjectId objId2 in btr)
                     {
@@ -711,53 +793,62 @@ namespace CAD_AUTOMATION
                                                 false
                                             );
 
-                                            // Open the Block Table Record for the new drawing's Model Space
-                                            BlockTable newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
-                                            BlockTableRecord newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+                                         // Open the Block Table Record for the new drawing's Model Space
+                                        BlockTable newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                        BlockTableRecord newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
                                         DBObjectCollection explodedEntities = new DBObjectCollection();
-                                        foreach (ObjectId objId in newBtr)
+
+                                        try
                                         {
-                                            Entity entity = newTr.GetObject(objId, OpenMode.ForWrite) as Entity;
-
-                                            if (entity != null)
+                                            foreach (ObjectId objId in newBtr)
                                             {
-                                                // Check if it's a BlockReference (block)
-                                                if (entity is BlockReference blockRef)
-                                                {
-                                                    BlockReference blockRefForWrite = newTr.GetObject(blockRef.ObjectId, OpenMode.ForWrite) as BlockReference;
-                                                    //MessageBox.Show(blockRefForWrite.Name);
-                                                    if (blockRefForWrite != null)
-                                                    {
-                                                        blockRefForWrite.Explode(explodedEntities);
+                                                Entity entity = newTr.GetObject(objId, OpenMode.ForWrite) as Entity;
 
-                                                        // Add exploded entities to the BlockTableRecord (model space)
-                                                        foreach (Entity explodedEntity in explodedEntities)
+                                                if (entity != null)
+                                                {
+                                                    // Check if it's a BlockReference (block)
+                                                    if (entity is BlockReference blockRef)
+                                                    {
+                                                        BlockReference blockRefForWrite = newTr.GetObject(blockRef.ObjectId, OpenMode.ForWrite) as BlockReference;
+                                                        //MessageBox.Show(blockRefForWrite.Name);
+                                                        if (blockRefForWrite != null)
                                                         {
-                                                            // Check if the entity is already in the model space by checking the ObjectId
-                                                            bool isAlreadyInDb = false;
-                                                            foreach (ObjectId existingObjId in newBtr)
+                                                            blockRefForWrite.Explode(explodedEntities);
+
+                                                            // Add exploded entities to the BlockTableRecord (model space)
+                                                            foreach (Entity explodedEntity in explodedEntities)
                                                             {
-                                                                Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
-                                                                if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                                // Check if the entity is already in the model space by checking the ObjectId
+                                                                bool isAlreadyInDb = false;
+                                                                foreach (ObjectId existingObjId in newBtr)
                                                                 {
-                                                                    isAlreadyInDb = true;
-                                                                    break;
+                                                                    Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
+                                                                    if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                                    {
+                                                                        isAlreadyInDb = true;
+                                                                        break;
+                                                                    }
+                                                                }
+
+                                                                if (!isAlreadyInDb)
+                                                                {
+                                                                    newBtr.AppendEntity(explodedEntity);
+                                                                    newTr.AddNewlyCreatedDBObject(explodedEntity, true);
                                                                 }
                                                             }
 
-                                                            if (!isAlreadyInDb)
-                                                            {
-                                                                newBtr.AppendEntity(explodedEntity);
-                                                                newTr.AddNewlyCreatedDBObject(explodedEntity, true);
-                                                            }
+                                                            // Erase the BlockReference after exploding, not the exploded entities
+                                                            blockRefForWrite.Erase();
                                                         }
-
-                                                        // Erase the BlockReference after exploding, not the exploded entities
-                                                        blockRefForWrite.Erase();
                                                     }
                                                 }
                                             }
                                         }
+                                        catch (System.Exception ex)
+                                        {
+                                            error = error + $"\n Error: {ex.Message} in {filename}";
+                                        }
+                                        
 
                                         //newTr.Commit();
 
@@ -840,8 +931,15 @@ namespace CAD_AUTOMATION
                     }
                    tr.Commit();
                 }
-
-                MessageBox.Show("Automation by GaMeR");
+                if (error == "")
+                {
+                    MessageBox.Show("Automation by GaMeR");
+                }
+                else 
+                {
+                    MessageBox.Show($"Automation Completed with error \n {error}");
+                }
+                
             }
             catch (Exception ex)
             {
@@ -1268,11 +1366,86 @@ namespace CAD_AUTOMATION
             // Get Excel application instance
             Excel.Application excelApp = null;
             Excel.Range selectedRange;
+            Excel.Range descRange;
+            bool error = false;
+            string errorText = "";
+
+            // Ask the user for a point
+            PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
+            PromptPointResult pointResult = ed.GetPoint(pointOptions);
+
+            if (pointResult.Status != PromptStatus.OK)
+            {
+                return;
+            }
+
+            Point3d descPoint = pointResult.Value;
+
             try
             {
                 excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+                BringExcelToFront(excelApp);
+                // Ensure Excel is visible
+                //excelApp.Visible = true;
+
+                Form topmostForm = new Form
+                {
+                    TopMost = true, // Keep it on top
+                    TopLevel = true,
+                    FormBorderStyle = FormBorderStyle.None,
+                    Opacity = 0, // Hide the form itself
+                    ShowInTaskbar = false
+                };
+                topmostForm.Load += (sender, e) =>
+                {
+                    topmostForm.Activate(); // Ensure it remains active
+                };
+
+                // Show the form temporarily to ensure the MessageBox stays on top
+                topmostForm.Show();
+
+                // Show the message box with an OK and Cancel button
+                DialogResult result = MessageBox.Show(
+                    topmostForm,
+                    "Please select the first range in Excel and click OK.",
+                    "Select First Range",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Information
+                );
+
+                // Close the topmost form after MessageBox is closed
+                //topmostForm.Close();
+
                 selectedRange = excelApp.Selection as Excel.Range;
-                ed.WriteMessage("\nAutomation By GaMeR: Excel instance found.");
+
+                if (result == DialogResult.Cancel || selectedRange == null || selectedRange.Cells.Count < 1)
+                {
+                    MessageBox.Show("Invalid first selection. Please restart the command and try again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Show the form temporarily to ensure the MessageBox stays on top
+                //topmostForm.Show();
+
+                // Show the message box with an OK and Cancel button
+                DialogResult result2 = MessageBox.Show(
+                    topmostForm,
+                    "Please select the second range in Excel and click OK.",
+                    "Select second Range",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Information
+                );
+
+                // Close the topmost form after MessageBox is closed
+                topmostForm.Close();
+
+                descRange = excelApp.Selection as Excel.Range;
+
+                if (result2 == DialogResult.Cancel || descRange == null || descRange.Cells.Count < 1)
+                {
+                    MessageBox.Show("Invalid second selection. Please restart the command and try again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
             catch (COMException)
             {
@@ -1288,20 +1461,11 @@ namespace CAD_AUTOMATION
                     return;
                 }
 
+                Application.MainWindow.WindowState = Autodesk.AutoCAD.Windows.Window.State.Maximized;
+                Application.MainWindow.Focus();
                 // AutoCAD document setup
                 Document acadDoc = Application.DocumentManager.MdiActiveDocument;
                 Database db = acadDoc.Database;
-
-                // Ask the user for a point
-                PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
-                PromptPointResult pointResult = ed.GetPoint(pointOptions);
-
-                if (pointResult.Status != PromptStatus.OK)
-                {
-                    return;
-                }
-
-                Point3d descPoint = pointResult.Value;
 
                 // Load blocks from external DWG file
                 string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -1337,6 +1501,7 @@ namespace CAD_AUTOMATION
                         double shippingrigthX = 0.0;
                         double shippingcolor = 0.0;
                         double panelheight = 0.0;
+                        double feedernumbercol = 1;
 
                         for (int col = 1; col <= selectedRange.Columns.Count; col++) // Left to right
                         {
@@ -1344,24 +1509,42 @@ namespace CAD_AUTOMATION
 
                             bool horizontallink = false;
                             double previouswidth = 0.0;
-
+                            bool feederfound = false;
+                            List<Point3d> feederaddress = new List<Point3d>();
+                            bool rightside = false;
 
                             for (int row = selectedRange.Rows.Count; row >= 1; row--) // Bottom to top
                             {
 
                                 Excel.Range cell = selectedRange.Cells[row, col];
                                 double height = 0.0;
-                                double height2 = 0.0; // Initialize height2
-                                double height3 = 0.0; // Initialize height3
+                                string[] splitValues = null;
+                                
+                                if(cell.Interior.Color == 0)
+                                {
+                                    continue;
+                                }
+
+                                if(cell.Value2?.ToString() == "rhs")
+                                {
+                                    rightside = true;
+                                    continue;
+                                }
+                                else if (cell.Value2?.ToString() == "lhs" || cell.Value2?.ToString() == "-")
+                                {
+                                    continue;
+                                }
 
                                 if (cell.Interior.Color != 16777215)
                                 {
 
-                                    if (row != selectedRange.Rows.Count)
+                                    if (row != selectedRange.Rows.Count - 1)
                                     {
                                         MessageBox.Show($"\nInterior color are only allowed in bottom cells for vertical width.");
                                         return;
                                     }
+
+                                    //MessageBox.Show(cell.Font.Color.ToString());
 
                                     width = double.Parse(cell.Value2.ToString());
                                     previouswidth = width;
@@ -1386,12 +1569,8 @@ namespace CAD_AUTOMATION
                                             Hatch hatch = new Hatch();
                                             hatch.SetDatabaseDefaults();
 
-                                            // Set hatch pattern to ANSI32
-                                            hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                                            hatch.PatternScale = 150.0; // Set hatch scale to 4
-
-                                            // Set hatch color (change if needed)
-                                            hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                            // Set hatch pattern
+                                            hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
 
                                             // Add hatch to drawing
                                             blockTableRecord.AppendEntity(hatch);
@@ -1402,7 +1581,10 @@ namespace CAD_AUTOMATION
                                             boundaryIds.Add(baserect.ObjectId);
                                             hatch.Associative = true;
                                             hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+                                            
+                                            hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
                                             hatch.EvaluateHatch(true);
+                                            hatch.PatternScale = 50.0; 
 
                                             InsertBlock(db,sourceDb,transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
                                             InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
@@ -1423,9 +1605,22 @@ namespace CAD_AUTOMATION
                                             if (cell.Column != cell.MergeArea.Cells[1, 1].Column)
                                             {
                                                 Excel.Range firstCellInMerge = cell.MergeArea.Cells[1, 1];
-                                                double leftCellValue = double.Parse(firstCellInMerge.Value2.ToString());
-                                                startY += leftCellValue;
-                                                continue;
+
+                                                string cellValue = firstCellInMerge.Value2.ToString(); 
+                                                
+                                                string[] splitValues2 = cellValue.Split('#');
+
+                                                if (splitValues2.Length >= 2)
+                                                {
+                                                    double leftCellValue = double.Parse(splitValues2[1]);
+                                                    startY += leftCellValue;
+                                                    continue;
+                                                }
+                                                else
+                                                {
+                                                    MessageBox.Show($"\nInvalid cell format in {firstCellInMerge.Address}. Expected format: FEEDER ID # WIDTH");
+                                                    return;
+                                                }
                                             }
                                             else
                                             {
@@ -1452,7 +1647,7 @@ namespace CAD_AUTOMATION
                                                 if (mergedCol > selectedRange.Columns.Count) // Ensure within the selected range
                                                     break;
 
-                                                Excel.Range rightCellBottom = selectedRange.Cells[selectedRange.Rows.Count, mergedCol];
+                                                Excel.Range rightCellBottom = selectedRange.Cells[selectedRange.Rows.Count - 1, mergedCol];
 
                                                 if (rightCellBottom.Interior.Color != 16777215) // Check if it's valid
                                                 {
@@ -1482,24 +1677,53 @@ namespace CAD_AUTOMATION
                                 {
                                     Excel.Range cell2 = cell.MergeArea.Cells[1, 1];
                                     // Now check the value of the cell (either merged or not)
-                                    if (cell2.Value2 != null && double.TryParse(cell2.Value2.ToString(), out height2))
+                                    if (cell2.Value2 != null)
                                     {
                                         mergeaddress.Add(cell2.Address);
-                                        height = height2;
-                                        if (col == 1)
+
+                                        string cellValue = cell2.Value2.ToString(); // Get cell value as string
+
+                                        // Split the string by '#' and check if it has at least 3 parts
+                                        splitValues = cellValue.Split('#');
+
+                                        if (splitValues.Length >= 2)
                                         {
-                                            panelheight += height2;
+                                            height = double.Parse(splitValues[1]);
+                                            if (col == 1)
+                                            {
+                                                panelheight += double.Parse(splitValues[1]);
+                                            }
                                         }
+                                        else
+                                        {
+                                            MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER # ID # WIDTH");
+                                            return;
+                                        }
+
+                                        
 
                                     }
                                 }
-                                else if (cell.Value2 != null && double.TryParse(cell.Value2.ToString(), out height3))
+                                else if (cell.Value2 != null)
                                 {
                                     mergeaddress.Add(cell.Address);
-                                    height = height3;
-                                    if (col == 1)
+                                    string cellValue = cell.Value2.ToString(); // Get cell value as string
+
+                                    // Split the string by '#' and check if it has at least 3 parts
+                                    splitValues = cellValue.Split('#');
+
+                                    if (splitValues.Length >= 2)
                                     {
-                                        panelheight += height3;
+                                        height = double.Parse(splitValues[1]);
+                                        if (col == 1)
+                                        {
+                                            panelheight += double.Parse(splitValues[1]);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER # ID # WIDTH");
+                                        return;
                                     }
                                 }
 
@@ -1530,20 +1754,212 @@ namespace CAD_AUTOMATION
                                 blockTableRecord.AppendEntity(rectangle);
                                 transaction.AddNewlyCreatedDBObject(rectangle, true);
 
-                                // Add text for height
-                                DBText heightText = new DBText
+                                if (splitValues.Length >= 2)
                                 {
-                                    Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                    Height = 5,
-                                    TextString = height.ToString("0.##"),
-                                    HorizontalMode = TextHorizontalMode.TextCenter,
-                                    VerticalMode = TextVerticalMode.TextVerticalMid,
-                                    AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
-                                };
-                                blockTableRecord.AppendEntity(heightText);
-                                transaction.AddNewlyCreatedDBObject(heightText, true);
+                                    string feederid = splitValues[0];
+                                    string feederidlow = feederid.Replace(" ","").ToLower();
+                                    string feedername = "";
 
+                                    for (int row2 = 1; row2 <= descRange.Rows.Count; row2++)
+                                    {
+                                        Excel.Range feederidcell = descRange.Cells[row2, 1];
+                                        if (feederidcell.Value2 != null)
+                                        {
+                                            string feederidcellvalue = feederidcell.Value2.ToString();
+                                            if (feederidcellvalue.Replace(" ","").ToLower() == feederidlow)
+                                            {
+                                                feedername = descRange.Cells[row2, 2].Value2.ToString();
+                                                feedername = feedername.ToLower();
+                                                break;
+                                            }
+                                        }
+                                    }
 
+                                    if (feederidlow == "cc")
+                                    {
+                                        feedername = "CABLE CHAMBER";
+                                    }
+                                    else if (feederidlow == "hbb" || feederidlow == "bb" || feederidlow == "vbb")
+                                    {
+                                        feedername = "BUSBAR CHAMBER";
+                                    }
+                                    else if (feederidlow == "v1")
+                                    {
+                                        feedername = "V1";
+                                    }
+
+                                    if (string.IsNullOrEmpty(feedername))
+                                    {
+                                        error = true;
+                                        errorText = $"\nFeeder ID {feederid} not found in description range.";
+                                    }
+
+                                    if (rightside)
+                                    {
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1"))
+                                        {
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(topRight.X - 50, bottomLeft.Y + 25, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(topRight.X - 50, bottomLeft.Y + 60, 0),
+                                                Height = 28,
+                                                TextString = $"M{height / 100}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(topRight.X - 50, bottomLeft.Y + 60, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 5,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 10, topRight.Y - 40, 0), new Point3d(bottomLeft.X + 110, topRight.Y - 10, 0), 10);
+                                            Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 10, bottomLeft.Y + 10, 0), new Point3d(bottomLeft.X + 132, bottomLeft.Y + 28, 0), 10);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+
+                                        }
+                                        
+                                        if(feedername.Contains("CABLE CHAMBER"))
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 40,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1"))
+                                        {
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(bottomLeft.X + 50, bottomLeft.Y + 25, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(bottomLeft.X + 50, bottomLeft.Y + 60, 0),
+                                                Height = 28,
+                                                TextString = $"M{height / 100}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(bottomLeft.X + 50, bottomLeft.Y + 60, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 5,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 110, topRight.Y - 40, 0), new Point3d(topRight.X - 10, topRight.Y - 10, 0), 10);
+                                            Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 132, topRight.Y - height + 10, 0), new Point3d(topRight.X - 10, topRight.Y - height + 28, 0), 10);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                        }
+                                        if (feedername.Contains("CABLE CHAMBER"))
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 40,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                    }
+
+                                    if (feedername.Contains("BUSBAR CHAMBER"))
+                                    {
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 20, bottomLeft.Y + 35, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 20, bottomLeft.Y + 35, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 20, topRight.Y - 35, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 25, topRight.Y - 35, 0), 1.0);
+
+                                        if(height > 600)
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 40,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                        else
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 30,
+                                                TextString = feedername,
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }   
+
+                                    }
+
+                                }
+                                else
+                                {
+                                    MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER # ID # WIDTH");
+                                    return;
+                                }
 
                                 // Update startY for stacking rectangles
                                 startY += height;
@@ -1552,6 +1968,29 @@ namespace CAD_AUTOMATION
                                     width = previouswidth;
                                     horizontallink = false;
                                 }
+                            }
+
+                            if (feederfound)
+                            {
+                                int feedernumberrow = 1;
+                                for (int i = feederaddress.Count - 1; i >= 0; i--)
+                                {
+                                    Point3d point = feederaddress[i];
+                                    DBText widthText = new DBText
+                                    {
+                                        Position = new Point3d(point.X, point.Y, 0),
+                                        Height = 28,
+                                        TextString = $"{feedernumbercol}F{feedernumberrow}",
+                                        ColorIndex = 3,
+                                        HorizontalMode = TextHorizontalMode.TextCenter,
+                                        VerticalMode = TextVerticalMode.TextVerticalMid,
+                                        AlignmentPoint = new Point3d(point.X, point.Y, 0)
+                                    };
+                                    blockTableRecord.AppendEntity(widthText);
+                                    transaction.AddNewlyCreatedDBObject(widthText, true);
+                                    feedernumberrow++;
+                                }
+                                feedernumbercol++;
                             }
 
                             if (col == 1)
@@ -1594,11 +2033,9 @@ namespace CAD_AUTOMATION
                                 Hatch hatch = new Hatch();
                                 hatch.SetDatabaseDefaults();
 
-                                // Set hatch pattern to ANSI32
-                                hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                                hatch.PatternScale = 150.0; // Set hatch scale to 4
-
-                                // Set hatch color (change if needed)
+                                // Set hatch pattern
+                                hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
+                                hatch.PatternScale = 50.0;  // Set hatch scale
                                 hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
 
                                 // Add hatch to drawing
@@ -1611,6 +2048,7 @@ namespace CAD_AUTOMATION
                                 hatch.Associative = true;
                                 hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
                                 hatch.EvaluateHatch(true);
+                                hatch.PatternScale = 50.0;  // Set hatch scale
 
                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
@@ -1619,13 +2057,21 @@ namespace CAD_AUTOMATION
                             startY = descPoint.Y;
                             startX += width;
                             width = 0.0;
-
+                            //feederfound = false;
                         }
+
+
                         transaction.Commit();
                     }
                 }
 
                 acadDoc.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
+
+                if (error)
+                {
+                    MessageBox.Show(errorText);
+                }
+
             }
             catch (Exception ex)
             {
