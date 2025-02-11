@@ -20,6 +20,7 @@ using Exception = System.Exception;
 using Polyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 using Line = Autodesk.AutoCAD.DatabaseServices.Line;
 using Arc = Autodesk.AutoCAD.DatabaseServices.Arc;
+using Color = Autodesk.AutoCAD.Colors.Color;
 using Viewport = Autodesk.AutoCAD.DatabaseServices.Viewport;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using ExcelApplication = Microsoft.Office.Interop.Excel.Application;
@@ -39,6 +40,13 @@ using Path = System.IO.Path;
 using System.Windows.Media.Media3D;
 using System.Security.Cryptography;
 using Autodesk.AutoCAD.Colors;
+using System.Text.RegularExpressions;
+using System.Reflection;
+using System.Drawing;
+using Point = System.Drawing.Point;
+using System.Windows;
+using MessageBox = System.Windows.Forms.MessageBox;
+using System.Net.NetworkInformation;
 
 namespace CAD_AUTOMATION
 {
@@ -123,6 +131,10 @@ namespace CAD_AUTOMATION
                 Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("http.exe not found in the same directory as the plugin.");
             }
 
+        }
+        public void Terminate()
+        {
+            // Clean up any resources if needed
         }
 
         [CommandMethod("oblong")]
@@ -372,7 +384,7 @@ namespace CAD_AUTOMATION
                             // Open the Block Table Record for the new drawing's Model Space
                             BlockTable newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
                             BlockTableRecord newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
-                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                            
                             foreach (ObjectId objId in newBtr)
                             {
                                 Entity entity = newTr.GetObject(objId, OpenMode.ForWrite) as Entity;
@@ -386,46 +398,77 @@ namespace CAD_AUTOMATION
                                         //MessageBox.Show(blockRefForWrite.Name);
                                         if (blockRefForWrite != null)
                                         {
-                                            blockRefForWrite.Explode(explodedEntities);
 
-                                            try
+                                            if (blockRef.IsDynamicBlock)
                                             {
-                                                foreach (Entity explodedEntity in explodedEntities)
+                                                DBObjectCollection explodedEntities = new DBObjectCollection();
+                                                blockRefForWrite.Explode(explodedEntities);
+                                                try
                                                 {
-                                                    // Check if the entity is already in the model space by checking the ObjectId
-                                                    bool isAlreadyInDb = false;
-                                                    foreach (ObjectId existingObjId in newBtr)
+                                                    foreach (Entity explodedEntity in explodedEntities)
                                                     {
-                                                        Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
-                                                        if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                        // Clone the entity to get a fresh ObjectId
+                                                        Entity clonedEntity = explodedEntity.Clone() as Entity;
+
+                                                        if (clonedEntity != null)
                                                         {
-                                                            isAlreadyInDb = true;
-                                                            break;
+                                                            newBtr.AppendEntity(clonedEntity);
+                                                            newTr.AddNewlyCreatedDBObject(clonedEntity, true);
                                                         }
                                                     }
+                                                }
+                                                catch (System.Exception ex)
+                                                {
+                                                    error = true;
+                                                    errorText = ex.Message;
+                                                }
 
-                                                    if (!isAlreadyInDb)
+                                                blockRefForWrite.Erase();
+
+                                            }
+                                            else
+                                            {
+                                                DBObjectCollection explodedEntities = new DBObjectCollection();
+                                                blockRefForWrite.Explode(explodedEntities);
+
+                                                try
+                                                {
+                                                    foreach (Entity explodedEntity in explodedEntities)
                                                     {
-                                                        newBtr.AppendEntity(explodedEntity);
-                                                        newTr.AddNewlyCreatedDBObject(explodedEntity, true);
+                                                        // Check if the entity is already in the model space by checking the ObjectId
+                                                        bool isAlreadyInDb = false;
+                                                        foreach (ObjectId existingObjId in newBtr)
+                                                        {
+                                                            Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
+                                                            if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                            {
+                                                                isAlreadyInDb = true;
+                                                                break;
+                                                            }
+                                                        }
+
+                                                        if (!isAlreadyInDb)
+                                                        {
+                                                            newBtr.AppendEntity(explodedEntity);
+                                                            newTr.AddNewlyCreatedDBObject(explodedEntity, true);
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            catch (System.Exception ex)
-                                            {
-                                                error = true;
-                                                errorText = ex.Message;
-                                            }
-                                            
+                                                catch (System.Exception ex)
+                                                {
+                                                    error = true;
+                                                    errorText = ex.Message;
+                                                }
 
-                                            // Erase the BlockReference after exploding, not the exploded entities
-                                            blockRefForWrite.Erase();
+                                                blockRefForWrite.Erase();
+                                            }
+
+                                            
                                         }
                                     }
+                                    
                                 }
                             }
-
-                            //newTr.Commit();
 
                             newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
                             newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
@@ -477,28 +520,48 @@ namespace CAD_AUTOMATION
 
                             List<Entity> entitiesToDelete = new List<Entity>();
 
+                            HashSet<string> entityHashes = new HashSet<string>();
+
                             foreach (ObjectId objId in newBtr)
                             {
                                 Entity entity = (Entity)newTr.GetObject(objId, OpenMode.ForWrite);
+                                string entityKey = null; // Unique identifier for each entity type
 
-                                // Check if entity is already in the list of duplicates
                                 if (entity is Line line)
                                 {
-                                    // Example of checking if a duplicate line exists (you can extend this for other entity types)
-                                    foreach (Entity existingEntity in entitiesToDelete)
+                                    // Create a unique key for lines based on StartPoint & EndPoint
+                                    entityKey = $"{line.StartPoint}-{line.EndPoint}";
+                                }
+                                else if (entity is Circle circle)
+                                {
+                                    // Create a unique key for circles based on Center & Radius
+                                    entityKey = $"{circle.Center}-{circle.Radius}";
+                                }
+                                else if (entity is Polyline polyline && polyline.NumberOfVertices == 4)
+                                {
+                                    // Handle rectangles (Polyline with 4 vertices)
+                                    List<string> points = new List<string>();
+                                    for (int i = 0; i < 4; i++)
                                     {
-                                        if (existingEntity is Line existingLine)
-                                        {
-                                            if (line.StartPoint == existingLine.StartPoint && line.EndPoint == existingLine.EndPoint)
-                                            {
-                                                // If duplicate, mark it for deletion
-                                                entity.Erase();
-                                                break;
-                                            }
-                                        }
+                                        points.Add(polyline.GetPoint2dAt(i).ToString());
+                                    }
+                                    // Sort points to handle different rectangle orientations
+                                    points.Sort();
+                                    entityKey = string.Join("-", points);
+                                }
+
+                                // Check if this entity is already found
+                                if (entityKey != null)
+                                {
+                                    if (entityHashes.Contains(entityKey))
+                                    {
+                                        entity.Erase(); // Duplicate detected, erase it
+                                    }
+                                    else
+                                    {
+                                        entityHashes.Add(entityKey); // Store the unique entity
                                     }
                                 }
-                                entitiesToDelete.Add(entity);
                             }
 
                             newTr.Commit();
@@ -752,28 +815,28 @@ namespace CAD_AUTOMATION
                                 // Use a lock on the new document
                                 using (DocumentLock docLock = newDoc.LockDocument())
                                 {
-                                        using (Transaction newTr = newDb.TransactionManager.StartTransaction())
+                                    using (Transaction newTr = newDb.TransactionManager.StartTransaction())
+                                    {
+
+                                        foreach (ObjectId objId in btr)
                                         {
+                                            Entity ent2 = tr.GetObject(objId, OpenMode.ForRead) as Entity;
 
-                                            foreach (ObjectId objId in btr)
+                                            if (ent2 != null)
                                             {
-                                                Entity ent2 = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+                                                Extents3d? entityBounds = ent2.Bounds;
+                                                if (!entityBounds.HasValue) continue;
 
-                                                if (ent2 != null)
+                                                Extents3d entityExtents = entityBounds.Value;
+
+                                                if (polyBounds.MinPoint.X <= entityExtents.MinPoint.X && polyBounds.MaxPoint.X >= entityExtents.MaxPoint.X &&
+                                                    polyBounds.MinPoint.Y <= entityExtents.MinPoint.Y && polyBounds.MaxPoint.Y >= entityExtents.MaxPoint.Y)
                                                 {
-                                                    Extents3d? entityBounds = ent2.Bounds;
-                                                    if (!entityBounds.HasValue) continue;
-
-                                                    Extents3d entityExtents = entityBounds.Value;
-
-                                                        if (polyBounds.MinPoint.X <= entityExtents.MinPoint.X && polyBounds.MaxPoint.X >= entityExtents.MaxPoint.X &&
-                                                            polyBounds.MinPoint.Y <= entityExtents.MinPoint.Y && polyBounds.MaxPoint.Y >= entityExtents.MaxPoint.Y)
-                                                        {
-                                                            objectIdCollection.Add(objId);
-                                                        }
-                                                    
+                                                    objectIdCollection.Add(objId);
                                                 }
+
                                             }
+                                        }
 
                                         if (objectIdCollection.Count == 0)
                                         {
@@ -785,18 +848,18 @@ namespace CAD_AUTOMATION
 
                                         // Clone selected objects into the new database
                                         IdMapping idMapping = new IdMapping();
-                                            db.WblockCloneObjects(
-                                                objectIdCollection,
-                                                newDb.CurrentSpaceId,
-                                                idMapping,
-                                                DuplicateRecordCloning.Replace,
-                                                false
-                                            );
+                                        db.WblockCloneObjects(
+                                            objectIdCollection,
+                                            newDb.CurrentSpaceId,
+                                            idMapping,
+                                            DuplicateRecordCloning.Replace,
+                                            false
+                                        );
 
-                                         // Open the Block Table Record for the new drawing's Model Space
+                                        // Open the Block Table Record for the new drawing's Model Space
                                         BlockTable newBt = newTr.GetObject(newDb.BlockTableId, OpenMode.ForRead) as BlockTable;
                                         BlockTableRecord newBtr = newTr.GetObject(newBt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
-                                        DBObjectCollection explodedEntities = new DBObjectCollection();
+                                        //DBObjectCollection explodedEntities = new DBObjectCollection();
 
                                         try
                                         {
@@ -813,35 +876,59 @@ namespace CAD_AUTOMATION
                                                         //MessageBox.Show(blockRefForWrite.Name);
                                                         if (blockRefForWrite != null)
                                                         {
-                                                            blockRefForWrite.Explode(explodedEntities);
 
-                                                            // Add exploded entities to the BlockTableRecord (model space)
-                                                            foreach (Entity explodedEntity in explodedEntities)
+                                                            if (blockRef.IsDynamicBlock)
                                                             {
-                                                                // Check if the entity is already in the model space by checking the ObjectId
-                                                                bool isAlreadyInDb = false;
-                                                                foreach (ObjectId existingObjId in newBtr)
+                                                                DBObjectCollection explodedEntities = new DBObjectCollection();
+                                                                blockRefForWrite.Explode(explodedEntities);
+                                                                foreach (Entity explodedEntity in explodedEntities)
                                                                 {
-                                                                    Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
-                                                                    if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                                    // Clone the entity to get a fresh ObjectId
+                                                                    Entity clonedEntity = explodedEntity.Clone() as Entity;
+
+                                                                    if (clonedEntity != null)
                                                                     {
-                                                                        isAlreadyInDb = true;
-                                                                        break;
+                                                                        newBtr.AppendEntity(clonedEntity);
+                                                                        newTr.AddNewlyCreatedDBObject(clonedEntity, true);
                                                                     }
                                                                 }
+                                                                blockRefForWrite.Erase();
 
-                                                                if (!isAlreadyInDb)
+                                                            }
+                                                            else
+                                                            {
+                                                                DBObjectCollection explodedEntities = new DBObjectCollection();
+                                                                blockRefForWrite.Explode(explodedEntities);
+
+
+                                                                foreach (Entity explodedEntity in explodedEntities)
                                                                 {
-                                                                    newBtr.AppendEntity(explodedEntity);
-                                                                    newTr.AddNewlyCreatedDBObject(explodedEntity, true);
+                                                                    // Check if the entity is already in the model space by checking the ObjectId
+                                                                    bool isAlreadyInDb = false;
+                                                                    foreach (ObjectId existingObjId in newBtr)
+                                                                    {
+                                                                        Entity existingEntity = newTr.GetObject(existingObjId, OpenMode.ForRead) as Entity;
+                                                                        if (existingEntity != null && explodedEntity.GetType() == existingEntity.GetType() && explodedEntity.ObjectId == existingEntity.ObjectId)
+                                                                        {
+                                                                            isAlreadyInDb = true;
+                                                                            break;
+                                                                        }
+                                                                    }
+
+                                                                    if (!isAlreadyInDb)
+                                                                    {
+                                                                        newBtr.AppendEntity(explodedEntity);
+                                                                        newTr.AddNewlyCreatedDBObject(explodedEntity, true);
+                                                                    }
                                                                 }
                                                             }
-
-                                                            // Erase the BlockReference after exploding, not the exploded entities
                                                             blockRefForWrite.Erase();
                                                         }
+
+
                                                     }
                                                 }
+
                                             }
                                         }
                                         catch (System.Exception ex)
@@ -900,10 +987,54 @@ namespace CAD_AUTOMATION
                                                     }
                                                 }
                                             }
+                                        List<Entity> entitiesToDelete = new List<Entity>();
 
-                                            // Commit changes to the new database
-                                            newTr.Commit();
+                                        HashSet<string> entityHashes = new HashSet<string>();
+
+                                        foreach (ObjectId objId in newBtr)
+                                        {
+                                            Entity entity = (Entity)newTr.GetObject(objId, OpenMode.ForWrite);
+                                            string entityKey = null; // Unique identifier for each entity type
+
+                                            if (entity is Line line)
+                                            {
+                                                // Create a unique key for lines based on StartPoint & EndPoint
+                                                entityKey = $"{line.StartPoint}-{line.EndPoint}";
+                                            }
+                                            else if (entity is Circle circle)
+                                            {
+                                                // Create a unique key for circles based on Center & Radius
+                                                entityKey = $"{circle.Center}-{circle.Radius}";
+                                            }
+                                            else if (entity is Polyline polyline && polyline.NumberOfVertices == 4)
+                                            {
+                                                // Handle rectangles (Polyline with 4 vertices)
+                                                List<string> points = new List<string>();
+                                                for (int i = 0; i < 4; i++)
+                                                {
+                                                    points.Add(polyline.GetPoint2dAt(i).ToString());
+                                                }
+                                                // Sort points to handle different rectangle orientations
+                                                points.Sort();
+                                                entityKey = string.Join("-", points);
+                                            }
+
+                                            // Check if this entity is already found
+                                            if (entityKey != null)
+                                            {
+                                                if (entityHashes.Contains(entityKey))
+                                                {
+                                                    entity.Erase(); // Duplicate detected, erase it
+                                                }
+                                                else
+                                                {
+                                                    entityHashes.Add(entityKey); // Store the unique entity
+                                                }
+                                            }
                                         }
+
+                                        newTr.Commit();
+                                    }
 
                                         
 
@@ -911,6 +1042,19 @@ namespace CAD_AUTOMATION
                                 //Application.DocumentManager.MdiActiveDocument = newDoc;
 
                                 string originalPath = db.Filename;
+
+                                if (string.IsNullOrEmpty(originalPath) || originalPath.Contains(@"AppData\Local\Temp"))
+                                {
+                                    // Get the last known saved location using the DWGPREFIX system variable
+                                    originalPath = Application.GetSystemVariable("DWGPREFIX") as string;
+
+                                    // If still not found, ask the user to provide a save location
+                                    if (string.IsNullOrEmpty(originalPath))
+                                    {
+                                        MessageBox.Show("The drawing has never been saved. Please save it first.", "Save Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                        return;
+                                    }
+                                }
                                 string folderPath = System.IO.Path.GetDirectoryName(originalPath);
 
                                 // Create folder if it doesn't exist
@@ -1361,6 +1505,12 @@ namespace CAD_AUTOMATION
         [CommandMethod("TI")]
         public void DrawRectanglesFromExcel()
         {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
             // Get Excel application instance
@@ -1381,27 +1531,60 @@ namespace CAD_AUTOMATION
 
             Point3d descPoint = pointResult.Value;
 
+            PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nCHOOSE BASE SIZE : ");
+            lineweightOptions.Keywords.Add("NOBASE");
+            lineweightOptions.Keywords.Add("ISMC75");
+            lineweightOptions.Keywords.Add("ISMC100");
+            lineweightOptions.AllowNone = false; // Allow pressing Enter without choosing
+            lineweightOptions.Message = "\nCHOOSE BASE SIZE : ";
+
+            PromptResult lineweightResult = ed.GetKeywords(lineweightOptions);
+
+            // Handle the default manually
+            double baseheight = 0;
+
+            if (lineweightResult.Status == PromptStatus.OK)
+            {
+                if(lineweightResult.StringResult == "ISMC75")
+                {
+                    baseheight = 75;
+                }
+                else if (lineweightResult.StringResult == "ISMC100")
+                {
+                    baseheight = 100;
+                }
+            }
+            else if (lineweightResult.Status == PromptStatus.None)
+            {
+                MessageBox.Show("Please choose a base size.");
+                return; // Exit on Cancel or other statuses
+            }
+            else
+            {
+                MessageBox.Show("Please choose a base size.");
+                return; // Exit on Cancel or other statuses
+            }
+
             try
             {
                 excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
                 BringExcelToFront(excelApp);
-                // Ensure Excel is visible
-                //excelApp.Visible = true;
 
                 Form topmostForm = new Form
                 {
                     TopMost = true, // Keep it on top
-                    TopLevel = true,
+                    //TopLevel = true,
                     FormBorderStyle = FormBorderStyle.None,
                     Opacity = 0, // Hide the form itself
-                    ShowInTaskbar = false
+                    ShowInTaskbar = false,
+                    StartPosition = FormStartPosition.Manual,
                 };
                 topmostForm.Load += (sender, e) =>
                 {
+                    topmostForm.Location = new Point(0, 0);
                     topmostForm.Activate(); // Ensure it remains active
                 };
 
-                // Show the form temporarily to ensure the MessageBox stays on top
                 topmostForm.Show();
 
                 // Show the message box with an OK and Cancel button
@@ -1413,9 +1596,6 @@ namespace CAD_AUTOMATION
                     MessageBoxIcon.Information
                 );
 
-                // Close the topmost form after MessageBox is closed
-                //topmostForm.Close();
-
                 selectedRange = excelApp.Selection as Excel.Range;
 
                 if (result == DialogResult.Cancel || selectedRange == null || selectedRange.Cells.Count < 1)
@@ -1424,10 +1604,6 @@ namespace CAD_AUTOMATION
                     return;
                 }
 
-                // Show the form temporarily to ensure the MessageBox stays on top
-                //topmostForm.Show();
-
-                // Show the message box with an OK and Cancel button
                 DialogResult result2 = MessageBox.Show(
                     topmostForm,
                     "Please select the second range in Excel and click OK.",
@@ -1492,7 +1668,7 @@ namespace CAD_AUTOMATION
                         double startY = descPoint.Y;
                         double sidechannel = 30;
                         double bottomchannel = 50;
-                        double baseheight = 75;
+                        double topchannel = 70;
                         int bottomchannelcolor = 2;
                         int basecolor = 4;
                         List<string> mergeaddress = new List<string>();
@@ -1512,6 +1688,8 @@ namespace CAD_AUTOMATION
                             bool feederfound = false;
                             List<Point3d> feederaddress = new List<Point3d>();
                             bool rightside = false;
+                            bool instrumentfound = false;
+                            double checkpanelheight = 0.0;
 
                             for (int row = selectedRange.Rows.Count; row >= 1; row--) // Bottom to top
                             {
@@ -1519,18 +1697,18 @@ namespace CAD_AUTOMATION
                                 Excel.Range cell = selectedRange.Cells[row, col];
                                 double height = 0.0;
                                 string[] splitValues = null;
-                                
-                                if(cell.Interior.Color == 0)
+
+                                if (cell.Interior.Color == 0)
                                 {
                                     continue;
                                 }
 
-                                if(cell.Value2?.ToString() == "rhs")
+                                if (cell.Value2?.ToString().ToLower() == "rhs")
                                 {
                                     rightside = true;
                                     continue;
                                 }
-                                else if (cell.Value2?.ToString() == "lhs" || cell.Value2?.ToString() == "-")
+                                else if (cell.Value2?.ToString().ToLower() == "lhs" || cell.Value2?.ToString().ToLower() == "-")
                                 {
                                     continue;
                                 }
@@ -1561,33 +1739,41 @@ namespace CAD_AUTOMATION
                                         {
                                             Point3d bottomLeft1 = new Point3d(shippingleftX, descPoint.Y - bottomchannel, 0);
                                             Point3d topRight1 = new Point3d(shippingrigthX, descPoint.Y, 0);
+                                            Point3d bottomLeft3 = new Point3d(shippingleftX + 10, descPoint.Y + panelheight - 5, 0);
+                                            Point3d topRight3 = new Point3d(shippingrigthX - 10, descPoint.Y + panelheight - 5 + topchannel, 0);
+                                            Addrectangle(transaction, blockTableRecord, bottomLeft3, topRight3, basecolor);
                                             Addrectangle(transaction, blockTableRecord, bottomLeft1, topRight1, bottomchannelcolor);
-                                            Point3d basebottomLeft = new Point3d(shippingleftX, bottomLeft1.Y - baseheight, 0);
-                                            Point3d basetopRight = new Point3d(shippingrigthX, bottomLeft1.Y, 0);
-                                            Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
 
-                                            Hatch hatch = new Hatch();
-                                            hatch.SetDatabaseDefaults();
+                                            if(baseheight > 0)
+                                            {
+                                                Point3d basebottomLeft = new Point3d(shippingleftX, bottomLeft1.Y - baseheight, 0);
+                                                Point3d basetopRight = new Point3d(shippingrigthX, bottomLeft1.Y, 0);
+                                                Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
 
-                                            // Set hatch pattern
-                                            hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
+                                                Hatch hatch = new Hatch();
+                                                hatch.SetDatabaseDefaults();
 
-                                            // Add hatch to drawing
-                                            blockTableRecord.AppendEntity(hatch);
-                                            transaction.AddNewlyCreatedDBObject(hatch, true);
+                                                // Set hatch pattern
+                                                hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
 
-                                            // Associate the hatch with the rectangle boundary
-                                            ObjectIdCollection boundaryIds = new ObjectIdCollection();
-                                            boundaryIds.Add(baserect.ObjectId);
-                                            hatch.Associative = true;
-                                            hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
-                                            
-                                            hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
-                                            hatch.EvaluateHatch(true);
-                                            hatch.PatternScale = 50.0; 
+                                                // Add hatch to drawing
+                                                blockTableRecord.AppendEntity(hatch);
+                                                transaction.AddNewlyCreatedDBObject(hatch, true);
 
-                                            InsertBlock(db,sourceDb,transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
+                                                // Associate the hatch with the rectangle boundary
+                                                ObjectIdCollection boundaryIds = new ObjectIdCollection();
+                                                boundaryIds.Add(baserect.ObjectId);
+                                                hatch.Associative = true;
+                                                hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+
+                                                hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                                hatch.EvaluateHatch(true);
+                                                hatch.PatternScale = 50.0;
+                                            }
+
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
                                             InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOGO", new Point3d(shippingleftX + 212, descPoint.Y + panelheight + 35, 0), 1.0);
                                         }
                                         shippingleftX = startX;
                                         shippingrigthX = startX + width;
@@ -1606,14 +1792,15 @@ namespace CAD_AUTOMATION
                                             {
                                                 Excel.Range firstCellInMerge = cell.MergeArea.Cells[1, 1];
 
-                                                string cellValue = firstCellInMerge.Value2.ToString(); 
-                                                
+                                                string cellValue = firstCellInMerge.Value2.ToString();
+
                                                 string[] splitValues2 = cellValue.Split('#');
 
                                                 if (splitValues2.Length >= 2)
                                                 {
                                                     double leftCellValue = double.Parse(splitValues2[1]);
                                                     startY += leftCellValue;
+                                                    checkpanelheight += leftCellValue;
                                                     continue;
                                                 }
                                                 else
@@ -1631,6 +1818,7 @@ namespace CAD_AUTOMATION
                                         {
                                             continue;
                                         }
+
 
                                     }
                                 }
@@ -1671,8 +1859,6 @@ namespace CAD_AUTOMATION
                                     }
                                 }
 
-
-
                                 if (cell.MergeCells)
                                 {
                                     Excel.Range cell2 = cell.MergeArea.Cells[1, 1];
@@ -1693,14 +1879,23 @@ namespace CAD_AUTOMATION
                                             {
                                                 panelheight += double.Parse(splitValues[1]);
                                             }
+                                            checkpanelheight += double.Parse(splitValues[1]);
+                                            if (row == 1)
+                                            {
+                                                if (checkpanelheight != panelheight)
+                                                {
+                                                    MessageBox.Show($"\nInvalid height value in column: {cell2.Address}. Expected height: {panelheight}");
+                                                    return;
+                                                }
+                                            }
                                         }
                                         else
                                         {
-                                            MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER # ID # WIDTH");
+                                            MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER ID # WIDTH");
                                             return;
                                         }
 
-                                        
+
 
                                     }
                                 }
@@ -1719,10 +1914,19 @@ namespace CAD_AUTOMATION
                                         {
                                             panelheight += double.Parse(splitValues[1]);
                                         }
+                                        checkpanelheight += double.Parse(splitValues[1]);
+                                        if (row == 1)
+                                        {
+                                            if (checkpanelheight != panelheight)
+                                            {
+                                                MessageBox.Show($"\nInvalid height value in column: {cell.Address}. Expected height: {panelheight}");
+                                                return;
+                                            }
+                                        }
                                     }
                                     else
                                     {
-                                        MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER # ID # WIDTH");
+                                        MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                         return;
                                     }
                                 }
@@ -1757,7 +1961,7 @@ namespace CAD_AUTOMATION
                                 if (splitValues.Length >= 2)
                                 {
                                     string feederid = splitValues[0];
-                                    string feederidlow = feederid.Replace(" ","").ToLower();
+                                    string feederidlow = feederid.Replace(" ", "").ToLower();
                                     string feedername = "";
 
                                     for (int row2 = 1; row2 <= descRange.Rows.Count; row2++)
@@ -1766,7 +1970,7 @@ namespace CAD_AUTOMATION
                                         if (feederidcell.Value2 != null)
                                         {
                                             string feederidcellvalue = feederidcell.Value2.ToString();
-                                            if (feederidcellvalue.Replace(" ","").ToLower() == feederidlow)
+                                            if (feederidlow.Contains(feederidcellvalue.Replace(" ", "").ToLower()))
                                             {
                                                 feedername = descRange.Cells[row2, 2].Value2.ToString();
                                                 feedername = feedername.ToLower();
@@ -1777,7 +1981,14 @@ namespace CAD_AUTOMATION
 
                                     if (feederidlow == "cc")
                                     {
-                                        feedername = "CABLE CHAMBER";
+                                        if (height > 500)
+                                        {
+                                            feedername = "CABLE CHAMBER";
+                                        }
+                                        else
+                                        {
+                                            feedername = "cc";
+                                        }
                                     }
                                     else if (feederidlow == "hbb" || feederidlow == "bb" || feederidlow == "vbb")
                                     {
@@ -1787,25 +1998,253 @@ namespace CAD_AUTOMATION
                                     {
                                         feedername = "V1";
                                     }
+                                    else if (feederidlow.Contains("met"))
+                                    {
+                                        feedername = "METERING CHAMBER";
+                                    }
+                                    else if (feederidlow.Contains("inst"))
+                                    {
+                                        feedername = "INSTRUMENT CHAMBER";
+                                        instrumentfound = true;
+                                    }
+                                    else if (feederidlow == "d" || feederidlow == "vacant")
+                                    {
+                                        feedername = "VACANT";
+                                    }
 
                                     if (string.IsNullOrEmpty(feedername))
                                     {
                                         error = true;
-                                        errorText = $"\nFeeder ID {feederid} not found in description range.";
+                                        errorText += $"\nFeeder ID {feederid} not found in description range.";
+                                    }
+
+                                    string feedertext = "";
+                                    if (feedername.Contains("METERING CHAMBER"))
+                                    {
+                                        feedertext = "METERING CHAMBER";
+                                    }
+                                    else if (feedername.Contains("INSTRUMENT CHAMBER"))
+                                    {
+                                        feedertext = "INSTRUMENT CHAMBER";
+                                    }
+                                    else if (feedername.Contains("VACANT"))
+                                    {
+                                        feedertext = "VACANT";
+                                    }
+                                    else if (feedername == "cc")
+                                    {
+                                        feedertext = "CABLE CHAMBER";
+                                    }
+                                    else if (feedername.Contains("mpcb"))
+                                    {
+                                        string[] mpcb = feedername.Split('a');
+                                        if (mpcb.Length > 1)
+                                        {
+                                            feedertext += " " + $"{mpcb[0]}A MPCB";
+                                        }
+                                        else
+                                        {
+                                            feedertext += " " + "MPCB";
+                                        }
+
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "mccb", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                    }
+                                    else if (feedername.Contains("mccb"))
+                                    {
+                                        if (feedername.Contains("dol") || feedername.Contains("sds"))
+                                        {
+                                            string[] mpcb = feedername.Split('a');
+                                            if (mpcb.Length > 1)
+                                            {
+                                                feedertext += " " + $"{mpcb[0]}A";
+                                            }
+                                            else
+                                            {
+                                                Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                                if (ampsMatch.Success)
+                                                {
+                                                    feedertext = ampsMatch.Value.ToUpper();
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                            if (ampsMatch.Success)
+                                            {
+                                                feedertext = ampsMatch.Value.ToUpper();
+                                            }
+                                        }
+
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "MCCB";
+
+                                        if (feedername.Contains("630") || feedername.Contains("400") || feedername.Contains("320"))
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "DN3_MCCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+                                        else
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "mccb", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+
+                                    }
+                                    else if (feedername.Contains("acb"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "ACB";
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                    }
+                                    else if (feedername.Contains("rccb") || feedername.Contains("rcbo"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "RCBO";
+
+                                        if (poleTypeMatch.Value.ToUpper() == "FP" || poleTypeMatch.Value.ToUpper() == "4P")
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "FP_RCCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+                                    }
+                                    else if (feedername.Contains("mcb"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "MCB";
+
+                                        if (poleTypeMatch.Value.ToUpper() == "SP" || poleTypeMatch.Value.ToUpper() == "1P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x4"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "SP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "DP" || poleTypeMatch.Value.ToUpper() == "2P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x4"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "TP" || poleTypeMatch.Value.ToUpper() == "3P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "4P" || poleTypeMatch.Value.ToUpper() == "FP")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_FP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                    }
+
+                                    if (feedername.Contains(" eb"))
+                                    {
+                                        feedertext += " " + "EB";
+                                    }
+                                    else if (feedername.Contains(" dg"))
+                                    {
+                                        feedertext += " " + "DG";
+                                    }
+
+                                    if (feedername.Contains("incomer") || feedername.Contains("incoming"))
+                                    {
+                                        feedertext += " " + "INCOMER";
+                                    }
+                                    else if (feedername.Contains("outgoing") || feedername.Contains("out"))
+                                    {
+                                        feedertext += " " + "O/G";
                                     }
 
                                     if (rightside)
                                     {
-                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1"))
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1") && !feedername.Contains("VACANT"))
                                         {
                                             feederfound = true;
-                                            feederaddress.Add(new Point3d(topRight.X - 50, bottomLeft.Y + 25, 0));
+                                            feederaddress.Add(new Point3d(topRight.X - 45, bottomLeft.Y + 25, 0));
 
                                             DBText heightText = new DBText
                                             {
-                                                Position = new Point3d(topRight.X - 50, bottomLeft.Y + 60, 0),
-                                                Height = 28,
-                                                TextString = $"M{height / 100}",
+                                                Position = new Point3d(topRight.X - 45, bottomLeft.Y + 60, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
                                                 ColorIndex = 3,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
@@ -1814,37 +2253,136 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(heightText);
                                             transaction.AddNewlyCreatedDBObject(heightText, true);
 
-                                            DBText feederText = new DBText
+                                            MText feederText = new MText
                                             {
-                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                                Height = 5,
-                                                TextString = feedername,
-                                                ColorIndex = 3,
-                                                HorizontalMode = TextHorizontalMode.TextCenter,
-                                                VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                                Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 10, 0),
+                                                Height = 23,
+                                                TextHeight = 25,
+                                                Width = width - 200,
+                                                Contents = feedertext,
+                                                Attachment = AttachmentPoint.BottomCenter
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
 
+
+                                            if (!feederidlow.Contains("`"))
+                                            {
+
+                                                Point3d meterpos = new Point3d(topRight.X - 80, topRight.Y - 70, 0);
+                                                Point3d lamppos = new Point3d(topRight.X - 80, topRight.Y - 45, 0);
+
+                                                if (feedername.Contains("mfm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("elr"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "ELR", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("vm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "VM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("am"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "AM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("ryb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RYB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("rg"))
+                                                {
+                                                    if (feedername.Contains("rga"))
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGA", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+                                                    else
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RG", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+
+                                                }
+                                                if (feedername.Contains("rgpb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGPB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("ss"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "SS", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                            }
+
                                             Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 10, topRight.Y - 40, 0), new Point3d(bottomLeft.X + 110, topRight.Y - 10, 0), 10);
-                                            Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 10, bottomLeft.Y + 10, 0), new Point3d(bottomLeft.X + 132, bottomLeft.Y + 28, 0), 10);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 12, bottomLeft.Y + 12, 0), new Point3d(bottomLeft.X + 132, bottomLeft.Y + 29, 0), 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 17, bottomLeft.Y + 21, 0), 3.5, 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 127, bottomLeft.Y + 21, 0), 3.5, 10);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
 
                                         }
-                                        
-                                        if(feedername.Contains("CABLE CHAMBER"))
+
+                                        if (feedername.Contains("CABLE CHAMBER"))
                                         {
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+
 
                                             DBText feederText = new DBText
                                             {
                                                 Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
                                                 Height = 40,
                                                 TextString = feedername,
-                                                ColorIndex = 3,
+                                                ColorIndex = 4,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
                                                 AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
@@ -1853,19 +2391,34 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
                                         }
+                                        else if (feedername == "VACANT")
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 25,
+                                                TextString = "VACANT",
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                        }
                                     }
                                     else
                                     {
-                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1"))
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1") && !feedername.Contains("VACANT"))
                                         {
                                             feederfound = true;
-                                            feederaddress.Add(new Point3d(bottomLeft.X + 50, bottomLeft.Y + 25, 0));
+                                            feederaddress.Add(new Point3d(bottomLeft.X + 45, bottomLeft.Y + 25, 0));
 
                                             DBText heightText = new DBText
                                             {
-                                                Position = new Point3d(bottomLeft.X + 50, bottomLeft.Y + 60, 0),
-                                                Height = 28,
-                                                TextString = $"M{height / 100}",
+                                                Position = new Point3d(bottomLeft.X + 45, bottomLeft.Y + 60, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
                                                 ColorIndex = 3,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
@@ -1874,35 +2427,135 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(heightText);
                                             transaction.AddNewlyCreatedDBObject(heightText, true);
 
-                                            DBText feederText = new DBText
+                                            MText feederText = new MText
                                             {
-                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                                Height = 5,
-                                                TextString = feedername,
-                                                ColorIndex = 3,
-                                                HorizontalMode = TextHorizontalMode.TextCenter,
-                                                VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                                Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 10, 0),
+                                                Height = 23,
+                                                TextHeight = 25,
+                                                Width = width - 200,
+                                                Contents = feedertext,
+                                                Attachment = AttachmentPoint.BottomCenter
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
 
+                                            if (!feederidlow.Contains("`"))
+                                            {
+                                                    
+
+                                                Point3d meterpos = new Point3d(bottomLeft.X + 80, topRight.Y - 70, 0);
+                                                Point3d lamppos = new Point3d(bottomLeft.X + 80, topRight.Y - 45, 0);
+                                                if (feedername.Contains("mfm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("elr"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "ELR", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("vm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "VM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("am"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "AM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("ryb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RYB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("rg"))
+                                                {
+                                                    if (feedername.Contains("rga"))
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGA", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+                                                    else
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RG", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+
+                                                }
+                                                if (feedername.Contains("rgpb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGPB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("ss"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "SS", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                            }
+
+
+
                                             Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 110, topRight.Y - 40, 0), new Point3d(topRight.X - 10, topRight.Y - 10, 0), 10);
-                                            Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 132, topRight.Y - height + 10, 0), new Point3d(topRight.X - 10, topRight.Y - height + 28, 0), 10);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 132, topRight.Y - height + 12, 0), new Point3d(topRight.X - 12, topRight.Y - height + 29, 0), 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + width - 17, bottomLeft.Y + 21, 0), 3.5, 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + width - 127, bottomLeft.Y + 21, 0), 3.5, 10);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
                                         }
                                         if (feedername.Contains("CABLE CHAMBER"))
                                         {
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
-                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+
 
                                             DBText feederText = new DBText
                                             {
                                                 Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
                                                 Height = 40,
                                                 TextString = feedername,
-                                                ColorIndex = 3,
+                                                ColorIndex = 4,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
                                                 AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
@@ -1910,6 +2563,21 @@ namespace CAD_AUTOMATION
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                        else if (feedername == "VACANT")
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 25,
+                                                TextString = "VACANT",
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
                                         }
                                     }
 
@@ -1920,44 +2588,394 @@ namespace CAD_AUTOMATION
                                         InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 20, topRight.Y - 35, 0), 1.0);
                                         InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 25, topRight.Y - 35, 0), 1.0);
 
-                                        if(height > 600)
+                                        if (height > 600)
                                         {
                                             DBText feederText = new DBText
                                             {
-                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Position = new Point3d(((bottomLeft.X + topRight.X) / 2) - 25, (bottomLeft.Y + topRight.Y) / 2, 0),
                                                 Height = 40,
                                                 TextString = feedername,
-                                                ColorIndex = 3,
+                                                ColorIndex = 4,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                AlignmentPoint = new Point3d(((bottomLeft.X + topRight.X) / 2) - 25, (bottomLeft.Y + topRight.Y) / 2, 0),
                                                 Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
                                         }
+                                        else if(height > 300)
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 35, 0),
+                                                Height = 30,
+                                                TextString = "H.B.C",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 35, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            DBText feederText2 = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) - 35, 0),
+                                                Height = 30,
+                                                TextString = "BUS",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) - 35, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText2);
+                                            transaction.AddNewlyCreatedDBObject(feederText2, true);
+
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 45, 0), 1.0);
+                                        }
                                         else
                                         {
                                             DBText feederText = new DBText
                                             {
-                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                                Height = 30,
-                                                TextString = feedername,
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 25, 0),
+                                                Height = 20,
+                                                TextString = "H.B.C",
                                                 ColorIndex = 3,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0)
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 30, 0)
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
-                                        }   
+
+                                            DBText feederText2 = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) - 25, 0),
+                                                Height = 20,
+                                                TextString = "BUS",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) - 30, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText2);
+                                            transaction.AddNewlyCreatedDBObject(feederText2, true);
+
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 35, 0), 1.0);
+                                        }
 
                                     }
+
+                                    if (feedername =="V1")
+                                    {
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 20, bottomLeft.Y + (height / 2), 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 20, bottomLeft.Y + (height / 2), 0), 1.0);
+
+
+                                        DBText feederText = new DBText
+                                        {
+                                            Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            Height = 25,
+                                            TextString = "V1",
+                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                            AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                        };
+                                        blockTableRecord.AppendEntity(feederText);
+                                        transaction.AddNewlyCreatedDBObject(feederText, true);
+                                    }
+                                    
+
+                                    if (instrumentfound)
+                                    {
+
+                                        if (feedername.Contains("INSTRUMENT CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("inst", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+
+                                            List<string> metersToPlace = new List<string>();
+                                            Dictionary<string, string> blocks = new Dictionary<string, string>
+                                            {
+                                                { "mfm", "MFM" },
+                                                { "elr", "ELR" },
+                                                { "vm", "VM" },
+                                                { "am", "AM" }
+                                            };
+
+                                            // Identify meters present in feedername
+                                            foreach (var kvp in blocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    metersToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int meterCount = metersToPlace.Count;
+                                            if (meterCount == 0) return;  // No meters found, exit
+
+                                            // Calculate Center Position
+                                            Point3d centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 100, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (meterCount == 1)
+                                            {
+                                                meterPositions.Add(centerPos);
+                                            }
+                                            else if (meterCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X - 90, centerPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 90, centerPos.Y, 0)); // Right
+                                            }
+                                            else if (meterCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));       // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));  // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));  // Right
+                                            }
+                                            else if (meterCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - 110, 0));  // Below Center
+                                            }
+                                            else
+                                            {
+                                                // First three in row, rest stack below center
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+
+                                                int yOffset = 110;
+                                                for (int i = 3; i < meterCount; i++)
+                                                {
+                                                    meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - yOffset, 0));
+                                                    yOffset += 110;
+                                                }
+                                            }
+
+                                            // Insert meters at calculated positions
+                                            for (int i = 0; i < metersToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, metersToPlace[i], meterPositions[i], 1.0);
+                                            }
+                                        }
+                                        if (feedername.Contains("METERING CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("met", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+                                            List<string> lampsToPlace = new List<string>();
+                                            Dictionary<string, string> lampBlocks = new Dictionary<string, string>
+                                            {
+                                                { "ryb", "RYB" },
+                                                { "rga", "RGA" },
+                                                { "rgpb", "RGPB" },
+                                                { "ss", "SS" }
+                                            };
+
+                                            // Identify other lamps in feedername
+                                            foreach (var kvp in lampBlocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    lampsToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int lampCount = lampsToPlace.Count;
+                                            if (lampCount == 0) return;  // No lamps found, exit
+
+                                            // Starting Position for Lamp Placement
+                                            Point3d lampPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 80, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (lampCount == 1)
+                                            {
+                                                meterPositions.Add(lampPos);
+                                            }
+                                            else if (lampCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                            }
+                                            else if (lampCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                meterPositions.Add(new Point3d(lampPos.X, lampPos.Y - 60, 0));  // Right
+                                            }
+                                            else if (lampCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y - 60, 0));  // Right
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y - 60, 0));  // Right
+                                            }
+
+                                            for (int i = 0; i < lampsToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, lampsToPlace[i], meterPositions[i], 1.0);
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (feedername.Contains("METERING CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("met", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+                                            List<string> lampsToPlace = new List<string>();
+                                            Dictionary<string, string> lampBlocks = new Dictionary<string, string>
+                                            {
+                                                { "ryb", "RYB" },
+                                                { "rga", "RGA" },
+                                                { "rgpb", "RGPB" },
+                                                { "ss", "SS" }
+                                            };
+
+                                            // Identify other lamps in feedername
+                                            foreach (var kvp in lampBlocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    lampsToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int lampCount = lampsToPlace.Count;
+
+                                            // Starting Position for Lamp Placement
+                                            Point3d lampPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 80, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> lampPositions = new List<Point3d>();
+
+                                            if (lampCount == 1)
+                                            {
+                                                lampPositions.Add(lampPos);
+                                            }
+                                            else if (lampCount == 2)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                            }
+                                            else if (lampCount == 3)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                lampPositions.Add(new Point3d(lampPos.X, lampPos.Y - 60, 0));  // Right
+                                            }
+                                            else if (lampCount == 4)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y - 60, 0));  // Right
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y - 60, 0));  // Right
+                                            }
+
+                                            for (int i = 0; i < lampsToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, lampsToPlace[i], lampPositions[i], 1.0);
+                                            }
+
+                                            List<string> metersToPlace = new List<string>();
+                                            Dictionary<string, string> blocks = new Dictionary<string, string>
+                                            {
+                                                { "mfm", "MFM" },
+                                                { "elr", "ELR" },
+                                                { "vm", "VM" },
+                                                { "am", "AM" }
+                                            };
+
+                                            // Identify meters present in feedername
+                                            foreach (var kvp in blocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    metersToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int meterCount = metersToPlace.Count;
+                                            
+                                            Point3d centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 100, 0);
+
+                                            if(lampCount > 2)
+                                            {
+                                                centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 215, 0);
+                                            }
+                                            else if(lampCount >= 1)
+                                            {
+                                                centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 160, 0);
+                                            }
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (meterCount == 1)
+                                            {
+                                                meterPositions.Add(centerPos);
+                                            }
+                                            else if (meterCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X - 90, centerPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 90, centerPos.Y, 0)); // Right
+                                            }
+                                            else if (meterCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));       // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));  // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));  // Right
+                                            }
+                                            else if (meterCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - 110, 0));  // Below Center
+                                            }
+                                            else
+                                            {
+                                                // First three in row, rest stack below center
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+
+                                                int yOffset = 110;
+                                                for (int i = 3; i < meterCount; i++)
+                                                {
+                                                    meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - yOffset, 0));
+                                                    yOffset += 110;
+                                                }
+                                            }
+
+                                            // Insert meters at calculated positions
+                                            for (int i = 0; i < metersToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, metersToPlace[i], meterPositions[i], 1.0);
+                                            }
+
+                                        }
+                                    }
+
 
                                 }
                                 else
                                 {
-                                    MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER # ID # WIDTH");
+                                    MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                     return;
                                 }
 
@@ -1979,7 +2997,7 @@ namespace CAD_AUTOMATION
                                     DBText widthText = new DBText
                                     {
                                         Position = new Point3d(point.X, point.Y, 0),
-                                        Height = 28,
+                                        Height = 23,
                                         TextString = $"{feedernumbercol}F{feedernumberrow}",
                                         ColorIndex = 3,
                                         HorizontalMode = TextHorizontalMode.TextCenter,
@@ -2026,32 +3044,40 @@ namespace CAD_AUTOMATION
                                 Point3d bottomLeft1 = new Point3d(shippingleftX, descPoint.Y - bottomchannel, 0);
                                 Point3d topRight1 = new Point3d(shippingrigthX, descPoint.Y, 0);
                                 Addrectangle(transaction, blockTableRecord, bottomLeft1, topRight1, bottomchannelcolor);
-                                Point3d basebottomLeft = new Point3d(shippingleftX, bottomLeft1.Y - baseheight, 0);
-                                Point3d basetopRight = new Point3d(shippingrigthX, bottomLeft1.Y, 0);
-                                Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
+                                Point3d bottomLeft3 = new Point3d(shippingleftX + 10, descPoint.Y + panelheight - 5, 0);
+                                Point3d topRight3 = new Point3d(shippingrigthX - 10, descPoint.Y + panelheight - 5 + topchannel, 0);
+                                Addrectangle(transaction, blockTableRecord, bottomLeft3, topRight3, basecolor);
 
-                                Hatch hatch = new Hatch();
-                                hatch.SetDatabaseDefaults();
+                                if (baseheight > 0)
+                                {
+                                    Point3d basebottomLeft = new Point3d(shippingleftX, bottomLeft1.Y - baseheight, 0);
+                                    Point3d basetopRight = new Point3d(shippingrigthX, bottomLeft1.Y, 0);
+                                    Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
 
-                                // Set hatch pattern
-                                hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
-                                hatch.PatternScale = 50.0;  // Set hatch scale
-                                hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                    Hatch hatch = new Hatch();
+                                    hatch.SetDatabaseDefaults();
 
-                                // Add hatch to drawing
-                                blockTableRecord.AppendEntity(hatch);
-                                transaction.AddNewlyCreatedDBObject(hatch, true);
+                                    // Set hatch pattern
+                                    hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
 
-                                // Associate the hatch with the rectangle boundary
-                                ObjectIdCollection boundaryIds = new ObjectIdCollection();
-                                boundaryIds.Add(baserect.ObjectId);
-                                hatch.Associative = true;
-                                hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
-                                hatch.EvaluateHatch(true);
-                                hatch.PatternScale = 50.0;  // Set hatch scale
+                                    // Add hatch to drawing
+                                    blockTableRecord.AppendEntity(hatch);
+                                    transaction.AddNewlyCreatedDBObject(hatch, true);
+
+                                    // Associate the hatch with the rectangle boundary
+                                    ObjectIdCollection boundaryIds = new ObjectIdCollection();
+                                    boundaryIds.Add(baserect.ObjectId);
+                                    hatch.Associative = true;
+                                    hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+
+                                    hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                    hatch.EvaluateHatch(true);
+                                    hatch.PatternScale = 50.0;
+                                }
 
                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOGO", new Point3d(shippingleftX + 212, descPoint.Y + panelheight + 35, 0), 1.0);
                             }
 
                             startY = descPoint.Y;
@@ -2073,6 +3099,1936 @@ namespace CAD_AUTOMATION
                 }
 
             }
+            
+            catch (Exception ex)
+            {
+                ed.WriteMessage("\nError: " + ex.Message);
+            }
+            finally
+            {
+                if (excelApp != null)
+                {
+                    Marshal.ReleaseComObject(excelApp);
+                }
+            }
+        }
+
+        [CommandMethod("NON-TI")]
+        public void DrawRectanglesFromExcel2()
+        {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+            // Get Excel application instance
+            Excel.Application excelApp = null;
+            Excel.Range selectedRange;
+            Excel.Range descRange;
+            bool error = false;
+            string errorText = "";
+
+            // Ask the user for a point
+            PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
+            PromptPointResult pointResult = ed.GetPoint(pointOptions);
+
+            if (pointResult.Status != PromptStatus.OK)
+            {
+                return;
+            }
+
+            Point3d descPoint = pointResult.Value;
+
+            PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nCHOOSE BASE SIZE : ");
+            lineweightOptions.Keywords.Add("NO BASE");
+            lineweightOptions.Keywords.Add("CRCA50");
+            lineweightOptions.Keywords.Add("ISMC75");
+            lineweightOptions.Keywords.Add("ISMC100");
+            lineweightOptions.AllowNone = false; // Allow pressing Enter without choosing
+            lineweightOptions.Message = "\nCHOOSE BASE SIZE : ";
+
+            PromptResult lineweightResult = ed.GetKeywords(lineweightOptions);
+
+            // Handle the default manually
+            double baseheight = 0;
+
+            if (lineweightResult.Status == PromptStatus.OK)
+            {
+                if (lineweightResult.StringResult == "ISMC75")
+                {
+                    baseheight = 75;
+                }
+                else if (lineweightResult.StringResult == "ISMC100")
+                {
+                    baseheight = 100;
+                }
+                else if (lineweightResult.StringResult == "CRCA50")
+                {
+                    baseheight = 50;
+                }
+            }
+            else if (lineweightResult.Status == PromptStatus.None)
+            {
+                MessageBox.Show("Please choose a base size.");
+                return; // Exit on Cancel or other statuses
+            }
+            else
+            {
+                MessageBox.Show("Please choose a base size.");
+                return; // Exit on Cancel or other statuses
+            }
+
+            PromptKeywordOptions viewOptions = new PromptKeywordOptions("\nCHOOSE VIEW POSITION : ");
+            viewOptions.Keywords.Add("NOVIEW");
+            viewOptions.Keywords.Add("BOTTOMVIEW");
+            viewOptions.Keywords.Add("TOPVIEW");
+            viewOptions.AppendKeywordsToMessage = true;
+            viewOptions.AllowNone = false; // Allow pressing Enter without choosing
+            viewOptions.Message = "\nCHOOSE VIEW POSITION : ";
+
+            PromptResult viewResult = ed.GetKeywords(viewOptions);
+            string view = "";
+
+            if (viewResult.Status == PromptStatus.OK)
+            {
+                //MessageBox.Show(viewResult.StringResult);
+                view = viewResult.StringResult;
+            }
+            else if (viewResult.Status == PromptStatus.None)
+            {
+                view = "BOTTOMVIEW";
+            }
+
+
+            try
+            {
+                excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+                BringExcelToFront(excelApp);
+
+                Form topmostForm = new Form
+                {
+                    TopMost = true, // Keep it on top
+                    //TopLevel = true,
+                    FormBorderStyle = FormBorderStyle.None,
+                    Opacity = 0, // Hide the form itself
+                    ShowInTaskbar = false,
+                    StartPosition = FormStartPosition.Manual,
+                };
+                topmostForm.Load += (sender, e) =>
+                {
+                    topmostForm.Location = new Point(0, 0);
+                    topmostForm.Activate(); // Ensure it remains active
+                };
+
+                topmostForm.Show();
+
+                // Show the message box with an OK and Cancel button
+                DialogResult result = MessageBox.Show(
+                    topmostForm,
+                    "Please select the first range in Excel and click OK.",
+                    "Select First Range",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Information
+                );
+
+                selectedRange = excelApp.Selection as Excel.Range;
+
+                if (result == DialogResult.Cancel || selectedRange == null || selectedRange.Cells.Count < 1)
+                {
+                    MessageBox.Show("Invalid first selection. Please restart the command and try again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                DialogResult result2 = MessageBox.Show(
+                    topmostForm,
+                    "Please select the second range in Excel and click OK.",
+                    "Select second Range",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Information
+                );
+
+                // Close the topmost form after MessageBox is closed
+                topmostForm.Close();
+
+                descRange = excelApp.Selection as Excel.Range;
+
+                if (result2 == DialogResult.Cancel || descRange == null || descRange.Cells.Count < 1)
+                {
+                    MessageBox.Show("Invalid second selection. Please restart the command and try again.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+            catch (COMException)
+            {
+                MessageBox.Show("\nExcel is not running.");
+                return;
+            }
+
+            try
+            {
+                if (selectedRange == null || selectedRange.Cells.Count < 2)
+                {
+                    MessageBox.Show("\nPlease select at least two cells in Excel.");
+                    return;
+                }
+
+                Application.MainWindow.WindowState = Autodesk.AutoCAD.Windows.Window.State.Maximized;
+                Application.MainWindow.Focus();
+                // AutoCAD document setup
+                Document acadDoc = Application.DocumentManager.MdiActiveDocument;
+                Database db = acadDoc.Database;
+
+                // Load blocks from external DWG file
+                string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                string cadFilePath = Path.Combine(pluginDirectory, "blocks.dwg");
+
+                if (!File.Exists(cadFilePath))
+                {
+                    MessageBox.Show("\nBlocks DWG file not found.");
+                    return;
+                }
+
+                //ImportBlocksFromDWG(db, cadFilePath);
+
+                using (Database sourceDb = new Database(false, true))
+                {
+                    sourceDb.ReadDwgFile(cadFilePath, FileOpenMode.OpenForReadAndReadShare, false, null);
+
+                    using (Transaction transaction = db.TransactionManager.StartTransaction())
+                    {
+                        BlockTable blockTable = transaction.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                        BlockTableRecord blockTableRecord = transaction.GetObject(db.CurrentSpaceId, OpenMode.ForWrite) as BlockTableRecord;
+
+                        double startX = descPoint.X;
+                        double startY = descPoint.Y;
+                        int basecolor = 4;
+                        List<string> mergeaddress = new List<string>();
+
+                        double shippingleftX = 0.0;
+                        double shippingrigthX = 0.0;
+                        double shippingcolor = 0.0;
+                        double panelheight = 0.0;
+                        double feedernumbercol = 1;
+                        double maxdepth = 0;
+
+                        // Check if "GaMeR" dimension style exists
+                        DimStyleTable dimStyleTable = transaction.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
+                        string dimStyleName = "GaMeR";
+                        ObjectId dimStyleId;
+
+                        if (!dimStyleTable.Has(dimStyleName))
+                        {
+                            // If it doesn't exist, create it
+                            DimStyleTableRecord newDimStyle = new DimStyleTableRecord();
+                            newDimStyle.Name = dimStyleName;
+
+                            // Add the new dimension style to the drawing
+                            dimStyleTable.UpgradeOpen();
+                            dimStyleId = dimStyleTable.Add(newDimStyle);
+                            transaction.AddNewlyCreatedDBObject(newDimStyle, true);
+
+                            // Set properties for the new dimension style
+                            newDimStyle.Dimclrd = Color.FromColorIndex(ColorMethod.ByColor, 2);
+                            newDimStyle.Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3);
+                            newDimStyle.Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 2);
+                            newDimStyle.Dimasz = 35;
+                            newDimStyle.Dimtxt = 30;
+                            newDimStyle.Dimexo = 4.0;
+                            newDimStyle.Dimdec = 0;
+                            newDimStyle.Dimtad = 1;
+                            newDimStyle.Dimtoh = false;
+                            newDimStyle.Dimgap = 10;
+
+                            //transaction.Commit();
+                        }
+                        else
+                        {
+                            // If it already exists, get its ObjectId
+                            dimStyleId = dimStyleTable[dimStyleName];
+                        }
+
+                        // Set the new dimension style as the current one
+                        db.Dimstyle = dimStyleId;
+
+                        for (int col = 1; col <= selectedRange.Columns.Count; col++) // Left to right
+                        {
+                            double width = 0.0;
+                            bool horizontallink = false;
+                            double previouswidth = 0.0;
+                            bool feederfound = false;
+                            List<Point3d> feederaddress = new List<Point3d>();
+                            string whichside = "";
+                            bool instrumentfound = false;
+                            double checkpanelheight = 0.0;
+                            double depth = 0;
+
+                            for (int row = selectedRange.Rows.Count; row >= 1; row--) // Bottom to top
+                            {
+
+                                Excel.Range cell = selectedRange.Cells[row, col];
+                                double height = 0.0;
+                                string[] splitValues = null;
+
+                                if (cell.Value2?.ToString().ToLower() == "rhs")
+                                {
+                                    whichside = "rhs";
+                                    continue;
+                                }
+                                else if (cell.Value2?.ToString().ToLower() == "lhs")
+                                {
+                                    whichside = "lhs";
+                                    continue;
+                                }
+                                else if(cell.Value2?.ToString().ToLower() == "-")
+                                {
+                                    continue;
+                                }
+
+                                if (cell.Interior.Color != 16777215)
+                                {
+
+                                    if (row != selectedRange.Rows.Count - 1)
+                                    {
+                                        MessageBox.Show($"\nInterior color are only allowed in bottom cells for vertical width.");
+                                        return;
+                                    }
+
+                                    //MessageBox.Show(cell.Font.Color.ToString());
+
+                                    width = double.Parse(cell.Value2.ToString());
+                                    previouswidth = width;
+
+                                    if (shippingcolor == cell.Interior.Color)
+                                    {
+                                        shippingrigthX += width;
+                                    }
+                                    else
+                                    {
+                                        shippingcolor = cell.Interior.Color;
+
+                                        if (col != 1)
+                                        {
+
+                                            if (baseheight > 0)
+                                            {
+                                                Point3d basebottomLeft = new Point3d(shippingleftX, descPoint.Y - baseheight, 0);
+                                                Point3d basetopRight = new Point3d(shippingrigthX, descPoint.Y, 0);
+                                                Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
+
+                                                Hatch hatch = new Hatch();
+                                                hatch.SetDatabaseDefaults();
+
+                                                // Set hatch pattern
+                                                hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
+
+                                                // Add hatch to drawing
+                                                blockTableRecord.AppendEntity(hatch);
+                                                transaction.AddNewlyCreatedDBObject(hatch, true);
+
+                                                // Associate the hatch with the rectangle boundary
+                                                ObjectIdCollection boundaryIds = new ObjectIdCollection();
+                                                boundaryIds.Add(baserect.ObjectId);
+                                                hatch.Associative = true;
+                                                hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+
+                                                hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                                hatch.EvaluateHatch(true);
+                                                hatch.PatternScale = 50.0;
+                                            }
+
+                                            AlignedDimension dim2 = new AlignedDimension(
+                                                new Point3d(shippingleftX, descPoint.Y + panelheight, 0), 
+                                                new Point3d(shippingrigthX, descPoint.Y + panelheight, 0), 
+                                                new Point3d(shippingleftX, descPoint.Y + panelheight + 150, 0), 
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                            blockTableRecord.AppendEntity(dim2);
+                                            transaction.AddNewlyCreatedDBObject(dim2, true);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING_HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING_HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
+                                            //InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOGO", new Point3d(shippingleftX + 212, descPoint.Y + panelheight + 35, 0), 1.0);
+                                        }
+                                        shippingleftX = startX;
+                                        shippingrigthX = startX + width;
+                                    }
+
+                                    AlignedDimension dim = new AlignedDimension(
+                                        new Point3d(startX, descPoint.Y - baseheight, 0), // First point
+                                        new Point3d(startX + width, descPoint.Y - baseheight, 0), // Second point
+                                        new Point3d(startX, descPoint.Y - baseheight - 100, 0), // Dimension line position (50mm down)
+                                        "", // Dimension text (Auto-generated)
+                                        db.Dimstyle // Use current dimension style
+                                        );
+
+                                    blockTableRecord.AppendEntity(dim);
+                                    transaction.AddNewlyCreatedDBObject(dim, true);
+
+                                    continue;
+                                }
+
+                                if (cell.MergeCells)
+                                {
+                                    if (mergeaddress.Contains(cell.MergeArea.Cells[1, 1].Address))
+                                    {
+                                        if (cell.MergeArea.Columns.Count > 1)
+                                        {
+                                            if (cell.Column != cell.MergeArea.Cells[1, 1].Column)
+                                            {
+                                                Excel.Range firstCellInMerge = cell.MergeArea.Cells[1, 1];
+
+                                                string cellValue = firstCellInMerge.Value2.ToString();
+
+                                                string[] splitValues2 = cellValue.Split('#');
+
+                                                if (splitValues2.Length >= 2)
+                                                {
+                                                    double leftCellValue = double.Parse(splitValues2[1]);
+                                                    startY += leftCellValue;
+                                                    checkpanelheight += leftCellValue;
+                                                    continue;
+                                                }
+                                                else
+                                                {
+                                                    MessageBox.Show($"\nInvalid cell format in {firstCellInMerge.Address}. Expected format: FEEDER ID # WIDTH");
+                                                    return;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                continue;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            continue;
+                                        }
+
+
+                                    }
+                                }
+
+                                if (cell.MergeCells)
+                                {
+                                    if (cell.Column == cell.MergeArea.Cells[1, 1].Column)
+                                    {
+                                        if (cell.MergeArea.Columns.Count > 1)
+                                        {
+                                            // Loop through all columns in the merged range
+                                            for (int mergedCol = col + 1; mergedCol <= col + cell.MergeArea.Columns.Count - 1; mergedCol++)
+                                            {
+                                                if (mergedCol > selectedRange.Columns.Count) // Ensure within the selected range
+                                                    break;
+
+                                                Excel.Range rightCellBottom = selectedRange.Cells[selectedRange.Rows.Count - 1, mergedCol];
+
+                                                if (rightCellBottom.Interior.Color != 16777215) // Check if it's valid
+                                                {
+                                                    double rightCellWidth = double.Parse(rightCellBottom.Value2.ToString());
+                                                    width += rightCellWidth;
+                                                    horizontallink = true;
+                                                    //MessageBox.Show($"\nWidth from column {mergedCol}: {rightCellWidth}, Total Width: {width}");
+                                                }
+                                                else
+                                                {
+                                                    MessageBox.Show($"\nInvalid or missing width value in cell: {rightCellBottom.Address}.");
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+
+                                        }
+
+                                    }
+                                }
+
+                                if (cell.MergeCells)
+                                {
+                                    Excel.Range cell2 = cell.MergeArea.Cells[1, 1];
+                                    // Now check the value of the cell (either merged or not)
+                                    if (cell2.Value2 != null)
+                                    {
+                                        mergeaddress.Add(cell2.Address);
+
+                                        string cellValue = cell2.Value2.ToString(); // Get cell value as string
+
+                                        // Split the string by '#' and check if it has at least 3 parts
+                                        splitValues = cellValue.Split('#');
+
+                                        if (splitValues.Length >= 2)
+                                        {
+                                            height = double.Parse(splitValues[1]);
+                                            if (col == 1)
+                                            {
+                                                panelheight += double.Parse(splitValues[1]);
+                                            }
+                                            checkpanelheight += double.Parse(splitValues[1]);
+                                            if (row == 2)
+                                            {
+                                                if (checkpanelheight != panelheight)
+                                                {
+                                                    MessageBox.Show($"\nInvalid height value in column: {cell2.Address}. Expected height: {panelheight}");
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER ID # WIDTH");
+                                            return;
+                                        }
+
+
+
+                                    }
+                                }
+                                else if (cell.Value2 != null)
+                                {
+                                    mergeaddress.Add(cell.Address);
+                                    string cellValue = cell.Value2.ToString(); // Get cell value as string
+
+                                    // Split the string by '#' and check if it has at least 3 parts
+                                    splitValues = cellValue.Split('#');
+
+                                    if (splitValues.Length >= 2)
+                                    {
+                                        height = double.Parse(splitValues[1]);
+                                        if (col == 1)
+                                        {
+                                            panelheight += double.Parse(splitValues[1]);
+                                        }
+                                        checkpanelheight += double.Parse(splitValues[1]);
+                                        if (row == 2)
+                                        {
+                                            if (checkpanelheight != panelheight)
+                                            {
+                                                MessageBox.Show($"\nInvalid height value in column: {cell.Address}. Expected height: {panelheight}");
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (double.TryParse(cellValue, out double tempdepth))
+                                        {
+                                            if (row == 1)
+                                            {
+                                                // FOR TOP AND BOTTOM VIEW
+                                                if(maxdepth < tempdepth)
+                                                {
+                                                    maxdepth = tempdepth;
+                                                }
+                                                depth = tempdepth;
+
+                                                if(view == "TOPVIEW")
+                                                {
+                                                    //Addrectangle(transaction, blockTableRecord, new Point3d(startX, panelheight + 600, 0), new Point3d(startX + width, panelheight + 600 + depth, 0));
+                                                    Point3d Bottomleft = new Point3d(startX,descPoint.Y + panelheight + 600, 0);
+                                                    Point3d Topright = new Point3d(startX + width,descPoint.Y + panelheight + 600 + depth, 0);
+                                                    Addrectangle(transaction, blockTableRecord, Bottomleft, Topright);
+                                                    Polyline door = Addrectangle(transaction, blockTableRecord, new Point3d(Bottomleft.X + 30, Bottomleft.Y - 20, 0), new Point3d(Topright.X - 30, Bottomleft.Y, 0), 10);
+                                                    if (whichside == "rhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Bottomleft.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+                                                    }
+                                                    else if (whichside == "lhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Bottomleft.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+                                                    }
+                                                    Polyline doorline = new Polyline();
+                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Topright.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Topright.Y), 0, 0, 0);
+
+                                                    blockTableRecord.AppendEntity(doorline);
+                                                    transaction.AddNewlyCreatedDBObject(doorline, true);
+                                                    double offsetDistance2 = -2; // Negative value for inside offset
+                                                    DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                                    foreach (Entity offsetEntity in offsetCurves2)
+                                                    {
+                                                        Polyline offsetPolyline = offsetEntity as Polyline;
+                                                        if (offsetPolyline != null)
+                                                        {
+                                                            blockTableRecord.AppendEntity(offsetPolyline);
+                                                            transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                                        }
+                                                    }
+
+                                                    if (feederfound)
+                                                    {
+                                                        DBText widthText = new DBText
+                                                        {
+                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0),
+                                                            Height = 45,
+                                                            TextString = $"{feedernumbercol}F",
+                                                            ColorIndex = 4,
+                                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0)
+                                                        };
+                                                        blockTableRecord.AppendEntity(widthText);
+                                                        transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 70, 10);
+                                                    }
+                                                }
+                                                else if(view == "BOTTOMVIEW")
+                                                {
+                                                    Point3d Bottomleft = new Point3d(startX, descPoint.Y - 600 - depth, 0);
+                                                    Point3d Topright = new Point3d(startX + width, descPoint.Y - 600, 0);
+                                                    Addrectangle(transaction, blockTableRecord, Bottomleft, Topright);
+                                                    Polyline door = Addrectangle(transaction,blockTableRecord,new Point3d(Bottomleft.X + 30,Topright.Y,0),new Point3d(Topright.X - 30,Topright.Y+20,0),10);
+                                                    if (whichside == "rhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Topright.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+                                                    }
+                                                    else if(whichside == "lhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Topright.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+                                                    }
+                                                    Polyline doorline = new Polyline();
+                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Bottomleft.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Bottomleft.Y - 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Bottomleft.Y - 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Bottomleft.Y), 0, 0, 0);
+
+                                                    blockTableRecord.AppendEntity(doorline);
+                                                    transaction.AddNewlyCreatedDBObject(doorline, true);
+                                                    double offsetDistance2 = -2; // Negative value for inside offset
+                                                    DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                                    foreach (Entity offsetEntity in offsetCurves2)
+                                                    {
+                                                        Polyline offsetPolyline = offsetEntity as Polyline;
+                                                        if (offsetPolyline != null)
+                                                        {
+                                                            blockTableRecord.AppendEntity(offsetPolyline);
+                                                            transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                                        }
+                                                    }
+
+                                                    if (feederfound)
+                                                    {
+                                                        DBText widthText = new DBText
+                                                        {
+                                                            Position = new Point3d((Bottomleft.X + Topright.X) /2, Topright.Y - 100, 0),
+                                                            Height = 45,
+                                                            TextString = $"{feedernumbercol}F",
+                                                            ColorIndex = 4,
+                                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0)
+                                                        };
+                                                        blockTableRecord.AppendEntity(widthText);
+                                                        transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0),70,10);
+                                                    }
+
+
+                                                }
+                                                
+
+                                                continue;
+                                            }
+                                            else
+                                            {
+                                                MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
+                                                return;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
+                                            return;
+                                        }
+
+                                    }
+                                    
+                                }
+
+                                if (height == 0)
+                                {
+                                    MessageBox.Show($"\nInvalid or missing height value in cell: {cell.Address}.");
+                                    return;
+                                }
+
+                                if (width == 0)
+                                {
+                                    MessageBox.Show($"\nInvalid or missing width value in cell: {cell.Address}.");
+                                    return;
+                                }
+
+                                // Draw rectangle
+                                Point3d bottomLeft = new Point3d(startX, startY, 0);
+                                Point3d topRight = new Point3d(startX + width, startY + height, 0);
+
+                                Polyline rectangle = new Polyline(4);
+                                rectangle.AddVertexAt(0, new Point2d(bottomLeft.X, bottomLeft.Y), 0, 0, 0);
+                                rectangle.AddVertexAt(1, new Point2d(topRight.X, bottomLeft.Y), 0, 0, 0);
+                                rectangle.AddVertexAt(2, new Point2d(topRight.X, topRight.Y), 0, 0, 0);
+                                rectangle.AddVertexAt(3, new Point2d(bottomLeft.X, topRight.Y), 0, 0, 0);
+                                rectangle.Closed = true;
+                                //rectangle.ColorIndex = 10;
+
+                                blockTableRecord.AppendEntity(rectangle);
+                                transaction.AddNewlyCreatedDBObject(rectangle, true);
+                                
+                                double offsetDistance = -10; // Negative value for inside offset
+                                DBObjectCollection offsetCurves = rectangle.GetOffsetCurves(offsetDistance);
+
+                                foreach (Entity offsetEntity in offsetCurves)
+                                {
+                                    Polyline offsetPolyline = offsetEntity as Polyline;
+                                    if (offsetPolyline != null)
+                                    {
+                                        blockTableRecord.AppendEntity(offsetPolyline);
+                                        transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                    }
+                                }
+
+                                if (splitValues.Length >= 2)
+                                {
+                                    string feederid = splitValues[0];
+                                    string feederidlow = feederid.Replace(" ", "").ToLower();
+                                    string feedername = "";
+
+                                    for (int row2 = 1; row2 <= descRange.Rows.Count; row2++)
+                                    {
+                                        Excel.Range feederidcell = descRange.Cells[row2, 1];
+                                        if (feederidcell.Value2 != null)
+                                        {
+                                            string feederidcellvalue = feederidcell.Value2.ToString();
+                                            if (feederidlow.Contains(feederidcellvalue.Replace(" ", "").ToLower()))
+                                            {
+                                                feedername = descRange.Cells[row2, 2].Value2.ToString();
+                                                feedername = feedername.ToLower();
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if (feederidlow == "cc")
+                                    {
+                                        if (height > 500)
+                                        {
+                                            feedername = "CABLE CHAMBER";
+                                        }
+                                        else
+                                        {
+                                            feedername = "cc";
+                                        }
+                                    }
+                                    else if (feederidlow == "hbb" || feederidlow == "bb" || feederidlow == "vbb")
+                                    {
+                                        feedername = "BUSBAR CHAMBER";
+                                    }
+                                    else if (feederidlow == "v1")
+                                    {
+                                        feedername = "V1";
+                                    }
+                                    else if (feederidlow.Contains("met"))
+                                    {
+                                        feedername = "METERING CHAMBER";
+                                    }
+                                    else if (feederidlow.Contains("inst"))
+                                    {
+                                        feedername = "INSTRUMENT CHAMBER";
+                                        instrumentfound = true;
+                                    }
+                                    else if (feederidlow == "d" || feederidlow == "vacant")
+                                    {
+                                        feedername = "VACANT";
+                                    }
+
+                                    if (string.IsNullOrEmpty(feedername))
+                                    {
+                                        error = true;
+                                        errorText += $"\nFeeder ID {feederid} not found in description range.";
+                                    }
+
+                                    string feedertext = "";
+                                    if (feedername.Contains("METERING CHAMBER"))
+                                    {
+                                        feedertext = "METERING CHAMBER";
+                                    }
+                                    else if (feedername.Contains("INSTRUMENT CHAMBER"))
+                                    {
+                                        feedertext = "INSTRUMENT CHAMBER";
+                                    }
+                                    else if (feedername.Contains("VACANT"))
+                                    {
+                                        feedertext = "VACANT";
+                                    }
+                                    else if (feedername == "cc")
+                                    {
+                                        feedertext = "CABLE CHAMBER";
+                                    }
+                                    else if (feedername.Contains("mpcb"))
+                                    {
+                                        string[] mpcb = feedername.Split('a');
+                                        if (mpcb.Length > 1)
+                                        {
+                                            feedertext += " " + $"{mpcb[0]}A MPCB";
+                                        }
+                                        else
+                                        {
+                                            feedertext += " " + "MPCB";
+                                        }
+
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "mccb", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                    }
+                                    else if (feedername.Contains("mccb"))
+                                    {
+                                        if (feedername.Contains("dol") || feedername.Contains("sds"))
+                                        {
+                                            string[] mpcb = feedername.Split('a');
+                                            if (mpcb.Length > 1)
+                                            {
+                                                feedertext += " " + $"{mpcb[0]}A";
+                                            }
+                                            else
+                                            {
+                                                Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                                if (ampsMatch.Success)
+                                                {
+                                                    feedertext = ampsMatch.Value.ToUpper();
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                            if (ampsMatch.Success)
+                                            {
+                                                feedertext = ampsMatch.Value.ToUpper();
+                                            }
+                                        }
+
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "MCCB";
+
+                                        if (feedername.Contains("630") || feedername.Contains("400") || feedername.Contains("320"))
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "DN3_MCCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+                                        else
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "mccb", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+
+                                    }
+                                    else if (feedername.Contains("acb"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "ACB";
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                    }
+                                    else if (feedername.Contains("rccb") || feedername.Contains("rcbo"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "RCBO";
+
+                                        if (poleTypeMatch.Value.ToUpper() == "FP" || poleTypeMatch.Value.ToUpper() == "4P")
+                                        {
+                                            InsertBlock(db, sourceDb, transaction, blockTableRecord, "FP_RCCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        }
+                                    }
+                                    else if (feedername.Contains("mcb"))
+                                    {
+                                        Match ampsMatch = Regex.Match(feedername, @"\d+ ?A", RegexOptions.IgnoreCase);
+                                        if (ampsMatch.Success)
+                                        {
+                                            feedertext = ampsMatch.Value.ToUpper();
+                                        }
+
+                                        Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
+                                        if (poleTypeMatch.Success)
+                                        {
+                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                        }
+
+                                        feedertext += " " + "MCB";
+
+                                        if (poleTypeMatch.Value.ToUpper() == "SP" || poleTypeMatch.Value.ToUpper() == "1P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x4"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "SP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "DP" || poleTypeMatch.Value.ToUpper() == "2P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x4"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "TP" || poleTypeMatch.Value.ToUpper() == "3P")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else if (feederidlow.Contains("x3"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        else if (poleTypeMatch.Value.ToUpper() == "4P" || poleTypeMatch.Value.ToUpper() == "FP")
+                                        {
+                                            if (feederidlow.Contains("x2"))
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_FP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                    }
+
+                                    if (feedername.Contains("eb"))
+                                    {
+                                        feedertext += " " + "EB";
+                                    }
+                                    else if (feedername.Contains("dg"))
+                                    {
+                                        feedertext += " " + "DG";
+                                    }
+
+                                    if (feedername.Contains("incomer") || feedername.Contains("incoming"))
+                                    {
+                                        feedertext += " " + "INCOMER";
+                                    }
+                                    else if (feedername.Contains("outgoing") || feedername.Contains("out"))
+                                    {
+                                        feedertext += " " + "O/G";
+                                    }
+
+                                    if (whichside == "rhs")
+                                    {
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1") && !feedername.Contains("VACANT"))
+                                        {
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(topRight.X - 55, bottomLeft.Y + 35, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(topRight.X - 55, bottomLeft.Y + 70, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(topRight.X - 55, bottomLeft.Y + 70, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
+                                            MText feederText = new MText
+                                            {
+                                                Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 20, 0),
+                                                Height = 23,
+                                                TextHeight = 25,
+                                                Width = width - 200,
+                                                Contents = feedertext,
+                                                Attachment = AttachmentPoint.BottomCenter
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+
+                                            if (!feederidlow.Contains("`"))
+                                            {
+
+                                                Point3d meterpos = new Point3d(topRight.X - 90, topRight.Y - 80, 0);
+                                                Point3d lamppos = new Point3d(topRight.X - 90, topRight.Y - 55, 0);
+
+                                                if (feedername.Contains("mfm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("elr"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "ELR", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("vm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "VM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("am"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "AM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("ryb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RYB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("rg"))
+                                                {
+                                                    if (feedername.Contains("rga"))
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGA", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+                                                    else
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RG", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+
+                                                }
+                                                if (feedername.Contains("rgpb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGPB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("ss"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "SS", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                            }
+
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 20, topRight.Y - 50, 0), new Point3d(bottomLeft.X + 130, topRight.Y - 20, 0));
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 12, bottomLeft.Y + 12, 0), new Point3d(bottomLeft.X + 132, bottomLeft.Y + 29, 0), 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 17, bottomLeft.Y + 21, 0), 3.5, 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + 127, bottomLeft.Y + 21, 0), 3.5, 10);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+
+                                        }
+
+                                        if (feedername.Contains("CABLE CHAMBER"))
+                                        {
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 40,
+                                                TextString = feedername,
+                                                ColorIndex = 4,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                        else if (feedername == "VACANT")
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 25,
+                                                TextString = "VACANT",
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + height - 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(bottomLeft.X + 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!feedername.Contains("CABLE CHAMBER") && !feedername.Contains("BUSBAR CHAMBER") && !feedername.Contains("V1") && !feedername.Contains("VACANT"))
+                                        {
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(bottomLeft.X + 55, bottomLeft.Y + 35, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(bottomLeft.X + 55, bottomLeft.Y + 70, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(bottomLeft.X + 55, bottomLeft.Y + 70, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
+                                            MText feederText = new MText
+                                            {
+                                                Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 20, 0),
+                                                Height = 23,
+                                                TextHeight = 25,
+                                                Width = width - 200,
+                                                Contents = feedertext,
+                                                Attachment = AttachmentPoint.BottomCenter
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            if (!feederidlow.Contains("`"))
+                                            {
+
+
+                                                Point3d meterpos = new Point3d(bottomLeft.X + 90, topRight.Y - 80, 0);
+                                                Point3d lamppos = new Point3d(bottomLeft.X + 90, topRight.Y - 55, 0);
+                                                if (feedername.Contains("mfm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("elr"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "ELR", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("vm"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "VM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("am"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "AM", meterpos, 1.0);
+                                                    meterpos = new Point3d(meterpos.X, meterpos.Y - 110, 0);
+                                                    if (lamppos.X == meterpos.X)
+                                                    {
+                                                        lamppos = new Point3d(topRight.X - (width / 2), lamppos.Y, 0);
+                                                    }
+                                                }
+                                                if (feedername.Contains("ryb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RYB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("rg"))
+                                                {
+                                                    if (feedername.Contains("rga"))
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGA", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+                                                    else
+                                                    {
+                                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "RG", lamppos, 1.0);
+                                                        lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                    }
+
+                                                }
+                                                if (feedername.Contains("rgpb"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "RGPB", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                                if (feedername.Contains("ss"))
+                                                {
+                                                    InsertBlock(db, sourceDb, transaction, blockTableRecord, "SS", lamppos, 1.0);
+                                                    lamppos = new Point3d(lamppos.X, lamppos.Y - 62, 0);
+                                                }
+                                            }
+
+
+
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 120, topRight.Y - 50, 0), new Point3d(topRight.X - 20, topRight.Y - 20, 0));
+                                            //Addrectangle(transaction, blockTableRecord, new Point3d(topRight.X - 132, topRight.Y - height + 12, 0), new Point3d(topRight.X - 12, topRight.Y - height + 29, 0), 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + width - 17, bottomLeft.Y + 21, 0), 3.5, 10);
+                                            //DrawCircle(transaction, blockTableRecord, new Point3d(bottomLeft.X + width - 127, bottomLeft.Y + 21, 0), 3.5, 10);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+                                        }
+                                        if (feedername.Contains("CABLE CHAMBER"))
+                                        {
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+
+
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 40,
+                                                TextString = feedername,
+                                                ColorIndex = 4,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+                                        }
+                                        else if (feedername == "VACANT")
+                                        {
+                                            DBText feederText = new DBText
+                                            {
+                                                Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                                Height = 25,
+                                                TextString = "VACANT",
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            };
+                                            blockTableRecord.AppendEntity(feederText);
+                                            transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            if (height > 600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else if (height > 250)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - height + 60, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+
+                                        }
+                                    }
+
+                                    if (feedername.Contains("BUSBAR CHAMBER"))
+                                    {
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 30, bottomLeft.Y + 45, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 30, bottomLeft.Y + 45, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 30, topRight.Y - 45, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 30, topRight.Y - 45, 0), 1.0);
+
+                                        if (height <= 500)
+                                        {
+                                            if (width <= 500)
+                                            {
+                                                //InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(bottomLeft.X + 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                //InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(topRight.X - 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                            }
+                                            else if (width <= 1800)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(bottomLeft.X + 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(topRight.X - 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                double spacing = (topRight.Y + bottomLeft.Y) / 4; // Dynamic spacing based on height
+
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(bottomLeft.X + 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d(bottomLeft.X + spacing, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d(topRight.X - spacing, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(topRight.X - 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                            }
+                                            
+                                        }
+                                        else
+                                        {
+                                            if (height <= 1600)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 100, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y - 100, 0), 1.0);
+                                            }
+                                            else
+                                            {
+                                                double spacing = (topRight.Y + bottomLeft.Y) / 4; // Dynamic spacing based on height
+
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 100, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + spacing, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y - spacing, 0), 1.0);
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y - 100, 0), 1.0);
+                                            }
+                                        }
+
+                                    }
+
+                                    if (feedername == "V1")
+                                    {
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(bottomLeft.X + 30, bottomLeft.Y + (height / 2), 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "BOLT", new Point3d(topRight.X - 30, bottomLeft.Y + (height / 2), 0), 1.0);
+
+
+                                        DBText feederText = new DBText
+                                        {
+                                            Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                            Height = 25,
+                                            TextString = "V1",
+                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                            AlignmentPoint = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
+                                        };
+                                        blockTableRecord.AppendEntity(feederText);
+                                        transaction.AddNewlyCreatedDBObject(feederText, true);
+                                    }
+                                    
+
+                                    if (instrumentfound)
+                                    {
+
+                                        if (feedername.Contains("INSTRUMENT CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("inst", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+
+                                            List<string> metersToPlace = new List<string>();
+                                            Dictionary<string, string> blocks = new Dictionary<string, string>
+                                            {
+                                                { "mfm", "MFM" },
+                                                { "elr", "ELR" },
+                                                { "vm", "VM" },
+                                                { "am", "AM" }
+                                            };
+
+                                            // Identify meters present in feedername
+                                            foreach (var kvp in blocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    metersToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int meterCount = metersToPlace.Count;
+                                            if (meterCount == 0) return;  // No meters found, exit
+
+                                            // Calculate Center Position
+                                            Point3d centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 110, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (meterCount == 1)
+                                            {
+                                                meterPositions.Add(centerPos);
+                                            }
+                                            else if (meterCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X - 90, centerPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 90, centerPos.Y, 0)); // Right
+                                            }
+                                            else if (meterCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));       // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));  // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));  // Right
+                                            }
+                                            else if (meterCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - 110, 0));  // Below Center
+                                            }
+                                            else
+                                            {
+                                                // First three in row, rest stack below center
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+
+                                                int yOffset = 110;
+                                                for (int i = 3; i < meterCount; i++)
+                                                {
+                                                    meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - yOffset, 0));
+                                                    yOffset += 110;
+                                                }
+                                            }
+
+                                            // Insert meters at calculated positions
+                                            for (int i = 0; i < metersToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, metersToPlace[i], meterPositions[i], 1.0);
+                                            }
+                                        }
+                                        if (feedername.Contains("METERING CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("met", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+                                            List<string> lampsToPlace = new List<string>();
+                                            Dictionary<string, string> lampBlocks = new Dictionary<string, string>
+                                            {
+                                                { "ryb", "RYB" },
+                                                { "rga", "RGA" },
+                                                { "rgpb", "RGPB" },
+                                                { "ss", "SS" }
+                                            };
+
+                                            // Identify other lamps in feedername
+                                            foreach (var kvp in lampBlocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    lampsToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int lampCount = lampsToPlace.Count;
+                                            if (lampCount == 0) return;  // No lamps found, exit
+
+                                            // Starting Position for Lamp Placement
+                                            Point3d lampPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 90, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (lampCount == 1)
+                                            {
+                                                meterPositions.Add(lampPos);
+                                            }
+                                            else if (lampCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                            }
+                                            else if (lampCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                meterPositions.Add(new Point3d(lampPos.X, lampPos.Y - 60, 0));  // Right
+                                            }
+                                            else if (lampCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                meterPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y - 60, 0));  // Right
+                                                meterPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y - 60, 0));  // Right
+                                            }
+
+                                            for (int i = 0; i < lampsToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, lampsToPlace[i], meterPositions[i], 1.0);
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (feedername.Contains("METERING CHAMBER"))
+                                        {
+                                            if (double.TryParse(feederidlow.Replace("met", ""), out double rownum))
+                                            {
+                                                feedername = descRange.Cells[rownum, 2].Value2?.ToString().ToLower();
+                                            }
+                                            List<string> lampsToPlace = new List<string>();
+                                            Dictionary<string, string> lampBlocks = new Dictionary<string, string>
+                                            {
+                                                { "ryb", "RYB" },
+                                                { "rga", "RGA" },
+                                                { "rgpb", "RGPB" },
+                                                { "ss", "SS" }
+                                            };
+
+                                            // Identify other lamps in feedername
+                                            foreach (var kvp in lampBlocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    lampsToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int lampCount = lampsToPlace.Count;
+
+                                            // Starting Position for Lamp Placement
+                                            Point3d lampPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 90, 0);
+
+                                            // Positioning Logic
+                                            List<Point3d> lampPositions = new List<Point3d>();
+
+                                            if (lampCount == 1)
+                                            {
+                                                lampPositions.Add(lampPos);
+                                            }
+                                            else if (lampCount == 2)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                            }
+                                            else if (lampCount == 3)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                lampPositions.Add(new Point3d(lampPos.X, lampPos.Y - 60, 0));  // Right
+                                            }
+                                            else if (lampCount == 4)
+                                            {
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y, 0)); // Left
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y, 0)); // Right
+                                                lampPositions.Add(new Point3d(lampPos.X - 75, lampPos.Y - 60, 0));  // Right
+                                                lampPositions.Add(new Point3d(lampPos.X + 75, lampPos.Y - 60, 0));  // Right
+                                            }
+
+                                            for (int i = 0; i < lampsToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, lampsToPlace[i], lampPositions[i], 1.0);
+                                            }
+
+                                            List<string> metersToPlace = new List<string>();
+                                            Dictionary<string, string> blocks = new Dictionary<string, string>
+                                            {
+                                                { "mfm", "MFM" },
+                                                { "elr", "ELR" },
+                                                { "vm", "VM" },
+                                                { "am", "AM" }
+                                            };
+
+                                            // Identify meters present in feedername
+                                            foreach (var kvp in blocks)
+                                            {
+                                                if (feedername.Contains(kvp.Key))
+                                                {
+                                                    metersToPlace.Add(kvp.Value);
+                                                }
+                                            }
+
+                                            int meterCount = metersToPlace.Count;
+
+                                            Point3d centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 100, 0);
+
+                                            if (lampCount > 2)
+                                            {
+                                                centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 225, 0);
+                                            }
+                                            else if (lampCount >= 1)
+                                            {
+                                                centerPos = new Point3d(bottomLeft.X + (width / 2), topRight.Y - 170, 0);
+                                            }
+
+                                            // Positioning Logic
+                                            List<Point3d> meterPositions = new List<Point3d>();
+
+                                            if (meterCount == 1)
+                                            {
+                                                meterPositions.Add(centerPos);
+                                            }
+                                            else if (meterCount == 2)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X - 90, centerPos.Y, 0)); // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 90, centerPos.Y, 0)); // Right
+                                            }
+                                            else if (meterCount == 3)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));       // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));  // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));  // Right
+                                            }
+                                            else if (meterCount == 4)
+                                            {
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - 110, 0));  // Below Center
+                                            }
+                                            else
+                                            {
+                                                // First three in row, rest stack below center
+                                                meterPositions.Add(new Point3d(centerPos.X, centerPos.Y, 0));        // Center
+                                                meterPositions.Add(new Point3d(centerPos.X - 110, centerPos.Y, 0));   // Left
+                                                meterPositions.Add(new Point3d(centerPos.X + 110, centerPos.Y, 0));   // Right
+
+                                                int yOffset = 110;
+                                                for (int i = 3; i < meterCount; i++)
+                                                {
+                                                    meterPositions.Add(new Point3d(centerPos.X, centerPos.Y - yOffset, 0));
+                                                    yOffset += 110;
+                                                }
+                                            }
+
+                                            // Insert meters at calculated positions
+                                            for (int i = 0; i < metersToPlace.Count; i++)
+                                            {
+                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, metersToPlace[i], meterPositions[i], 1.0);
+                                            }
+
+                                        }
+                                    }
+
+
+                                }
+                                else
+                                {
+                                    MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
+                                    return;
+                                }
+
+                                // Update startY for stacking rectangles
+                                startY += height;
+                                if (horizontallink)
+                                {
+                                    width = previouswidth;
+                                    horizontallink = false;
+                                }
+                            }
+
+                            if (feederfound)
+                            {
+                                int feedernumberrow = 1;
+                                for (int i = feederaddress.Count - 1; i >= 0; i--)
+                                {
+                                    Point3d point = feederaddress[i];
+                                    DBText widthText = new DBText
+                                    {
+                                        Position = new Point3d(point.X, point.Y, 0),
+                                        Height = 23,
+                                        TextString = $"{feedernumbercol}F{feedernumberrow}",
+                                        ColorIndex = 3,
+                                        HorizontalMode = TextHorizontalMode.TextCenter,
+                                        VerticalMode = TextVerticalMode.TextVerticalMid,
+                                        AlignmentPoint = new Point3d(point.X, point.Y, 0)
+                                    };
+                                    blockTableRecord.AppendEntity(widthText);
+                                    transaction.AddNewlyCreatedDBObject(widthText, true);
+                                    feedernumberrow++;
+                                }
+                                feedernumbercol++;
+                            }
+
+                            if (col == 1)
+                            {
+
+                            }
+                            else if (col == selectedRange.Columns.Count)
+                            {
+
+                                if (baseheight > 0)
+                                {
+                                    Point3d basebottomLeft = new Point3d(shippingleftX, descPoint.Y - baseheight, 0);
+                                    Point3d basetopRight = new Point3d(shippingrigthX, descPoint.Y, 0);
+                                    Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
+
+                                    Hatch hatch = new Hatch();
+                                    hatch.SetDatabaseDefaults();
+
+                                    // Set hatch pattern
+                                    hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
+
+                                    // Add hatch to drawing
+                                    blockTableRecord.AppendEntity(hatch);
+                                    transaction.AddNewlyCreatedDBObject(hatch, true);
+
+                                    // Associate the hatch with the rectangle boundary
+                                    ObjectIdCollection boundaryIds = new ObjectIdCollection();
+                                    boundaryIds.Add(baserect.ObjectId);
+                                    hatch.Associative = true;
+                                    hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+
+                                    hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                    hatch.EvaluateHatch(true);
+                                    hatch.PatternScale = 50.0;
+
+                                    AlignedDimension dimbase = new AlignedDimension(
+                                                new Point3d(descPoint.X, descPoint.Y, 0),
+                                                new Point3d(descPoint.X, descPoint.Y - baseheight, 0),
+                                                new Point3d(descPoint.X - 150, descPoint.Y, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                    blockTableRecord.AppendEntity(dimbase);
+                                    transaction.AddNewlyCreatedDBObject(dimbase, true);
+
+                                }
+                                AlignedDimension dim2 = new AlignedDimension(
+                                                new Point3d(shippingleftX, descPoint.Y + panelheight, 0),
+                                                new Point3d(shippingrigthX, descPoint.Y + panelheight, 0),
+                                                new Point3d(shippingleftX, descPoint.Y + panelheight + 150, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dim2);
+                                transaction.AddNewlyCreatedDBObject(dim2, true);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING_HOOK", new Point3d(shippingleftX + 78, descPoint.Y + panelheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "LIFTING_HOOK", new Point3d(shippingrigthX - 78, descPoint.Y + panelheight, 0), 1.0);
+                                //InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOGO", new Point3d(shippingleftX + 212, descPoint.Y + panelheight + 35, 0), 1.0);
+
+                                AlignedDimension dim = new AlignedDimension(
+                                                new Point3d(descPoint.X, descPoint.Y + panelheight, 0),
+                                                new Point3d(shippingrigthX, descPoint.Y + panelheight, 0),
+                                                new Point3d(descPoint.X, descPoint.Y + panelheight + 300, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dim);
+                                transaction.AddNewlyCreatedDBObject(dim, true);
+
+                                AlignedDimension dimheight = new AlignedDimension(
+                                                new Point3d(descPoint.X, descPoint.Y, 0),
+                                                new Point3d(descPoint.X, descPoint.Y + panelheight, 0),
+                                                new Point3d(descPoint.X - 150, descPoint.Y + panelheight, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dimheight);
+                                transaction.AddNewlyCreatedDBObject(dimheight, true);
+
+                                Point3d sidebottomleft = new Point3d(descPoint.X - 800 - maxdepth, descPoint.Y, 0);
+                                Point3d sidetopright = new Point3d(descPoint.X - 800, descPoint.Y + panelheight, 0);
+                                Addrectangle(transaction, blockTableRecord, sidebottomleft, sidetopright);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "SIDE_HOOK", new Point3d(sidebottomleft.X + 45, descPoint.Y + panelheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "SIDE_HOOK", new Point3d(sidetopright.X - 45, descPoint.Y + panelheight, 0), 1.0);
+                                if (baseheight > 0)
+                                {
+                                    Point3d basebottomLeft = new Point3d(sidebottomleft.X, descPoint.Y - baseheight, 0);
+                                    Point3d basetopRight = new Point3d(sidetopright.X, descPoint.Y, 0);
+                                    Polyline baserect = Addrectangle(transaction, blockTableRecord, basebottomLeft, basetopRight, basecolor);
+
+                                    Hatch hatch = new Hatch();
+                                    hatch.SetDatabaseDefaults();
+
+                                    // Set hatch pattern
+                                    hatch.SetHatchPattern(HatchPatternType.PreDefined, "GOST_GROUND");
+
+                                    // Add hatch to drawing
+                                    blockTableRecord.AppendEntity(hatch);
+                                    transaction.AddNewlyCreatedDBObject(hatch, true);
+
+                                    // Associate the hatch with the rectangle boundary
+                                    ObjectIdCollection boundaryIds = new ObjectIdCollection();
+                                    boundaryIds.Add(baserect.ObjectId);
+                                    hatch.Associative = true;
+                                    hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
+
+                                    hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
+                                    hatch.EvaluateHatch(true);
+                                    hatch.PatternScale = 50.0;
+                                }
+
+                                Polyline doorline = new Polyline();
+                                doorline.AddVertexAt(0, new Point2d(sidetopright.X, sidebottomleft.Y + 20), 0, 0, 0);
+                                doorline.AddVertexAt(1, new Point2d(sidetopright.X + 20, sidebottomleft.Y + 20), 0, 0, 0);
+                                doorline.AddVertexAt(2, new Point2d(sidetopright.X + 20, sidetopright.Y - 20), 0, 0, 0);
+                                doorline.AddVertexAt(3, new Point2d(sidetopright.X, sidetopright.Y - 20), 0, 0, 0);
+
+                                blockTableRecord.AppendEntity(doorline);
+                                transaction.AddNewlyCreatedDBObject(doorline, true);
+                                double offsetDistance2 = -2; // Negative value for inside offset
+                                DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                foreach (Entity offsetEntity in offsetCurves2)
+                                {
+                                    Polyline offsetPolyline = offsetEntity as Polyline;
+                                    if (offsetPolyline != null)
+                                    {
+                                        blockTableRecord.AppendEntity(offsetPolyline);
+                                        transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                    }
+                                }
+                                AlignedDimension dimsideheight = new AlignedDimension(
+                                                new Point3d(sidebottomleft.X, sidebottomleft.Y, 0),
+                                                new Point3d(sidebottomleft.X, sidetopright.Y, 0),
+                                                new Point3d(sidebottomleft.X - 150, sidetopright.Y, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dimsideheight);
+                                transaction.AddNewlyCreatedDBObject(dimsideheight, true);
+
+                                AlignedDimension dimdepth = new AlignedDimension(
+                                                new Point3d(sidebottomleft.X, sidetopright.Y, 0),
+                                                new Point3d(sidetopright.X, sidetopright.Y, 0),
+                                                new Point3d(sidebottomleft.X, sidetopright.Y + 150, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dimdepth);
+                                transaction.AddNewlyCreatedDBObject(dimdepth, true);
+
+
+                            }
+
+                            startY = descPoint.Y;
+                            startX += width;
+                            width = 0.0;
+                            //feederfound = false;
+                        }
+
+
+                        transaction.Commit();
+                    }
+                }
+
+                acadDoc.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
+
+                if (error)
+                {
+                    MessageBox.Show(errorText);
+                }
+
+            }
+
             catch (Exception ex)
             {
                 ed.WriteMessage("\nError: " + ex.Message);
@@ -4474,12 +7430,7 @@ namespace CAD_AUTOMATION
                 // Commit the changes
                 acTrans.Commit();
             }
-        }
-        public void Terminate()
-        {
-            
-        }
-        
+        }     
         private void InsertBlock(Database targetDb, Database sourceDb,Transaction transaction, BlockTableRecord blockTableRecord, string blockName, Point3d position, double scaleFactor)
         {
             BlockTable blockTable = transaction.GetObject(blockTableRecord.Database.BlockTableId, OpenMode.ForRead) as BlockTable;
@@ -4513,7 +7464,7 @@ namespace CAD_AUTOMATION
                 transaction.AddNewlyCreatedDBObject(blockRef, true);
             }
         }
-        public static Polyline Addrectangle(Transaction trans,BlockTableRecord btr, Point3d bottomLeft, Point3d topRight, int color)
+        public static Polyline Addrectangle(Transaction trans,BlockTableRecord btr, Point3d bottomLeft, Point3d topRight, int? color = null)
         {
             Polyline rectangle = new Polyline(4);
             rectangle.AddVertexAt(0, new Point2d(bottomLeft.X, bottomLeft.Y), 0, 0, 0);
@@ -4521,11 +7472,37 @@ namespace CAD_AUTOMATION
             rectangle.AddVertexAt(2, new Point2d(topRight.X, topRight.Y), 0, 0, 0);
             rectangle.AddVertexAt(3, new Point2d(bottomLeft.X, topRight.Y), 0, 0, 0);
             rectangle.Closed = true;
-            rectangle.ColorIndex = color;
+            if (color.HasValue)
+            {
+                rectangle.ColorIndex = color.Value;
+            }
             btr.AppendEntity(rectangle);
             trans.AddNewlyCreatedDBObject(rectangle, true);
 
             return rectangle;
+        }
+
+        private Circle DrawCircle(Transaction trans, BlockTableRecord block, Point3d center, double radius, int? color = null)
+        {
+            // Create a new Circle object
+            Circle circle = new Circle
+            {
+                Center = center, // Set the center point
+                Radius = radius  // Set the radius
+            };
+
+            // Apply the color if provided
+            if (color.HasValue)
+            {
+                circle.ColorIndex = color.Value;
+            }
+
+            // Add the circle to the block table record and the transaction
+            block.AppendEntity(circle);
+            trans.AddNewlyCreatedDBObject(circle, true);
+
+            // Return the created circle
+            return circle;
         }
 
     }
