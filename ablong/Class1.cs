@@ -62,7 +62,7 @@ namespace CAD_AUTOMATION
         private static double lastoblen;
         private static double lastobwid;
         private static bool isEnabled = false;
-
+        //update 28feb
         [DllImport("user32.dll")]
         static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -1682,12 +1682,13 @@ namespace CAD_AUTOMATION
                         double panelheight = 0.0;
                         double feedernumbercol = 1;
                         double maxdepth = 0;
-                        bool bottombusbar = false;
+                        string busbarposition = "";
                         bool lastbusbar = false;
                         double busbarheight = 0;
                         bool sidedoor = false;
                         List<string> mergeaddress = new List<string>();
-                        List<double> lastfeederheights = new List<double>();
+                        List<List<double>> feederheights = new List<List<double>>();
+
                         // Check if "GaMeR" dimension style exists
                         DimStyleTable dimStyleTable = transaction.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
                         string dimStyleName = "GaMeR";
@@ -1719,7 +1720,7 @@ namespace CAD_AUTOMATION
                             newDimStyle.Dimupt = false;
                             newDimStyle.Dimgap = 5;
 
-                            //transaction.Commit();
+                            
                         }
                         else
                         {
@@ -1739,6 +1740,7 @@ namespace CAD_AUTOMATION
                             bool vbbfound = false;
                             bool cablechamberfound = false;
                             List<Point3d> feederaddress = new List<Point3d>();
+                            feederheights.Add(new List<double>());
                             string whichside = "";
                             bool instrumentfound = false;
                             double checkpanelheight = 0.0;
@@ -1820,7 +1822,7 @@ namespace CAD_AUTOMATION
 
                                             BlockReference bases = InsertBlock(db, sourceDb, transaction, blockTableRecord, "TIBASE", new Point3d(shippingleftX + 35, descPoint.Y - (bottomchannel/2), 0), 1.0);
 
-                                            int arraycount = (int)((shippingrigthX - shippingleftX - 70) / 14);
+                                            int arraycount = (int)((shippingrigthX - shippingleftX - 65) / 14);
 
                                             var source = (BlockReference)transaction.GetObject(bases.ObjectId, OpenMode.ForWrite);
                                             var parameters = new AssocArrayRectangularParameters(14, 14, 0, arraycount, 1, 0, 0, 0);
@@ -1927,6 +1929,10 @@ namespace CAD_AUTOMATION
                                                     double leftCellValue = double.Parse(splitValues2[1]);
                                                     startY += leftCellValue;
                                                     checkpanelheight += leftCellValue;
+                                                    if (feederheights.Count > 0)
+                                                    {
+                                                        feederheights[feederheights.Count - 1].Add(leftCellValue);
+                                                    }
                                                     continue;
                                                 }
                                                 else
@@ -2020,11 +2026,17 @@ namespace CAD_AUTOMATION
                                                 panelheight += double.Parse(splitValues[1]);
                                             }
                                             checkpanelheight += double.Parse(splitValues[1]);
+
+                                            if (feederheights.Count > 0)
+                                            {
+                                                feederheights[feederheights.Count -1].Add(height);
+                                            }
+                                                
                                             if (row == 2)
                                             {
                                                 if (checkpanelheight != panelheight)
                                                 {
-                                                    MessageBox.Show($"\nInvalid height value in column: {cell2.Address}. Expected height: {panelheight}");
+                                                    MessageBox.Show($"\nInvalid height value in {col} Vertical. Expected height: {panelheight + bottomchannel}");
                                                     return;
                                                 }
                                             }
@@ -2055,11 +2067,15 @@ namespace CAD_AUTOMATION
                                             panelheight += double.Parse(splitValues[1]);
                                         }
                                         checkpanelheight += double.Parse(splitValues[1]);
+                                        if (feederheights.Count > 0)
+                                        {
+                                            feederheights[feederheights.Count - 1].Add(height);
+                                        }
                                         if (row == 2)
                                         {
                                             if (checkpanelheight != panelheight)
                                             {
-                                                MessageBox.Show($"\nInvalid height value in column: {cell.Address}. Expected height: {panelheight}");
+                                                MessageBox.Show($"\nInvalid height value in {col} Vertical. Expected height: {panelheight + bottomchannel}");
                                                 return;
                                             }
                                         }
@@ -2219,19 +2235,39 @@ namespace CAD_AUTOMATION
 
                                                     if (feederfound)
                                                     {
-                                                        DBText widthText = new DBText
+                                                        if (rearcabling)
                                                         {
-                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0),
-                                                            Height = 45,
-                                                            TextString = $"{feedernumbercol}F",
-                                                            ColorIndex = 4,
-                                                            HorizontalMode = TextHorizontalMode.TextCenter,
-                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0)
-                                                        };
-                                                        blockTableRecord.AppendEntity(widthText);
-                                                        transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 70, 10);
+                                                            DBText widthText = new DBText
+                                                            {
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0),
+                                                                Height = 40,
+                                                                TextString = $"{feedernumbercol}F",
+                                                                ColorIndex = 4,
+                                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0)
+                                                            };
+                                                            blockTableRecord.AppendEntity(widthText);
+                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 60, 10);
+                                                        }
+                                                        else
+                                                        {
+                                                            DBText widthText = new DBText
+                                                            {
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0),
+                                                                Height = 40,
+                                                                TextString = $"{feedernumbercol}F",
+                                                                ColorIndex = 4,
+                                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0)
+                                                            };
+                                                            blockTableRecord.AppendEntity(widthText);
+                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 60, 10);
+                                                        }
+                                                        
                                                     }
 
                                                     
@@ -2240,6 +2276,12 @@ namespace CAD_AUTOMATION
                                                     {
                                                         Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - 350, 0);
                                                         Point3d glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+
+                                                        if(maxdepth < 430)
+                                                        {
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth - 100, 0);
+                                                            glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+                                                        }
                                                         // FOR GLAND PLATE
                                                         Polyline gland = new Polyline(4);
                                                         gland.AddVertexAt(0, new Point2d(glandTopright.X, glandTopright.Y), 0, 0, 0);
@@ -2383,30 +2425,14 @@ namespace CAD_AUTOMATION
                                                     Point3d Bottomleft = new Point3d(startX, descPoint.Y - 700 - depth, 0);
                                                     Point3d Topright = new Point3d(startX + width, descPoint.Y - 700, 0);
                                                     Addrectangle(transaction, blockTableRecord, Bottomleft, Topright, 10);
-                                                    Polyline door = Addrectangle(transaction, blockTableRecord, new Point3d(Bottomleft.X + 30, Topright.Y, 0), new Point3d(Topright.X - 30, Topright.Y + 20, 0), 10);
+                                                    Polyline door = Addrectangle(transaction, blockTableRecord, new Point3d(Bottomleft.X + 30, Bottomleft.Y - 20, 0), new Point3d(Topright.X - 30, Bottomleft.Y, 0), 10);
                                                     if (whichside == "rhs")
                                                     {
-                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Topright.Y, 0));
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Bottomleft.Y, 0));
                                                         door.TransformBy(rotationMatrix);
 
-                                                        Point3d startPoint = new Point3d(Bottomleft.X, Topright.Y, 0);
-                                                        Point3d endPoint = door.GetPoint3dAt(0);
-                                                        Polyline bendPolyline = new Polyline();
-                                                        bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
-                                                        bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), 0.2, 0, 0); // Midpoint with bulge
-                                                        bendPolyline.AddVertexAt(2, new Point2d(startPoint.X, startPoint.Y), 0.2, 0, 0); // End point
-                                                        bendPolyline.ColorIndex = 2;
-
-                                                        blockTableRecord.AppendEntity(bendPolyline);
-                                                        transaction.AddNewlyCreatedDBObject(bendPolyline, true);
-                                                    }
-                                                    else if (whichside == "lhs")
-                                                    {
-                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Topright.Y, 0));
-                                                        door.TransformBy(rotationMatrix);
-
-                                                        Point3d startPoint = Topright;
-                                                        Point3d endPoint = door.GetPoint3dAt(1);
+                                                        Point3d startPoint = Bottomleft;
+                                                        Point3d endPoint = door.GetPoint3dAt(3);
                                                         Polyline bendPolyline = new Polyline();
                                                         bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
                                                         bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), -0.2, 0, 0); // Midpoint with bulge
@@ -2416,11 +2442,27 @@ namespace CAD_AUTOMATION
                                                         blockTableRecord.AppendEntity(bendPolyline);
                                                         transaction.AddNewlyCreatedDBObject(bendPolyline, true);
                                                     }
+                                                    else if (whichside == "lhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Bottomleft.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+
+                                                        Point3d startPoint = new Point3d(Topright.X, Bottomleft.Y, 0);
+                                                        Point3d endPoint = door.GetPoint3dAt(2);
+                                                        Polyline bendPolyline = new Polyline();
+                                                        bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
+                                                        bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), 0.2, 0, 0); // Midpoint with bulge
+                                                        bendPolyline.AddVertexAt(2, new Point2d(startPoint.X, startPoint.Y), 0.2, 0, 0); // End point
+                                                        bendPolyline.ColorIndex = 2;
+
+                                                        blockTableRecord.AppendEntity(bendPolyline);
+                                                        transaction.AddNewlyCreatedDBObject(bendPolyline, true);
+                                                    }
                                                     Polyline doorline = new Polyline();
-                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Bottomleft.Y), 0, 0, 0);
-                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Bottomleft.Y - 20), 0, 0, 0);
-                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Bottomleft.Y - 20), 0, 0, 0);
-                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Bottomleft.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Topright.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Topright.Y), 0, 0, 0);
                                                     doorline.ColorIndex = 10;
 
                                                     blockTableRecord.AppendEntity(doorline);
@@ -2440,19 +2482,39 @@ namespace CAD_AUTOMATION
 
                                                     if (feederfound)
                                                     {
-                                                        DBText widthText = new DBText
+                                                        if (rearcabling)
                                                         {
-                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0),
-                                                            Height = 45,
-                                                            TextString = $"{feedernumbercol}F",
-                                                            ColorIndex = 4,
-                                                            HorizontalMode = TextHorizontalMode.TextCenter,
-                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0)
-                                                        };
-                                                        blockTableRecord.AppendEntity(widthText);
-                                                        transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0), 70, 10);
+                                                            DBText widthText = new DBText
+                                                            {
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0),
+                                                                Height = 40,
+                                                                TextString = $"{feedernumbercol}F",
+                                                                ColorIndex = 4,
+                                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0)
+                                                            };
+                                                            blockTableRecord.AppendEntity(widthText);
+                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0), 60, 10);
+                                                        }
+                                                        else
+                                                        {
+                                                            DBText widthText = new DBText
+                                                            {
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0),
+                                                                Height = 40,
+                                                                TextString = $"{feedernumbercol}F",
+                                                                ColorIndex = 4,
+                                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0)
+                                                            };
+                                                            blockTableRecord.AppendEntity(widthText);
+                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0), 60, 10);
+                                                        }
+                                                        
 
 
                                                     }
@@ -2462,6 +2524,12 @@ namespace CAD_AUTOMATION
                                                         // FOR GLAND PLATE
                                                         Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Bottomleft.Y + 50, 0);
                                                         Point3d glandTopright = new Point3d(Topright.X - 50, Bottomleft.Y + 350, 0);
+
+                                                        if(maxdepth < 430)
+                                                        {
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Bottomleft.Y + 50, 0);
+                                                            glandTopright = new Point3d(Topright.X - 50, Bottomleft.Y + maxdepth - 100, 0);
+                                                        }
 
                                                         Polyline gland = new Polyline(4);
                                                         gland.AddVertexAt(0, new Point2d(glandTopright.X, glandTopright.Y), 0, 0, 0);
@@ -2626,7 +2694,11 @@ namespace CAD_AUTOMATION
                                         if(row == selectedRange.Rows.Count -2 && feederidlow == "hbb")
                                         {
                                             busbarheight = height;
-                                            bottombusbar = true;
+                                            busbarposition = "bottom";
+                                        }
+                                        else if(feederidlow == "hbb")
+                                        {
+                                            busbarposition = "top";
                                         }
 
                                     }
@@ -3051,7 +3123,7 @@ namespace CAD_AUTOMATION
                                                 Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 10, 0),
                                                 Height = 30,
                                                 TextHeight = 30,
-                                                Width = width - 200,
+                                                Width = width - ((height <= 240) ? 167 : 200),
                                                 Contents = feedertext,
                                                 Attachment = AttachmentPoint.BottomCenter
                                             };
@@ -3062,8 +3134,8 @@ namespace CAD_AUTOMATION
                                             if (!feederidlow.Contains("`"))
                                             {
 
-                                                Point3d meterpos = new Point3d(topRight.X - 80, topRight.Y - 130, 0);
-                                                Point3d lamppos = new Point3d(topRight.X - 80, topRight.Y - 45, 0);
+                                                Point3d meterpos = new Point3d(topRight.X - 71, topRight.Y - 130, 0);
+                                                Point3d lamppos = new Point3d(topRight.X - 71, topRight.Y - 42, 0);
 
                                                 if (feedername.Contains("mfm"))
                                                 {
@@ -3255,7 +3327,7 @@ namespace CAD_AUTOMATION
                                                 Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 10, 0),
                                                 Height = 30,
                                                 TextHeight = 30,
-                                                Width = width - 200,
+                                                Width = width - ((height <= 240) ? 167 : 200),
                                                 Contents = feedertext,
                                                 Attachment = AttachmentPoint.BottomCenter
                                             };
@@ -3266,8 +3338,8 @@ namespace CAD_AUTOMATION
                                             {
                                                     
 
-                                                Point3d meterpos = new Point3d(bottomLeft.X + 80, topRight.Y - 130, 0);
-                                                Point3d lamppos = new Point3d(bottomLeft.X + 80, topRight.Y - 45, 0);
+                                                Point3d meterpos = new Point3d(bottomLeft.X + 71, topRight.Y - 130, 0);
+                                                Point3d lamppos = new Point3d(bottomLeft.X + 71, topRight.Y - 42, 0);
                                                 if (feedername.Contains("mfm"))
                                                 {
                                                     InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
@@ -3433,7 +3505,6 @@ namespace CAD_AUTOMATION
 
                                     if (feederfound)
                                     {
-                                        lastfeederheights.Add(height);
                                         if (!sidedoor)
                                         {
                                             if(feedernumbercol == 1)
@@ -3474,8 +3545,8 @@ namespace CAD_AUTOMATION
                                                 }
 
                                                 AlignedDimension dimbase = new AlignedDimension(
-                                                new Point3d(descPoint.X, bottomLeft.Y, 0),
-                                                new Point3d(descPoint.X, topRight.Y, 0),
+                                                new Point3d(descPoint.X - sidechannel, bottomLeft.Y, 0),
+                                                new Point3d(descPoint.X - sidechannel, topRight.Y, 0),
                                                 new Point3d(descPoint.X - 120, descPoint.Y, 0),
                                                 "", // Dimension text (Auto-generated)
                                                 db.Dimstyle // Use current dimension style
@@ -3519,7 +3590,7 @@ namespace CAD_AUTOMATION
 
                                             if (vbbfound)
                                             {
-                                                if (bottombusbar)
+                                                if (busbarposition == "bottom")
                                                 {
                                                     Polyline busbarview = new Polyline(2);
                                                     busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y - (busbarheight/2)), 0, 0, 0);
@@ -3548,7 +3619,7 @@ namespace CAD_AUTOMATION
                                                     DrawOrderTable drawOrderTable = transaction.GetObject(blockTableRecord.DrawOrderTableId, OpenMode.ForWrite) as DrawOrderTable;
                                                     drawOrderTable.MoveToBottom(new ObjectIdCollection { busbarview.ObjectId });
                                                 }
-                                                else
+                                                else if(busbarposition == "top")
                                                 {
                                                     Polyline busbarview = new Polyline(2);
                                                     busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 70), 0, 0, 0);
@@ -3575,6 +3646,41 @@ namespace CAD_AUTOMATION
                                                     InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBARJOINT", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y + (busbarheight / 2), 0), 1.0);
                                                     DrawOrderTable drawOrderTable = transaction.GetObject(blockTableRecord.DrawOrderTableId, OpenMode.ForWrite) as DrawOrderTable;
                                                     drawOrderTable.MoveToBottom(new ObjectIdCollection { busbarview.ObjectId });
+                                                }
+                                                else
+                                                {
+                                                    Polyline busbarview = new Polyline(2);
+                                                    busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 70), 0, 0, 0);
+                                                    busbarview.AddVertexAt(1, new Point2d((bottomLeft.X + topRight.X) / 2, topRight.Y - 70), 0, 0, 0);
+                                                    busbarview.ColorIndex = 244;
+                                                    busbarview.SetStartWidthAt(0, 12.5);
+                                                    busbarview.SetEndWidthAt(0, 12.5);
+                                                    busbarview.SetStartWidthAt(1, 12.5);
+                                                    busbarview.SetEndWidthAt(1, 12.5);
+                                                    blockTableRecord.AppendEntity(busbarview);
+                                                    transaction.AddNewlyCreatedDBObject(busbarview, true);
+
+                                                    Polyline busbarviewside = new Polyline(2);
+                                                    busbarviewside.AddVertexAt(0, new Point2d(((bottomLeft.X + topRight.X) / 2) - 45, bottomLeft.Y + 70), 0, 0, 0);
+                                                    busbarviewside.AddVertexAt(1, new Point2d(((bottomLeft.X + topRight.X) / 2) + 45, bottomLeft.Y + 70), 0, 0, 0);
+                                                    busbarviewside.ColorIndex = 2;
+                                                    busbarviewside.SetStartWidthAt(0, 12.5);
+                                                    busbarviewside.SetEndWidthAt(0, 12.5);
+                                                    busbarviewside.SetStartWidthAt(1, 12.5);
+                                                    busbarviewside.SetEndWidthAt(1, 12.5);
+                                                    blockTableRecord.AppendEntity(busbarviewside);
+                                                    transaction.AddNewlyCreatedDBObject(busbarviewside, true);
+
+                                                    Polyline busbarviewside2 = new Polyline(2);
+                                                    busbarviewside2.AddVertexAt(0, new Point2d(((bottomLeft.X + topRight.X) / 2) - 45, topRight.Y - 70), 0, 0, 0);
+                                                    busbarviewside2.AddVertexAt(1, new Point2d(((bottomLeft.X + topRight.X) / 2) + 45, topRight.Y - 70), 0, 0, 0);
+                                                    busbarviewside2.ColorIndex = 2;
+                                                    busbarviewside2.SetStartWidthAt(0, 12.5);
+                                                    busbarviewside2.SetEndWidthAt(0, 12.5);
+                                                    busbarviewside2.SetStartWidthAt(1, 12.5);
+                                                    busbarviewside2.SetEndWidthAt(1, 12.5);
+                                                    blockTableRecord.AppendEntity(busbarviewside2);
+                                                    transaction.AddNewlyCreatedDBObject(busbarviewside2, true);
                                                 }
                                             }
 
@@ -3675,11 +3781,11 @@ namespace CAD_AUTOMATION
                                             }
                                             
 
-                                            if (bottombusbar)
+                                            if (busbarposition == "bottom")
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y - 45, 0), 1.0);
                                             }
-                                            else
+                                            else if(busbarposition == "top")
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 45, 0), 1.0);
                                             }
@@ -3723,8 +3829,8 @@ namespace CAD_AUTOMATION
                                                         }
                                                     }
                                                     AlignedDimension dimbase = new AlignedDimension(
-                                                    new Point3d(descPoint.X, bottomLeft.Y, 0),
-                                                    new Point3d(descPoint.X, topRight.Y, 0),
+                                                    new Point3d(descPoint.X - sidechannel, bottomLeft.Y, 0),
+                                                    new Point3d(descPoint.X - sidechannel, topRight.Y, 0),
                                                     new Point3d(descPoint.X - 120, descPoint.Y, 0),
                                                     "", // Dimension text (Auto-generated)
                                                     db.Dimstyle // Use current dimension style
@@ -3831,11 +3937,11 @@ namespace CAD_AUTOMATION
                                             }
 
 
-                                            if (bottombusbar)
+                                            if (busbarposition == "bottom")
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, topRight.Y - 35, 0), 1.0);
                                             }
-                                            else
+                                            else if(busbarposition == "top")
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "BUSBAR_IMG", new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 35, 0), 1.0);
                                             }
@@ -3880,8 +3986,8 @@ namespace CAD_AUTOMATION
                                                         }
                                                     }
                                                     AlignedDimension dimbase = new AlignedDimension(
-                                                    new Point3d(descPoint.X, bottomLeft.Y, 0),
-                                                    new Point3d(descPoint.X, topRight.Y, 0),
+                                                    new Point3d(descPoint.X - sidechannel, bottomLeft.Y, 0),
+                                                    new Point3d(descPoint.X - sidechannel, topRight.Y, 0),
                                                     new Point3d(descPoint.X - 120, descPoint.Y, 0),
                                                     "", // Dimension text (Auto-generated)
                                                     db.Dimstyle // Use current dimension style
@@ -3954,8 +4060,8 @@ namespace CAD_AUTOMATION
                                                     }
                                                 }
                                                 AlignedDimension dimbase = new AlignedDimension(
-                                                new Point3d(descPoint.X, bottomLeft.Y, 0),
-                                                new Point3d(descPoint.X, topRight.Y, 0),
+                                                new Point3d(descPoint.X -sidechannel, bottomLeft.Y, 0),
+                                                new Point3d(descPoint.X -sidechannel, topRight.Y, 0),
                                                 new Point3d(descPoint.X - 120, descPoint.Y, 0),
                                                 "", // Dimension text (Auto-generated)
                                                 db.Dimstyle // Use current dimension style
@@ -4294,8 +4400,13 @@ namespace CAD_AUTOMATION
                                     feedernumberrow++;
                                 }
                                 feedernumbercol++;
-
-
+                            }
+                            else
+                            {
+                                if (feederheights.Count > 0)
+                                {
+                                    feederheights.RemoveAt(feederheights.Count - 1);
+                                }
                             }
 
                             if (col == 1)
@@ -4400,7 +4511,7 @@ namespace CAD_AUTOMATION
 
                                 BlockReference bases = InsertBlock(db, sourceDb, transaction, blockTableRecord, "TIBASE", new Point3d(shippingleftX + 35, descPoint.Y - (bottomchannel / 2), 0), 1.0);
 
-                                int arraycount = (int)((shippingrigthX - shippingleftX - 70) / 14);
+                                int arraycount = (int)((shippingrigthX - shippingleftX - 65) / 14);
 
                                 var source = (BlockReference)transaction.GetObject(bases.ObjectId, OpenMode.ForWrite);
                                 var parameters = new AssocArrayRectangularParameters(14, 14, 0, arraycount, 1, 0, 0, 0);
@@ -4412,7 +4523,7 @@ namespace CAD_AUTOMATION
 
                                 Point3d bottomLeft3 = new Point3d(shippingleftX, descPoint.Y + panelheight, 0);
                                 Point3d topRight3 = new Point3d(shippingrigthX, descPoint.Y + panelheight + topchannel, 0);
-                                Polyline toprect = Addrectangle(transaction, blockTableRecord, bottomLeft3, topRight3, basecolor);
+                                Polyline toprect = Addrectangle(transaction, blockTableRecord, bottomLeft3, topRight3);
 
                                 Hatch tophatch = new Hatch();
                                 tophatch.SetDatabaseDefaults();
@@ -4656,7 +4767,7 @@ namespace CAD_AUTOMATION
                                 {
                                     MText topviewText = new MText
                                     {
-                                        Location = new Point3d((descPoint.X + shippingrigthX) / 2, descPoint.Y - maxdepth - 900, 0),
+                                        Location = new Point3d((descPoint.X + shippingrigthX) / 2, descPoint.Y - maxdepth - 950, 0),
                                         Height = 55,
                                         TextHeight = 55,
                                         Contents = @"\LBOTTOM VIEW",  // "\L" applies underline
@@ -4665,11 +4776,49 @@ namespace CAD_AUTOMATION
                                     blockTableRecord.AppendEntity(topviewText);
                                     transaction.AddNewlyCreatedDBObject(topviewText, true);
 
-                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y - 400, 0), 1.0);
-                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y - 400, 0), 1.0);
-                                    toptext1.Rotation = Math.PI / 2;
-                                    toptext2.Rotation = Math.PI / 2;
+                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y - maxdepth - 950, 0), 1.0);
+                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y - maxdepth - 950, 0), 1.0);
+                                    toptext1.Rotation = -Math.PI / 2;
+                                    toptext2.Rotation = -Math.PI / 2;
                                 }
+
+                                AlignedDimension dimrightsidebaseheight = new AlignedDimension(
+                                                new Point3d(shippingrigthX + sidechannel, descPoint.Y, 0),
+                                                new Point3d(shippingrigthX + sidechannel, descPoint.Y - bottomchannel, 0),
+                                                new Point3d(shippingrigthX + sidechannel + 90, descPoint.Y, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                blockTableRecord.AppendEntity(dimrightsidebaseheight);
+                                transaction.AddNewlyCreatedDBObject(dimrightsidebaseheight, true);
+
+                                if (feederheights.Count > 0) // Ensure there is at least one list
+                                {
+                                    List<double> lastList = feederheights[feederheights.Count - 1]; // Get the last list
+                                    double previousY = descPoint.Y; // Start Y position
+
+                                    foreach (double value in lastList)
+                                    {
+                                        // Create an aligned dimension moving upwards
+                                        AlignedDimension dimrightsideheight = new AlignedDimension(
+                                            new Point3d(shippingrigthX + sidechannel, previousY, 0),
+                                            new Point3d(shippingrigthX + sidechannel, previousY + value, 0), // Increment Y-axis
+                                            new Point3d(shippingrigthX + sidechannel + 90, previousY + (value / 2), 0), // Midpoint for dimension line
+                                            "", // Auto-generated text
+                                            db.Dimstyle // Use current dimension style
+                                        );
+
+                                        // Append to drawing
+                                        blockTableRecord.AppendEntity(dimrightsideheight);
+                                        transaction.AddNewlyCreatedDBObject(dimrightsideheight, true);
+
+                                        // Update previous Y position for next dimension
+                                        previousY += value;
+                                    }
+                                }
+
+
                             }
 
                             startY = descPoint.Y;
@@ -4681,9 +4830,19 @@ namespace CAD_AUTOMATION
 
 
                         transaction.Commit();
+
+                        //StringBuilder message = new StringBuilder();
+                        //for (int i = 0; i < feederheights.Count; i++)
+                        //{
+                        //    message.AppendLine($"List {i + 1}: {string.Join(", ", feederheights[i])}");
+                        //}
+
+                        //// Show message box with all lists and values
+                        //MessageBox.Show(message.ToString(), "List of Lists", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
 
+                
                 //acadDoc.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
 
                 if (error)
