@@ -51,6 +51,11 @@ using System.Net;
 using System.Security.Policy;
 using System.Windows.Media;
 using System.Runtime.ConstrainedExecution;
+using OpenFileDialog = System.Windows.Forms.OpenFileDialog;
+using PdfSharp.Pdf.IO;
+using PdfSharp.Pdf;
+using System.Runtime.InteropServices.ComTypes;
+using Autodesk.AutoCAD.Internal.Calculator;
 
 namespace CAD_AUTOMATION
 {
@@ -1720,7 +1725,7 @@ namespace CAD_AUTOMATION
                             newDimStyle.Dimupt = false;
                             newDimStyle.Dimgap = 5;
 
-                            
+                            dimStyleTable.DowngradeOpen();
                         }
                         else
                         {
@@ -1774,6 +1779,7 @@ namespace CAD_AUTOMATION
 
                                     if (row != selectedRange.Rows.Count - 1)
                                     {
+                                        transaction.Commit();
                                         MessageBox.Show($"\nInterior color are only allowed in bottom cells for vertical width.");
                                         return;
                                     }
@@ -1937,6 +1943,7 @@ namespace CAD_AUTOMATION
                                                 }
                                                 else
                                                 {
+                                                    transaction.Commit();
                                                     MessageBox.Show($"\nInvalid cell format in {firstCellInMerge.Address}. Expected format: FEEDER ID # WIDTH");
                                                     return;
                                                 }
@@ -1978,6 +1985,7 @@ namespace CAD_AUTOMATION
                                                 }
                                                 else
                                                 {
+                                                    transaction.Commit();
                                                     MessageBox.Show($"\nInvalid or missing width value in cell: {rightCellBottom.Address}.");
                                                     return;
                                                 }
@@ -2036,14 +2044,16 @@ namespace CAD_AUTOMATION
                                             {
                                                 if (checkpanelheight != panelheight)
                                                 {
-                                                    MessageBox.Show($"\nInvalid height value in {col} Vertical. Expected height: {panelheight + bottomchannel}");
+                                                    transaction.Commit();
+                                                    Application.ShowAlertDialog($"\nInvalid height value in {col} Vertical. Expected height: {panelheight + bottomchannel}");
                                                     return;
                                                 }
                                             }
                                         }
                                         else
                                         {
-                                            MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER ID # WIDTH");
+                                            transaction.Commit();
+                                            Application.ShowAlertDialog($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER ID # WIDTH");                                  
                                             return;
                                         }
 
@@ -2058,6 +2068,16 @@ namespace CAD_AUTOMATION
 
                                     // Split the string by '#' and check if it has at least 3 parts
                                     splitValues = cellValue.Split('#');
+
+                                    Range rightCell = cell.Offset[0, 1];
+                                    int selectedFirstCol = selectedRange.Column;
+                                    int selectedLastCol = selectedFirstCol + selectedRange.Columns.Count - 1;
+
+                                    // Check if the right cell is out of the selected range
+                                    if (rightCell.Column > selectedLastCol)
+                                    {
+                                        lastbusbar = true;
+                                    }
 
                                     if (splitValues.Length >= 2)
                                     {
@@ -2075,7 +2095,8 @@ namespace CAD_AUTOMATION
                                         {
                                             if (checkpanelheight != panelheight)
                                             {
-                                                MessageBox.Show($"\nInvalid height value in {col} Vertical. Expected height: {panelheight + bottomchannel}");
+                                                transaction.Commit();
+                                                Application.ShowAlertDialog($"\nInvalid height value in {col}th Vertical. Expected height: {panelheight + bottomchannel}");
                                                 return;
                                             }
                                         }
@@ -2216,7 +2237,7 @@ namespace CAD_AUTOMATION
                                                     doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Topright.Y + 20), 0, 0, 0);
                                                     doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Topright.Y + 20), 0, 0, 0);
                                                     doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Topright.Y), 0, 0, 0);
-                                                    doorline.ColorIndex = 10;
+                                                    //doorline.ColorIndex = 10;
 
                                                     blockTableRecord.AppendEntity(doorline);
                                                     transaction.AddNewlyCreatedDBObject(doorline, true);
@@ -2235,38 +2256,21 @@ namespace CAD_AUTOMATION
 
                                                     if (feederfound)
                                                     {
-                                                        if (rearcabling)
-                                                        {
+                                                        
                                                             DBText widthText = new DBText
                                                             {
-                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0),
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0),
                                                                 Height = 40,
                                                                 TextString = $"{feedernumbercol}F",
                                                                 ColorIndex = 4,
                                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0)
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0)
                                                             };
                                                             blockTableRecord.AppendEntity(widthText);
                                                             transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 60, 10);
-                                                        }
-                                                        else
-                                                        {
-                                                            DBText widthText = new DBText
-                                                            {
-                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0),
-                                                                Height = 40,
-                                                                TextString = $"{feedernumbercol}F",
-                                                                ColorIndex = 4,
-                                                                HorizontalMode = TextHorizontalMode.TextCenter,
-                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0)
-                                                            };
-                                                            blockTableRecord.AppendEntity(widthText);
-                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 60, 10);
-                                                        }
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0), 45, 10);
+                                                        
                                                         
                                                     }
 
@@ -2279,7 +2283,7 @@ namespace CAD_AUTOMATION
 
                                                         if(maxdepth < 430)
                                                         {
-                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth - 100, 0);
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth + 100, 0);
                                                             glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
                                                         }
                                                         // FOR GLAND PLATE
@@ -2463,7 +2467,7 @@ namespace CAD_AUTOMATION
                                                     doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Topright.Y + 20), 0, 0, 0);
                                                     doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Topright.Y + 20), 0, 0, 0);
                                                     doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Topright.Y), 0, 0, 0);
-                                                    doorline.ColorIndex = 10;
+                                                    //doorline.ColorIndex = 10;
 
                                                     blockTableRecord.AppendEntity(doorline);
                                                     transaction.AddNewlyCreatedDBObject(doorline, true);
@@ -2482,38 +2486,21 @@ namespace CAD_AUTOMATION
 
                                                     if (feederfound)
                                                     {
-                                                        if (rearcabling)
-                                                        {
+                                                        
                                                             DBText widthText = new DBText
                                                             {
-                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0),
+                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0),
                                                                 Height = 40,
                                                                 TextString = $"{feedernumbercol}F",
                                                                 ColorIndex = 4,
                                                                 HorizontalMode = TextHorizontalMode.TextCenter,
                                                                 VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0)
+                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0)
                                                             };
                                                             blockTableRecord.AppendEntity(widthText);
                                                             transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y + 100, 0), 60, 10);
-                                                        }
-                                                        else
-                                                        {
-                                                            DBText widthText = new DBText
-                                                            {
-                                                                Position = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0),
-                                                                Height = 40,
-                                                                TextString = $"{feedernumbercol}F",
-                                                                ColorIndex = 4,
-                                                                HorizontalMode = TextHorizontalMode.TextCenter,
-                                                                VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                                AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0)
-                                                            };
-                                                            blockTableRecord.AppendEntity(widthText);
-                                                            transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0), 60, 10);
-                                                        }
+                                                            DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0), 45, 10);
+                                                        
                                                         
 
 
@@ -2521,14 +2508,13 @@ namespace CAD_AUTOMATION
 
                                                     if (cablechamberfound || (feederfound && rearcabling))
                                                     {
-                                                        // FOR GLAND PLATE
-                                                        Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Bottomleft.Y + 50, 0);
-                                                        Point3d glandTopright = new Point3d(Topright.X - 50, Bottomleft.Y + 350, 0);
+                                                        Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - 350, 0);
+                                                        Point3d glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
 
-                                                        if(maxdepth < 430)
+                                                        if (maxdepth < 430)
                                                         {
-                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Bottomleft.Y + 50, 0);
-                                                            glandTopright = new Point3d(Topright.X - 50, Bottomleft.Y + maxdepth - 100, 0);
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth + 100, 0);
+                                                            glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
                                                         }
 
                                                         Polyline gland = new Polyline(4);
@@ -2603,12 +2589,14 @@ namespace CAD_AUTOMATION
                                             }
                                             else
                                             {
+                                                transaction.Commit();
                                                 MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                                 return;
                                             }
                                         }
                                         else
                                         {
+                                            transaction.Commit();
                                             MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                             return;
                                         }
@@ -2618,12 +2606,14 @@ namespace CAD_AUTOMATION
 
                                 if (height == 0)
                                 {
+                                    transaction.Commit();
                                     MessageBox.Show($"\nInvalid or missing height value in cell: {cell.Address}.");
                                     return;
                                 }
 
                                 if (width == 0)
                                 {
+                                    transaction.Commit();
                                     MessageBox.Show($"\nInvalid or missing width value in cell: {cell.Address}.");
                                     return;
                                 }
@@ -2698,6 +2688,7 @@ namespace CAD_AUTOMATION
                                         }
                                         else if(feederidlow == "hbb")
                                         {
+                                            busbarheight = height;
                                             busbarposition = "top";
                                         }
 
@@ -2788,7 +2779,19 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if(poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if(poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
+                                            
                                         }
 
                                         feedertext += " " + "MCCB";
@@ -2814,11 +2817,22 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "ACB";
-                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 10, 0), 1.0);
                                     }
                                     else if (feedername.Contains("rccb") || feedername.Contains("rcbo"))
                                     {
@@ -2831,7 +2845,18 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "RCBO";
@@ -2852,7 +2877,18 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "MCB";
@@ -3285,6 +3321,23 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
 
+                                            feederfound = true;
+
+                                            feederaddress.Add(new Point3d(topRight.X - 45, bottomLeft.Y + 25, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(topRight.X - 45, bottomLeft.Y + 60, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(topRight.X - 50, bottomLeft.Y + 60, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
                                             if (height > 600)
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(bottomLeft.X + 35, bottomLeft.Y + 60, 0), 1.0);
@@ -3485,6 +3538,22 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
 
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(bottomLeft.X + 45, bottomLeft.Y + 25, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(bottomLeft.X + 45, bottomLeft.Y + 60, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(bottomLeft.X + 50, bottomLeft.Y + 60, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
                                             if (height > 600)
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
@@ -3517,7 +3586,23 @@ namespace CAD_AUTOMATION
                                                         db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
                                                     }
                                                 }
-                                                Line partitionline = new Line(new Point3d(descPoint.X - 800,bottomLeft.Y,0), new Point3d(descPoint.X - 800 - maxdepth, bottomLeft.Y, 0));
+                                                double depth1 = 0;
+                                                if(maxdepth < 1)
+                                                {
+                                                    if (rearcabling)
+                                                    {
+                                                        depth1 = 600;
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = 440;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    depth1 = maxdepth;
+                                                }
+                                                Line partitionline = new Line(new Point3d(descPoint.X - 800,bottomLeft.Y,0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
                                                 partitionline.ColorIndex = 150;
                                                 partitionline.Linetype = linetypeName;
                                                 blockTableRecord.AppendEntity(partitionline);
@@ -3528,7 +3613,7 @@ namespace CAD_AUTOMATION
                                                 doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
                                                 doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
                                                 doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
-                                                doorline.ColorIndex = 10;
+                                                //doorline.ColorIndex = 10;
                                                 blockTableRecord.AppendEntity(doorline);
                                                 transaction.AddNewlyCreatedDBObject(doorline, true);
                                                 double offsetDistance2 = -2; // Negative value for inside offset
@@ -3595,7 +3680,7 @@ namespace CAD_AUTOMATION
                                                     Polyline busbarview = new Polyline(2);
                                                     busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y - (busbarheight/2)), 0, 0, 0);
                                                     busbarview.AddVertexAt(1, new Point2d((bottomLeft.X + topRight.X) / 2, topRight.Y - 70), 0, 0, 0);
-                                                    busbarview.ColorIndex = 244;
+                                                    busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                     busbarview.SetStartWidthAt(0, 12.5);
                                                     busbarview.SetEndWidthAt(0, 12.5);
                                                     busbarview.SetStartWidthAt(1, 12.5);
@@ -3624,7 +3709,7 @@ namespace CAD_AUTOMATION
                                                     Polyline busbarview = new Polyline(2);
                                                     busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 70), 0, 0, 0);
                                                     busbarview.AddVertexAt(1, new Point2d((bottomLeft.X + topRight.X) / 2, topRight.Y + (busbarheight/2)), 0, 0, 0);
-                                                    busbarview.ColorIndex = 244;
+                                                    busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                     busbarview.SetStartWidthAt(0, 12.5);
                                                     busbarview.SetEndWidthAt(0, 12.5);
                                                     busbarview.SetStartWidthAt(1, 12.5);
@@ -3652,7 +3737,7 @@ namespace CAD_AUTOMATION
                                                     Polyline busbarview = new Polyline(2);
                                                     busbarview.AddVertexAt(0, new Point2d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 70), 0, 0, 0);
                                                     busbarview.AddVertexAt(1, new Point2d((bottomLeft.X + topRight.X) / 2, topRight.Y - 70), 0, 0, 0);
-                                                    busbarview.ColorIndex = 244;
+                                                    busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                     busbarview.SetStartWidthAt(0, 12.5);
                                                     busbarview.SetEndWidthAt(0, 12.5);
                                                     busbarview.SetStartWidthAt(1, 12.5);
@@ -3723,7 +3808,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X + 50, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3747,7 +3832,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X - 50, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3771,7 +3856,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3802,7 +3887,23 @@ namespace CAD_AUTOMATION
                                                             db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
                                                         }
                                                     }
-                                                    Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - maxdepth, bottomLeft.Y, 0));
+                                                    double depth1 = 0;
+                                                    if (maxdepth < 1)
+                                                    {
+                                                        if (rearcabling)
+                                                        {
+                                                            depth1 = 600;
+                                                        }
+                                                        else
+                                                        {
+                                                            depth1 = 440;
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = maxdepth;
+                                                    }
+                                                    Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
                                                     partitionline.ColorIndex = 150;
                                                     partitionline.Linetype = linetypeName;
                                                     blockTableRecord.AppendEntity(partitionline);
@@ -3813,7 +3914,7 @@ namespace CAD_AUTOMATION
                                                     doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
                                                     doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
                                                     doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
-                                                    doorline.ColorIndex = 10;
+                                                    //doorline.ColorIndex = 10;
                                                     blockTableRecord.AppendEntity(doorline);
                                                     transaction.AddNewlyCreatedDBObject(doorline, true);
                                                     double offsetDistance2 = -2; // Negative value for inside offset
@@ -3879,7 +3980,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X + 50, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3903,7 +4004,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X - 50, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3927,7 +4028,7 @@ namespace CAD_AUTOMATION
                                                 Polyline busbarview = new Polyline(2);
                                                 busbarview.AddVertexAt(0, new Point2d(bottomLeft.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
                                                 busbarview.AddVertexAt(1, new Point2d(topRight.X, (bottomLeft.Y + topRight.Y) / 2), 0, 0, 0);
-                                                busbarview.ColorIndex = 244;
+                                                busbarview.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(153, 0, 0);
                                                 busbarview.SetStartWidthAt(0, 12.5);
                                                 busbarview.SetEndWidthAt(0, 12.5);
                                                 busbarview.SetStartWidthAt(1, 12.5);
@@ -3959,7 +4060,23 @@ namespace CAD_AUTOMATION
                                                             db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
                                                         }
                                                     }
-                                                    Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - maxdepth, bottomLeft.Y, 0));
+                                                    double depth1 = 0;
+                                                    if (maxdepth < 1)
+                                                    {
+                                                        if (rearcabling)
+                                                        {
+                                                            depth1 = 600;
+                                                        }
+                                                        else
+                                                        {
+                                                            depth1 = 440;
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = maxdepth;
+                                                    }
+                                                    Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
                                                     partitionline.ColorIndex = 150;
                                                     partitionline.Linetype = linetypeName;
                                                     blockTableRecord.AppendEntity(partitionline);
@@ -3970,7 +4087,7 @@ namespace CAD_AUTOMATION
                                                     doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
                                                     doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
                                                     doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
-                                                    doorline.ColorIndex = 10;
+                                                    //doorline.ColorIndex = 10;
                                                     blockTableRecord.AppendEntity(doorline);
                                                     transaction.AddNewlyCreatedDBObject(doorline, true);
                                                     double offsetDistance2 = -2; // Negative value for inside offset
@@ -4033,7 +4150,23 @@ namespace CAD_AUTOMATION
                                                         db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
                                                     }
                                                 }
-                                                Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - maxdepth, bottomLeft.Y, 0));
+                                                double depth1 = 0;
+                                                if (maxdepth < 1)
+                                                {
+                                                    if (rearcabling)
+                                                    {
+                                                        depth1 = 600;
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = 440;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    depth1 = maxdepth;
+                                                }
+                                                Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
                                                 partitionline.ColorIndex = 150;
                                                 partitionline.Linetype = linetypeName;
                                                 blockTableRecord.AppendEntity(partitionline);
@@ -4044,7 +4177,7 @@ namespace CAD_AUTOMATION
                                                 doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
                                                 doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
                                                 doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
-                                                doorline.ColorIndex = 10;
+                                                //doorline.ColorIndex = 10;
                                                 blockTableRecord.AppendEntity(doorline);
                                                 transaction.AddNewlyCreatedDBObject(doorline, true);
                                                 double offsetDistance2 = -2; // Negative value for inside offset
@@ -4680,7 +4813,7 @@ namespace CAD_AUTOMATION
                                 doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 - 20 - maxdepth, descPoint.Y + 10), 0, 0, 0);
                                 doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 - 20 -maxdepth, descPoint.Y + panelheight - 10), 0, 0, 0);
                                 doorline.AddVertexAt(3, new Point2d(descPoint.X - 800 - maxdepth, descPoint.Y + panelheight - 10), 0, 0, 0);
-                                doorline.ColorIndex = 10;
+                                //doorline.ColorIndex = 10;
                                 blockTableRecord.AppendEntity(doorline);
                                 transaction.AddNewlyCreatedDBObject(doorline, true);
                                 double offsetDistance2 = -2; // Negative value for inside offset
@@ -4776,8 +4909,8 @@ namespace CAD_AUTOMATION
                                     blockTableRecord.AppendEntity(topviewText);
                                     transaction.AddNewlyCreatedDBObject(topviewText, true);
 
-                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y - maxdepth - 950, 0), 1.0);
-                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y - maxdepth - 950, 0), 1.0);
+                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y - maxdepth - 1000, 0), 1.0);
+                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y - maxdepth - 1000, 0), 1.0);
                                     toptext1.Rotation = -Math.PI / 2;
                                     toptext2.Rotation = -Math.PI / 2;
                                 }
@@ -4854,7 +4987,7 @@ namespace CAD_AUTOMATION
             
             catch (Exception ex)
             {
-                ed.WriteMessage("\nError: " + ex.Message);
+                MessageBox.Show("\nError: " + ex.Message);
             }
             finally
             {
@@ -5032,6 +5165,7 @@ namespace CAD_AUTOMATION
                         double startY = descPoint.Y;
                         int basecolor = 4;
                         List<string> mergeaddress = new List<string>();
+                        List<List<double>> feederheights = new List<List<double>>();
 
                         double shippingleftX = 0.0;
                         double shippingrigthX = 0.0;
@@ -5040,7 +5174,8 @@ namespace CAD_AUTOMATION
                         double panelheight = 0.0;
                         double feedernumbercol = 1;
                         double maxdepth = 0;
-                        
+                        bool sidedoor = false;
+
 
                         // Check if "GaMeR" dimension style exists
                         DimStyleTable dimStyleTable = transaction.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
@@ -5063,17 +5198,17 @@ namespace CAD_AUTOMATION
                             newDimStyle.Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3);
                             newDimStyle.Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 6);
                             newDimStyle.Dimasz = 35;
-                            newDimStyle.Dimtxt = 55;
+                            newDimStyle.Dimtxt = 45;
                             newDimStyle.Dimexo = 4.0;
                             newDimStyle.Dimdec = 0;
-                            newDimStyle.Dimtad = 1;
+                            newDimStyle.Dimtad = 0;
                             newDimStyle.Dimjust = 0;
-                            //newDimStyle.Dimtoh = true;
-                            newDimStyle.Dimtih = true;
-                            newDimStyle.Dimupt = true;
+                            newDimStyle.Dimtoh = true;
+                            newDimStyle.Dimtih = false;
+                            newDimStyle.Dimupt = false;
                             newDimStyle.Dimgap = 5;
 
-                            //transaction.Commit();
+
                         }
                         else
                         {
@@ -5090,8 +5225,10 @@ namespace CAD_AUTOMATION
                             bool horizontallink = false;
                             double previouswidth = 0.0;
                             bool feederfound = false;
+                            bool vbbfound = false;
                             bool cablechamberfound = false;
                             List<Point3d> feederaddress = new List<Point3d>();
+                            feederheights.Add(new List<double>());
                             string whichside = "";
                             bool instrumentfound = false;
                             double checkpanelheight = 0.0;
@@ -5220,10 +5357,15 @@ namespace CAD_AUTOMATION
                                                     double leftCellValue = double.Parse(splitValues2[1]);
                                                     startY += leftCellValue;
                                                     checkpanelheight += leftCellValue;
+                                                    if (feederheights.Count > 0)
+                                                    {
+                                                        feederheights[feederheights.Count - 1].Add(leftCellValue);
+                                                    }
                                                     continue;
                                                 }
                                                 else
                                                 {
+                                                    transaction.Commit();
                                                     MessageBox.Show($"\nInvalid cell format in {firstCellInMerge.Address}. Expected format: FEEDER ID # WIDTH");
                                                     return;
                                                 }
@@ -5265,6 +5407,7 @@ namespace CAD_AUTOMATION
                                                 }
                                                 else
                                                 {
+                                                    transaction.Commit();
                                                     MessageBox.Show($"\nInvalid or missing width value in cell: {rightCellBottom.Address}.");
                                                     return;
                                                 }
@@ -5299,10 +5442,17 @@ namespace CAD_AUTOMATION
                                                 panelheight += double.Parse(splitValues[1]);
                                             }
                                             checkpanelheight += double.Parse(splitValues[1]);
+
+                                            if (feederheights.Count > 0)
+                                            {
+                                                feederheights[feederheights.Count - 1].Add(height);
+                                            }
+
                                             if (row == 2)
                                             {
                                                 if (checkpanelheight != panelheight)
                                                 {
+                                                    transaction.Commit();
                                                     MessageBox.Show($"\nInvalid height value in column: {cell2.Address}. Expected height: {panelheight}");
                                                     return;
                                                 }
@@ -5310,6 +5460,7 @@ namespace CAD_AUTOMATION
                                         }
                                         else
                                         {
+                                            transaction.Commit();
                                             MessageBox.Show($"\nInvalid cell format in {cell2.Address}. Expected format: FEEDER ID # WIDTH");
                                             return;
                                         }
@@ -5334,10 +5485,17 @@ namespace CAD_AUTOMATION
                                             panelheight += double.Parse(splitValues[1]);
                                         }
                                         checkpanelheight += double.Parse(splitValues[1]);
+
+                                        if (feederheights.Count > 0)
+                                        {
+                                            feederheights[feederheights.Count - 1].Add(height);
+                                        }
+
                                         if (row == 2)
                                         {
                                             if (checkpanelheight != panelheight)
                                             {
+                                                transaction.Commit();
                                                 MessageBox.Show($"\nInvalid height value in column: {cell.Address}. Expected height: {panelheight}");
                                                 return;
                                             }
@@ -5358,9 +5516,25 @@ namespace CAD_AUTOMATION
 
                                                 if(view == "TOPVIEW")
                                                 {
+                                                    Point3d Bottomleft = new Point3d(startX, descPoint.Y + panelheight + 800, 0);
+                                                    Point3d Topright = new Point3d(startX + width, descPoint.Y + panelheight + 800 + depth, 0);
+
+                                                    if (col == 1)
+                                                    {
+                                                        AlignedDimension dimtopheight = new AlignedDimension(
+                                                        new Point3d(Bottomleft.X, Bottomleft.Y, 0),
+                                                        new Point3d(Bottomleft.X, Topright.Y, 0),
+                                                        new Point3d(Bottomleft.X - 90, Bottomleft.Y, 0),
+                                                        "", // Dimension text (Auto-generated)
+                                                        db.Dimstyle // Use current dimension style
+                                                        );
+
+                                                        blockTableRecord.AppendEntity(dimtopheight);
+                                                        transaction.AddNewlyCreatedDBObject(dimtopheight, true);
+                                                    }
+
                                                     //Addrectangle(transaction, blockTableRecord, new Point3d(startX, panelheight + 600, 0), new Point3d(startX + width, panelheight + 600 + depth, 0));
-                                                    Point3d Bottomleft = new Point3d(startX,descPoint.Y + panelheight + 600, 0);
-                                                    Point3d Topright = new Point3d(startX + width,descPoint.Y + panelheight + 600 + depth, 0);
+                                                    
                                                     Addrectangle(transaction, blockTableRecord, Bottomleft, Topright);
                                                     Polyline door = Addrectangle(transaction, blockTableRecord, new Point3d(Bottomleft.X + 30, Bottomleft.Y - 20, 0), new Point3d(Topright.X - 30, Bottomleft.Y, 0), 10);
                                                     if (whichside == "rhs")
@@ -5418,17 +5592,17 @@ namespace CAD_AUTOMATION
                                                     {
                                                         DBText widthText = new DBText
                                                         {
-                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0),
-                                                            Height = 45,
+                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0),
+                                                            Height = 40,
                                                             TextString = $"{feedernumbercol}F",
                                                             ColorIndex = 4,
                                                             HorizontalMode = TextHorizontalMode.TextCenter,
                                                             VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0)
+                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0)
                                                         };
                                                         blockTableRecord.AppendEntity(widthText);
                                                         transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 100, 0), 70, 10);
+                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0), 45, 10);
                                                     }
 
                                                     if (cablechamberfound || (feederfound && rearcabling))
@@ -5436,6 +5610,23 @@ namespace CAD_AUTOMATION
                                                         // FOR GLAND PLATE
                                                         Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - 350, 0);
                                                         Point3d glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+
+                                                        if (maxdepth < 430)
+                                                        {
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth + 100, 0);
+                                                            glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+                                                        }
+                                                        // FOR GLAND PLATE
+                                                        Polyline gland = new Polyline(4);
+                                                        gland.AddVertexAt(0, new Point2d(glandTopright.X, glandTopright.Y), 0, 0, 0);
+                                                        gland.AddVertexAt(1, new Point2d(glandTopright.X, glandBottomleft.Y), 0, 0, 0);
+                                                        gland.AddVertexAt(2, new Point2d(((glandBottomleft.X + glandTopright.X) / 2) + 40, ((glandBottomleft.Y + glandTopright.Y) / 2) + 60), 0, 0, 0);
+                                                        gland.AddVertexAt(3, new Point2d(glandBottomleft.X, glandTopright.Y), 0, 0, 0);
+                                                        gland.Closed = true;
+                                                        //gland.ColorIndex = 10;
+                                                        blockTableRecord.AppendEntity(gland);
+                                                        transaction.AddNewlyCreatedDBObject(gland, true);
+
                                                         Polyline glandrec = Addrectangle(transaction, blockTableRecord, glandBottomleft, glandTopright);
 
                                                         double textX = (glandBottomleft.X + glandTopright.X) / 2;
@@ -5443,8 +5634,8 @@ namespace CAD_AUTOMATION
 
                                                         MText glandText = new MText
                                                         {
-                                                            Location = new Point3d(textX, textY, 0), // Corrected midpoint calculation
-                                                            Height = 35,
+                                                            Location = new Point3d(textX -5, textY -20, 0), // Corrected midpoint calculation
+                                                            Height = 30,
                                                             TextHeight = 30,
                                                             Width = 200,
                                                             Contents = "GLAND PLATE",
@@ -5457,9 +5648,9 @@ namespace CAD_AUTOMATION
                                                         Hatch hatch = new Hatch();
                                                         hatch.SetDatabaseDefaults();
 
-                                                        hatch.PatternScale = 8.0;
-                                                        hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                                                        hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 8);
+                                                        hatch.PatternScale = 2.5;
+                                                        hatch.SetHatchPattern(HatchPatternType.PreDefined, "DASH");
+                                                        hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
 
                                                         // Add hatch to drawing
                                                         blockTableRecord.AppendEntity(hatch);
@@ -5467,43 +5658,58 @@ namespace CAD_AUTOMATION
 
                                                         // Associate the hatch with the rectangle boundary
                                                         ObjectIdCollection boundaryIds = new ObjectIdCollection();
-                                                        boundaryIds.Add(glandrec.ObjectId);
+                                                        boundaryIds.Add(gland.ObjectId);
                                                         hatch.Associative = true;
                                                         hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
                                                         hatch.EvaluateHatch(false);
-                                                        
 
+
+                                                    }
+                                                    else if (vbbfound)
+                                                    {
+                                                        DBText feederText = new DBText
+                                                        {
+                                                            Position = new Point3d(((Bottomleft.X + Topright.X) / 2), (Bottomleft.Y + Topright.Y) / 2, 0),
+                                                            Height = 35,
+                                                            TextString = "V.B.C",
+                                                            ColorIndex = 4,
+                                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                            AlignmentPoint = new Point3d(((Bottomleft.X + Topright.X) / 2), (Bottomleft.Y + Topright.Y) / 2, 0),
+                                                            Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                                        };
+                                                        blockTableRecord.AppendEntity(feederText);
+                                                        transaction.AddNewlyCreatedDBObject(feederText, true);
                                                     }
                                                 }
                                                 else if(view == "BOTTOMVIEW")
                                                 {
-                                                    Point3d Bottomleft = new Point3d(startX, descPoint.Y - 600 - depth, 0);
-                                                    Point3d Topright = new Point3d(startX + width, descPoint.Y - 600, 0);
+                                                    Point3d Bottomleft = new Point3d(startX, descPoint.Y - 700 - depth, 0);
+                                                    Point3d Topright = new Point3d(startX + width, descPoint.Y - 700, 0);
+
+                                                    if(col == 1)
+                                                    {
+                                                        AlignedDimension dimtopheight = new AlignedDimension(
+                                                        new Point3d(Bottomleft.X, Bottomleft.Y, 0),
+                                                        new Point3d(Bottomleft.X, Topright.Y, 0),
+                                                        new Point3d(Bottomleft.X - 90, Bottomleft.Y, 0),
+                                                        "", // Dimension text (Auto-generated)
+                                                        db.Dimstyle // Use current dimension style
+                                                        );
+
+                                                        blockTableRecord.AppendEntity(dimtopheight);
+                                                        transaction.AddNewlyCreatedDBObject(dimtopheight, true);
+                                                    }
+
                                                     Addrectangle(transaction, blockTableRecord, Bottomleft, Topright);
-                                                    Polyline door = Addrectangle(transaction,blockTableRecord,new Point3d(Bottomleft.X + 30,Topright.Y,0),new Point3d(Topright.X - 30,Topright.Y+20,0),10);
+                                                    Polyline door = Addrectangle(transaction, blockTableRecord, new Point3d(Bottomleft.X + 30, Bottomleft.Y - 20, 0), new Point3d(Topright.X - 30, Bottomleft.Y, 0), 10);
                                                     if (whichside == "rhs")
                                                     {
-                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Topright.Y, 0));
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Topright.X - 30, Bottomleft.Y, 0));
                                                         door.TransformBy(rotationMatrix);
 
-                                                        Point3d startPoint = new Point3d (Bottomleft.X,Topright.Y,0);
-                                                        Point3d endPoint = door.GetPoint3dAt(0);
-                                                        Polyline bendPolyline = new Polyline();
-                                                        bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
-                                                        bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), 0.2, 0, 0); // Midpoint with bulge
-                                                        bendPolyline.AddVertexAt(2, new Point2d(startPoint.X, startPoint.Y), 0.2, 0, 0); // End point
-                                                        bendPolyline.ColorIndex = 2;
-
-                                                        blockTableRecord.AppendEntity(bendPolyline);
-                                                        transaction.AddNewlyCreatedDBObject(bendPolyline, true);
-                                                    }
-                                                    else if(whichside == "lhs")
-                                                    {
-                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(15 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Topright.Y, 0));
-                                                        door.TransformBy(rotationMatrix);
-
-                                                        Point3d startPoint = Topright;
-                                                        Point3d endPoint = door.GetPoint3dAt(1);
+                                                        Point3d startPoint = Bottomleft;
+                                                        Point3d endPoint = door.GetPoint3dAt(3);
                                                         Polyline bendPolyline = new Polyline();
                                                         bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
                                                         bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), -0.2, 0, 0); // Midpoint with bulge
@@ -5513,11 +5719,27 @@ namespace CAD_AUTOMATION
                                                         blockTableRecord.AppendEntity(bendPolyline);
                                                         transaction.AddNewlyCreatedDBObject(bendPolyline, true);
                                                     }
+                                                    else if(whichside == "lhs")
+                                                    {
+                                                        Matrix3d rotationMatrix = Matrix3d.Rotation(345 * (Math.PI / 180), Vector3d.ZAxis, new Point3d(Bottomleft.X + 30, Bottomleft.Y, 0));
+                                                        door.TransformBy(rotationMatrix);
+
+                                                        Point3d startPoint = new Point3d(Topright.X, Bottomleft.Y, 0);
+                                                        Point3d endPoint = door.GetPoint3dAt(2);
+                                                        Polyline bendPolyline = new Polyline();
+                                                        bendPolyline.AddVertexAt(0, new Point2d(endPoint.X, endPoint.Y), 0, 0, 0); // Start point
+                                                        bendPolyline.AddVertexAt(1, new Point2d(endPoint.X, endPoint.Y), 0.2, 0, 0); // Midpoint with bulge
+                                                        bendPolyline.AddVertexAt(2, new Point2d(startPoint.X, startPoint.Y), 0.2, 0, 0); // End point
+                                                        bendPolyline.ColorIndex = 2;
+
+                                                        blockTableRecord.AppendEntity(bendPolyline);
+                                                        transaction.AddNewlyCreatedDBObject(bendPolyline, true);
+                                                    }
                                                     Polyline doorline = new Polyline();
-                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Bottomleft.Y), 0, 0, 0);
-                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Bottomleft.Y - 20), 0, 0, 0);
-                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Bottomleft.Y - 20), 0, 0, 0);
-                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Bottomleft.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(0, new Point2d(Bottomleft.X + 17, Topright.Y), 0, 0, 0);
+                                                    doorline.AddVertexAt(1, new Point2d(Bottomleft.X + 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(2, new Point2d(Topright.X - 17, Topright.Y + 20), 0, 0, 0);
+                                                    doorline.AddVertexAt(3, new Point2d(Topright.X - 17, Topright.Y), 0, 0, 0);
 
                                                     blockTableRecord.AppendEntity(doorline);
                                                     transaction.AddNewlyCreatedDBObject(doorline, true);
@@ -5538,36 +5760,52 @@ namespace CAD_AUTOMATION
                                                     {
                                                         DBText widthText = new DBText
                                                         {
-                                                            Position = new Point3d((Bottomleft.X + Topright.X) /2, Topright.Y - 100, 0),
-                                                            Height = 45,
+                                                            Position = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0),
+                                                            Height = 40,
                                                             TextString = $"{feedernumbercol}F",
                                                             ColorIndex = 4,
                                                             HorizontalMode = TextHorizontalMode.TextCenter,
                                                             VerticalMode = TextVerticalMode.TextVerticalMid,
-                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0)
+                                                            AlignmentPoint = new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0)
                                                         };
                                                         blockTableRecord.AppendEntity(widthText);
                                                         transaction.AddNewlyCreatedDBObject(widthText, true);
-                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Topright.Y - 100, 0),70,10);
-                                                        
+                                                        DrawCircle(transaction, blockTableRecord, new Point3d((Bottomleft.X + Topright.X) / 2, Bottomleft.Y + 90, 0), 45, 10);
+
 
                                                     }
 
                                                     if (cablechamberfound || (feederfound && rearcabling))
                                                     {
-                                                        // FOR GLAND PLATE
-                                                        Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Bottomleft.Y + 50, 0);
-                                                        Point3d glandTopright = new Point3d(Topright.X - 50, Bottomleft.Y + 350, 0);
+                                                        Point3d glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - 350, 0);
+                                                        Point3d glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+
+                                                        if(maxdepth < 430)
+                                                        {
+                                                            glandBottomleft = new Point3d(Bottomleft.X + 50, Topright.Y - maxdepth + 100, 0);
+                                                            glandTopright = new Point3d(Topright.X - 50, Topright.Y - 50, 0);
+                                                        }
+
+                                                        Polyline gland = new Polyline(4);
+                                                        gland.AddVertexAt(0, new Point2d(glandTopright.X, glandTopright.Y), 0, 0, 0);
+                                                        gland.AddVertexAt(1, new Point2d(glandTopright.X, glandBottomleft.Y), 0, 0, 0);
+                                                        gland.AddVertexAt(2, new Point2d(((glandBottomleft.X + glandTopright.X) / 2) + 40, ((glandBottomleft.Y + glandTopright.Y) / 2) + 60), 0, 0, 0);
+                                                        gland.AddVertexAt(3, new Point2d(glandBottomleft.X, glandTopright.Y), 0, 0, 0);
+                                                        gland.Closed = true;
+                                                        //gland.ColorIndex = 10;
+                                                        blockTableRecord.AppendEntity(gland);
+                                                        transaction.AddNewlyCreatedDBObject(gland, true);
+
                                                         Polyline glandrec = Addrectangle(transaction, blockTableRecord, glandBottomleft, glandTopright);
-                                                        
+
                                                         double textX = (glandBottomleft.X + glandTopright.X) / 2;
                                                         double textY = (glandBottomleft.Y + glandTopright.Y) / 2;
 
                                                         MText glandText = new MText
                                                         {
-                                                            Location = new Point3d(textX, textY, 0), // Corrected midpoint calculation
-                                                            Height = 35,
-                                                            TextHeight = 30,
+                                                            Location = new Point3d(textX - 5, textY - 20, 0), // Corrected midpoint calculation
+                                                            Height = 30,
+                                                            TextHeight = 25,
                                                             Width = 200,
                                                             Contents = "GLAND PLATE",
                                                             Attachment = AttachmentPoint.MiddleCenter // Better alignment
@@ -5579,9 +5817,9 @@ namespace CAD_AUTOMATION
                                                         Hatch hatch = new Hatch();
                                                         hatch.SetDatabaseDefaults();
 
-                                                        hatch.PatternScale = 8.0;
-                                                        hatch.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
-                                                        hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 8);
+                                                        hatch.PatternScale = 2.5;
+                                                        hatch.SetHatchPattern(HatchPatternType.PreDefined, "DASH");
+                                                        hatch.Color = Color.FromColorIndex(ColorMethod.ByAci, 4);
 
                                                         // Add hatch to drawing
                                                         blockTableRecord.AppendEntity(hatch);
@@ -5589,11 +5827,27 @@ namespace CAD_AUTOMATION
 
                                                         // Associate the hatch with the rectangle boundary
                                                         ObjectIdCollection boundaryIds = new ObjectIdCollection();
-                                                        boundaryIds.Add(glandrec.ObjectId);
+                                                        boundaryIds.Add(gland.ObjectId);
                                                         hatch.Associative = true;
                                                         hatch.AppendLoop(HatchLoopTypes.External, boundaryIds);
                                                         hatch.EvaluateHatch(false);
 
+                                                    }
+                                                    else if (vbbfound)
+                                                    {
+                                                        DBText feederText = new DBText
+                                                        {
+                                                            Position = new Point3d(((Bottomleft.X + Topright.X) / 2), (Bottomleft.Y + Topright.Y) / 2, 0),
+                                                            Height = 35,
+                                                            TextString = "V.B.C",
+                                                            ColorIndex = 4,
+                                                            HorizontalMode = TextHorizontalMode.TextCenter,
+                                                            VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                            AlignmentPoint = new Point3d(((Bottomleft.X + Topright.X) / 2), (Bottomleft.Y + Topright.Y) / 2, 0),
+                                                            Rotation = Math.PI / 2 // Rotate 90 degrees (upwards)
+                                                        };
+                                                        blockTableRecord.AppendEntity(feederText);
+                                                        transaction.AddNewlyCreatedDBObject(feederText, true);
                                                     }
 
 
@@ -5604,12 +5858,14 @@ namespace CAD_AUTOMATION
                                             }
                                             else
                                             {
+                                                transaction.Commit();
                                                 MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                                 return;
                                             }
                                         }
                                         else
                                         {
+                                            transaction.Commit();
                                             MessageBox.Show($"\nInvalid cell format in {cell.Address}. Expected format: FEEDER ID # WIDTH");
                                             return;
                                         }
@@ -5620,12 +5876,14 @@ namespace CAD_AUTOMATION
 
                                 if (height == 0)
                                 {
+                                    transaction.Commit();
                                     MessageBox.Show($"\nInvalid or missing height value in cell: {cell.Address}.");
                                     return;
                                 }
 
                                 if (width == 0)
                                 {
+                                    transaction.Commit();
                                     MessageBox.Show($"\nInvalid or missing width value in cell: {cell.Address}.");
                                     return;
                                 }
@@ -5694,6 +5952,12 @@ namespace CAD_AUTOMATION
                                     else if (feederidlow == "hbb" || feederidlow == "bb" || feederidlow == "vbb")
                                     {
                                         feedername = "BUSBAR CHAMBER";
+                                        if (feederidlow == "vbb")
+                                        {
+                                            vbbfound = true;
+                                        }
+
+                   
                                     }
                                     else if (feederidlow == "v1")
                                     {
@@ -5781,7 +6045,18 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "MCCB";
@@ -5807,11 +6082,22 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "ACB";
-                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                        InsertBlock(db, sourceDb, transaction, blockTableRecord, "ACB_GA", new Point3d((bottomLeft.X + topRight.X) / 2, ((bottomLeft.Y + topRight.Y) / 2) + 10, 0), 1.0);
                                     }
                                     else if (feedername.Contains("rccb") || feedername.Contains("rcbo"))
                                     {
@@ -5824,7 +6110,18 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "RCBO";
@@ -5845,73 +6142,240 @@ namespace CAD_AUTOMATION
                                         Match poleTypeMatch = Regex.Match(feedername, @"[SDTF1234]P[N]?", RegexOptions.IgnoreCase);
                                         if (poleTypeMatch.Success)
                                         {
-                                            feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            if (poleTypeMatch.Value.ToUpper() == "TPN")
+                                            {
+                                                feedertext += " TP+N";
+                                            }
+                                            else if (poleTypeMatch.Value.ToUpper() == "4P")
+                                            {
+                                                feedertext += " FP";
+                                            }
+                                            else
+                                            {
+                                                feedertext += " " + poleTypeMatch.Value.ToUpper();
+                                            }
                                         }
 
                                         feedertext += " " + "MCB";
 
                                         if (poleTypeMatch.Value.ToUpper() == "SP" || poleTypeMatch.Value.ToUpper() == "1P")
                                         {
-                                            if (feederidlow.Contains("x2"))
+                                            int multiplier = 1; // Default to 1 if no multiplier is found
+                                            bool rotateToVertical = false; // Flag to track if rotation is needed
+
+                                            // Single regex to extract multiplier (xN) and detect 'v' at the end
+                                            Match match = Regex.Match(feederidlow, @"x(\d+)(v)?", RegexOptions.IgnoreCase);
+
+                                            if (match.Success)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                multiplier = int.Parse(match.Groups[1].Value); // Extract multiplier
+                                                rotateToVertical = match.Groups[2].Success;   // 'v' exists if Group[2] is matched
                                             }
-                                            else if (feederidlow.Contains("x3"))
+
+                                            // Base position (center)
+                                            Point3d basePosition = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0);
+
+                                            // Spacing between blocks
+                                            double spacing = 22.5;
+
+                                            // List to store inserted block references for later rotation
+                                            List<BlockReference> insertedBlocks = new List<BlockReference>();
+
+                                            for (int i = 0; i < multiplier; i++)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Calculate horizontal position for centering
+                                                double offset = (multiplier == 1) ? 0 : ((i - (multiplier - 1) / 2.0) * spacing);
+
+                                                Point3d position = new Point3d(basePosition.X + offset, basePosition.Y, 0);
+
+                                                // Insert the "SP_MCB" block
+                                                BlockReference blockRef = InsertBlock(db, sourceDb, transaction, blockTableRecord, "SP_MCB", position, 1.0);
+
+                                                if (blockRef != null)
+                                                {
+                                                    insertedBlocks.Add(blockRef);
+                                                }
                                             }
-                                            else if (feederidlow.Contains("x4"))
+
+                                            // If 'v' is found, rotate the entire group around its center
+                                            if (rotateToVertical && insertedBlocks.Count > 0)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
-                                            }
-                                            else
-                                            {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "SP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Compute the center of all blocks
+                                                double minX = insertedBlocks.Min(b => b.Position.X);
+                                                double maxX = insertedBlocks.Max(b => b.Position.X);
+                                                Point3d rotationCenter = new Point3d((minX + maxX) / 2, basePosition.Y, 0);
+
+                                                foreach (BlockReference block in insertedBlocks)
+                                                {
+                                                    // Rotate each block around the group's center
+                                                    Matrix3d rotationMatrix = Matrix3d.Rotation(Math.PI / 2, Vector3d.ZAxis, rotationCenter);
+                                                    block.TransformBy(rotationMatrix);
+                                                }
                                             }
                                         }
                                         else if (poleTypeMatch.Value.ToUpper() == "DP" || poleTypeMatch.Value.ToUpper() == "2P")
                                         {
-                                            if (feederidlow.Contains("x2"))
+                                            int multiplier = 1; // Default to 1 if no multiplier is found
+                                            bool rotateToVertical = false; // Flag to track if rotation is needed
+
+                                            // Single regex to extract multiplier (xN) and detect 'v' at the end
+                                            Match match = Regex.Match(feederidlow, @"x(\d+)(v)?", RegexOptions.IgnoreCase);
+
+                                            if (match.Success)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                multiplier = int.Parse(match.Groups[1].Value); // Extract multiplier
+                                                rotateToVertical = match.Groups[2].Success;   // 'v' exists if Group[2] is matched
                                             }
-                                            else if (feederidlow.Contains("x3"))
+
+                                            // Base position (center)
+                                            Point3d basePosition = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0);
+
+                                            // Spacing between blocks
+                                            double spacing = 40;
+
+                                            // List to store inserted block references for later rotation
+                                            List<BlockReference> insertedBlocks = new List<BlockReference>();
+
+                                            for (int i = 0; i < multiplier; i++)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Calculate horizontal position for centering
+                                                double offset = (multiplier == 1) ? 0 : ((i - (multiplier - 1) / 2.0) * spacing);
+
+                                                Point3d position = new Point3d(basePosition.X + offset, basePosition.Y, 0);
+
+                                                // Insert the "SP_MCB" block
+                                                BlockReference blockRef = InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", position, 1.0);
+
+                                                if (blockRef != null)
+                                                {
+                                                    insertedBlocks.Add(blockRef);
+                                                }
                                             }
-                                            else if (feederidlow.Contains("x4"))
+
+                                            // If 'v' is found, rotate the entire group around its center
+                                            if (rotateToVertical && insertedBlocks.Count > 0)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4X_DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
-                                            }
-                                            else
-                                            {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "DP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Compute the center of all blocks
+                                                double minX = insertedBlocks.Min(b => b.Position.X);
+                                                double maxX = insertedBlocks.Max(b => b.Position.X);
+                                                Point3d rotationCenter = new Point3d((minX + maxX) / 2, basePosition.Y, 0);
+
+                                                foreach (BlockReference block in insertedBlocks)
+                                                {
+                                                    // Rotate each block around the group's center
+                                                    Matrix3d rotationMatrix = Matrix3d.Rotation(Math.PI / 2, Vector3d.ZAxis, rotationCenter);
+                                                    block.TransformBy(rotationMatrix);
+                                                }
                                             }
                                         }
                                         else if (poleTypeMatch.Value.ToUpper() == "TP" || poleTypeMatch.Value.ToUpper() == "3P")
                                         {
-                                            if (feederidlow.Contains("x2"))
+                                            int multiplier = 1; // Default to 1 if no multiplier is found
+                                            bool rotateToVertical = false; // Flag to track if rotation is needed
+
+                                            // Single regex to extract multiplier (xN) and detect 'v' at the end
+                                            Match match = Regex.Match(feederidlow, @"x(\d+)(v)?", RegexOptions.IgnoreCase);
+
+                                            if (match.Success)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                multiplier = int.Parse(match.Groups[1].Value); // Extract multiplier
+                                                rotateToVertical = match.Groups[2].Success;   // 'v' exists if Group[2] is matched
                                             }
-                                            else if (feederidlow.Contains("x3"))
+
+                                            // Base position (center)
+                                            Point3d basePosition = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0);
+
+                                            // Spacing between blocks
+                                            double spacing = 57.5;
+
+                                            // List to store inserted block references for later rotation
+                                            List<BlockReference> insertedBlocks = new List<BlockReference>();
+
+                                            for (int i = 0; i < multiplier; i++)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "3X_TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Calculate horizontal position for centering
+                                                double offset = (multiplier == 1) ? 0 : ((i - (multiplier - 1) / 2.0) * spacing);
+
+                                                Point3d position = new Point3d(basePosition.X + offset, basePosition.Y, 0);
+
+                                                // Insert the "SP_MCB" block
+                                                BlockReference blockRef = InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", position, 1.0);
+
+                                                if (blockRef != null)
+                                                {
+                                                    insertedBlocks.Add(blockRef);
+                                                }
                                             }
-                                            else
+
+                                            // If 'v' is found, rotate the entire group around its center
+                                            if (rotateToVertical && insertedBlocks.Count > 0)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "TP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Compute the center of all blocks
+                                                double minX = insertedBlocks.Min(b => b.Position.X);
+                                                double maxX = insertedBlocks.Max(b => b.Position.X);
+                                                Point3d rotationCenter = new Point3d((minX + maxX) / 2, basePosition.Y, 0);
+
+                                                foreach (BlockReference block in insertedBlocks)
+                                                {
+                                                    // Rotate each block around the group's center
+                                                    Matrix3d rotationMatrix = Matrix3d.Rotation(Math.PI / 2, Vector3d.ZAxis, rotationCenter);
+                                                    block.TransformBy(rotationMatrix);
+                                                }
                                             }
                                         }
                                         else if (poleTypeMatch.Value.ToUpper() == "4P" || poleTypeMatch.Value.ToUpper() == "FP")
                                         {
-                                            if (feederidlow.Contains("x2"))
+                                            int multiplier = 1; // Default to 1 if no multiplier is found
+                                            bool rotateToVertical = false; // Flag to track if rotation is needed
+
+                                            // Single regex to extract multiplier (xN) and detect 'v' at the end
+                                            Match match = Regex.Match(feederidlow, @"x(\d+)(v)?", RegexOptions.IgnoreCase);
+
+                                            if (match.Success)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "2X_FP_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                multiplier = int.Parse(match.Groups[1].Value); // Extract multiplier
+                                                rotateToVertical = match.Groups[2].Success;   // 'v' exists if Group[2] is matched
                                             }
-                                            else
+
+                                            // Base position (center)
+                                            Point3d basePosition = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0);
+
+                                            // Spacing between blocks
+                                            double spacing = 75;
+
+                                            // List to store inserted block references for later rotation
+                                            List<BlockReference> insertedBlocks = new List<BlockReference>();
+
+                                            for (int i = 0; i < multiplier; i++)
                                             {
-                                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "4P_MCB", new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                                // Calculate horizontal position for centering
+                                                double offset = (multiplier == 1) ? 0 : ((i - (multiplier - 1) / 2.0) * spacing);
+
+                                                Point3d position = new Point3d(basePosition.X + offset, basePosition.Y, 0);
+
+                                                // Insert the "SP_MCB" block
+                                                BlockReference blockRef = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FP_MCB", position, 1.0);
+
+                                                if (blockRef != null)
+                                                {
+                                                    insertedBlocks.Add(blockRef);
+                                                }
+                                            }
+
+                                            // If 'v' is found, rotate the entire group around its center
+                                            if (rotateToVertical && insertedBlocks.Count > 0)
+                                            {
+                                                // Compute the center of all blocks
+                                                double minX = insertedBlocks.Min(b => b.Position.X);
+                                                double maxX = insertedBlocks.Max(b => b.Position.X);
+                                                Point3d rotationCenter = new Point3d((minX + maxX) / 2, basePosition.Y, 0);
+
+                                                foreach (BlockReference block in insertedBlocks)
+                                                {
+                                                    // Rotate each block around the group's center
+                                                    Matrix3d rotationMatrix = Matrix3d.Rotation(Math.PI / 2, Vector3d.ZAxis, rotationCenter);
+                                                    block.TransformBy(rotationMatrix);
+                                                }
                                             }
                                         }
                                     }
@@ -5959,7 +6423,7 @@ namespace CAD_AUTOMATION
                                                 Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 20, 0),
                                                 Height = 23,
                                                 TextHeight = 25,
-                                                Width = width - 200,
+                                                Width = width - ((height <= 240) ? 167 : 200),
                                                 Contents = feedertext,
                                                 Attachment = AttachmentPoint.BottomCenter
                                             };
@@ -5970,8 +6434,8 @@ namespace CAD_AUTOMATION
                                             if (!feederidlow.Contains("`"))
                                             {
 
-                                                Point3d meterpos = new Point3d(topRight.X - 90, topRight.Y - 80, 0);
-                                                Point3d lamppos = new Point3d(topRight.X - 90, topRight.Y - 55, 0);
+                                                Point3d meterpos = new Point3d(topRight.X - 75, topRight.Y - 80, 0);
+                                                Point3d lamppos = new Point3d(topRight.X - 75, topRight.Y - 42, 0);
 
                                                 if (feedername.Contains("mfm"))
                                                 {
@@ -6081,7 +6545,7 @@ namespace CAD_AUTOMATION
                                             DBText feederText = new DBText
                                             {
                                                 Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                                Height = 40,
+                                                Height = 35,
                                                 TextString = feedername,
                                                 ColorIndex = 4,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
@@ -6105,6 +6569,23 @@ namespace CAD_AUTOMATION
                                             };
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                            feederfound = true;
+
+                                            feederaddress.Add(new Point3d(topRight.X - 55, bottomLeft.Y + 35, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(topRight.X - 55, bottomLeft.Y + 70, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(topRight.X - 55, bottomLeft.Y + 70, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
 
                                             if (height > 600)
                                             {
@@ -6149,7 +6630,7 @@ namespace CAD_AUTOMATION
                                                 Location = new Point3d((bottomLeft.X + topRight.X) / 2, bottomLeft.Y + 20, 0),
                                                 Height = 23,
                                                 TextHeight = 25,
-                                                Width = width - 200,
+                                                Width = width - ((height <= 240) ? 167 : 200),
                                                 Contents = feedertext,
                                                 Attachment = AttachmentPoint.BottomCenter
                                             };
@@ -6160,8 +6641,8 @@ namespace CAD_AUTOMATION
                                             {
 
 
-                                                Point3d meterpos = new Point3d(bottomLeft.X + 90, topRight.Y - 80, 0);
-                                                Point3d lamppos = new Point3d(bottomLeft.X + 90, topRight.Y - 55, 0);
+                                                Point3d meterpos = new Point3d(bottomLeft.X + 75, topRight.Y - 80, 0);
+                                                Point3d lamppos = new Point3d(bottomLeft.X + 75, topRight.Y - 42, 0);
                                                 if (feedername.Contains("mfm"))
                                                 {
                                                     InsertBlock(db, sourceDb, transaction, blockTableRecord, "MFM", meterpos, 1.0);
@@ -6270,7 +6751,7 @@ namespace CAD_AUTOMATION
                                             DBText feederText = new DBText
                                             {
                                                 Position = new Point3d((bottomLeft.X + topRight.X) / 2, (bottomLeft.Y + topRight.Y) / 2, 0),
-                                                Height = 40,
+                                                Height = 35,
                                                 TextString = feedername,
                                                 ColorIndex = 4,
                                                 HorizontalMode = TextHorizontalMode.TextCenter,
@@ -6295,6 +6776,22 @@ namespace CAD_AUTOMATION
                                             blockTableRecord.AppendEntity(feederText);
                                             transaction.AddNewlyCreatedDBObject(feederText, true);
 
+                                            feederfound = true;
+                                            feederaddress.Add(new Point3d(bottomLeft.X + 55, bottomLeft.Y + 35, 0));
+
+                                            DBText heightText = new DBText
+                                            {
+                                                Position = new Point3d(bottomLeft.X + 55, bottomLeft.Y + 70, 0),
+                                                Height = 23,
+                                                TextString = $"M{(height / 100).ToString("0.0")}",
+                                                ColorIndex = 3,
+                                                HorizontalMode = TextHorizontalMode.TextCenter,
+                                                VerticalMode = TextVerticalMode.TextVerticalMid,
+                                                AlignmentPoint = new Point3d(bottomLeft.X + 55, bottomLeft.Y + 70, 0)
+                                            };
+                                            blockTableRecord.AppendEntity(heightText);
+                                            transaction.AddNewlyCreatedDBObject(heightText, true);
+
                                             if (height > 600)
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, topRight.Y - 60, 0), 1.0);
@@ -6309,6 +6806,81 @@ namespace CAD_AUTOMATION
                                             else
                                             {
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "CAM_LOCK", new Point3d(topRight.X - 35, (bottomLeft.Y + topRight.Y) / 2, 0), 1.0);
+                                            }
+
+                                        }
+                                    }
+
+                                    if (feederfound)
+                                    {
+                                        if (!sidedoor)
+                                        {
+                                            if (feedernumbercol == 1)
+                                            {
+                                                string linetypeName = "HIDDEN";
+                                                using (LinetypeTable linetypeTable = (LinetypeTable)transaction.GetObject(db.LinetypeTableId, OpenMode.ForRead))
+                                                {
+                                                    if (!linetypeTable.Has(linetypeName))
+                                                    {
+                                                        db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
+                                                    }
+                                                }
+                                                double depth1 = 0;
+                                                if (maxdepth < 1)
+                                                {
+                                                    if (rearcabling)
+                                                    {
+                                                        depth1 = 600;
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = 440;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    depth1 = maxdepth;
+                                                }
+                                                Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
+                                                partitionline.ColorIndex = 150;
+                                                partitionline.Linetype = linetypeName;
+                                                blockTableRecord.AppendEntity(partitionline);
+                                                transaction.AddNewlyCreatedDBObject(partitionline, true);
+
+                                                Polyline doorline = new Polyline(4);
+                                                doorline.AddVertexAt(0, new Point2d(descPoint.X - 800, bottomLeft.Y + 10), 0, 0, 0);
+                                                doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
+                                                doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
+                                                doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
+                                                //doorline.ColorIndex = 10;
+                                                blockTableRecord.AppendEntity(doorline);
+                                                transaction.AddNewlyCreatedDBObject(doorline, true);
+                                                double offsetDistance2 = -2; // Negative value for inside offset
+                                                DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                                foreach (Entity offsetEntity in offsetCurves2)
+                                                {
+                                                    Polyline offsetPolyline = offsetEntity as Polyline;
+                                                    if (offsetPolyline != null)
+                                                    {
+                                                        blockTableRecord.AppendEntity(offsetPolyline);
+                                                        transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                                    }
+                                                }
+
+                                                AlignedDimension dimbase = new AlignedDimension(
+                                                new Point3d(descPoint.X, bottomLeft.Y, 0),
+                                                new Point3d(descPoint.X, topRight.Y, 0),
+                                                new Point3d(descPoint.X - 120, descPoint.Y, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                                blockTableRecord.AppendEntity(dimbase);
+                                                transaction.AddNewlyCreatedDBObject(dimbase, true);
+
+
+
                                             }
 
                                         }
@@ -6345,7 +6917,75 @@ namespace CAD_AUTOMATION
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "DANGER", new Point3d(topRight.X - spacing, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
                                                 InsertBlock(db, sourceDb, transaction, blockTableRecord, "LOUVER", new Point3d(topRight.X - 130, ((bottomLeft.Y + topRight.Y) / 2), 0), 1.0);
                                             }
-                                            
+
+                                            if (!sidedoor)
+                                            {
+                                                if (feedernumbercol == 1)
+                                                {
+                                                    string linetypeName = "HIDDEN";
+                                                    using (LinetypeTable linetypeTable = (LinetypeTable)transaction.GetObject(db.LinetypeTableId, OpenMode.ForRead))
+                                                    {
+                                                        if (!linetypeTable.Has(linetypeName))
+                                                        {
+                                                            db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
+                                                        }
+                                                    }
+                                                    double depth1 = 0;
+                                                    if (maxdepth < 1)
+                                                    {
+                                                        if (rearcabling)
+                                                        {
+                                                            depth1 = 600;
+                                                        }
+                                                        else
+                                                        {
+                                                            depth1 = 440;
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = maxdepth;
+                                                    }
+                                                    Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
+                                                    partitionline.ColorIndex = 150;
+                                                    partitionline.Linetype = linetypeName;
+                                                    blockTableRecord.AppendEntity(partitionline);
+                                                    transaction.AddNewlyCreatedDBObject(partitionline, true);
+
+                                                    Polyline doorline = new Polyline(4);
+                                                    doorline.AddVertexAt(0, new Point2d(descPoint.X - 800, bottomLeft.Y + 10), 0, 0, 0);
+                                                    doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
+                                                    doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
+                                                    doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
+                                                    //doorline.ColorIndex = 10;
+                                                    blockTableRecord.AppendEntity(doorline);
+                                                    transaction.AddNewlyCreatedDBObject(doorline, true);
+                                                    double offsetDistance2 = -2; // Negative value for inside offset
+                                                    DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                                    foreach (Entity offsetEntity in offsetCurves2)
+                                                    {
+                                                        Polyline offsetPolyline = offsetEntity as Polyline;
+                                                        if (offsetPolyline != null)
+                                                        {
+                                                            blockTableRecord.AppendEntity(offsetPolyline);
+                                                            transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                                        }
+                                                    }
+                                                    AlignedDimension dimbase = new AlignedDimension(
+                                                    new Point3d(descPoint.X, bottomLeft.Y, 0),
+                                                    new Point3d(descPoint.X, topRight.Y, 0),
+                                                    new Point3d(descPoint.X - 120, descPoint.Y, 0),
+                                                    "", // Dimension text (Auto-generated)
+                                                    db.Dimstyle // Use current dimension style
+                                                    );
+
+                                                    blockTableRecord.AppendEntity(dimbase);
+                                                    transaction.AddNewlyCreatedDBObject(dimbase, true);
+                                                }
+
+                                            }
+
                                         }
                                         else
                                         {
@@ -6386,6 +7026,75 @@ namespace CAD_AUTOMATION
                                         };
                                         blockTableRecord.AppendEntity(feederText);
                                         transaction.AddNewlyCreatedDBObject(feederText, true);
+
+                                        if (!sidedoor)
+                                        {
+                                            if (feedernumbercol == 1)
+                                            {
+                                                string linetypeName = "HIDDEN";
+                                                using (LinetypeTable linetypeTable = (LinetypeTable)transaction.GetObject(db.LinetypeTableId, OpenMode.ForRead))
+                                                {
+                                                    if (!linetypeTable.Has(linetypeName))
+                                                    {
+                                                        db.LoadLineTypeFile(linetypeName, "acad.lin"); // Load from AutoCAD's linetype file
+                                                    }
+                                                }
+                                                double depth1 = 0;
+                                                if (maxdepth < 1)
+                                                {
+                                                    if (rearcabling)
+                                                    {
+                                                        depth1 = 600;
+                                                    }
+                                                    else
+                                                    {
+                                                        depth1 = 440;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    depth1 = maxdepth;
+                                                }
+                                                Line partitionline = new Line(new Point3d(descPoint.X - 800, bottomLeft.Y, 0), new Point3d(descPoint.X - 800 - depth1, bottomLeft.Y, 0));
+                                                partitionline.ColorIndex = 150;
+                                                partitionline.Linetype = linetypeName;
+                                                blockTableRecord.AppendEntity(partitionline);
+                                                transaction.AddNewlyCreatedDBObject(partitionline, true);
+
+                                                Polyline doorline = new Polyline(4);
+                                                doorline.AddVertexAt(0, new Point2d(descPoint.X - 800, bottomLeft.Y + 10), 0, 0, 0);
+                                                doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 + 20, bottomLeft.Y + 10), 0, 0, 0);
+                                                doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 + 20, topRight.Y - 10), 0, 0, 0);
+                                                doorline.AddVertexAt(3, new Point2d(descPoint.X - 800, topRight.Y - 10), 0, 0, 0);
+                                                //doorline.ColorIndex = 10;
+                                                blockTableRecord.AppendEntity(doorline);
+                                                transaction.AddNewlyCreatedDBObject(doorline, true);
+                                                double offsetDistance2 = -2; // Negative value for inside offset
+                                                DBObjectCollection offsetCurves2 = doorline.GetOffsetCurves(offsetDistance2);
+
+                                                foreach (Entity offsetEntity in offsetCurves2)
+                                                {
+                                                    Polyline offsetPolyline = offsetEntity as Polyline;
+                                                    if (offsetPolyline != null)
+                                                    {
+                                                        blockTableRecord.AppendEntity(offsetPolyline);
+                                                        transaction.AddNewlyCreatedDBObject(offsetPolyline, true);
+                                                    }
+                                                }
+                                                AlignedDimension dimbase = new AlignedDimension(
+                                                new Point3d(descPoint.X, bottomLeft.Y, 0),
+                                                new Point3d(descPoint.X, topRight.Y, 0),
+                                                new Point3d(descPoint.X - 120, descPoint.Y, 0),
+                                                "", // Dimension text (Auto-generated)
+                                                db.Dimstyle // Use current dimension style
+                                                );
+
+                                                blockTableRecord.AppendEntity(dimbase);
+                                                transaction.AddNewlyCreatedDBObject(dimbase, true);
+                                            }
+
+                                        }
+
                                     }
                                     
 
@@ -6692,6 +7401,7 @@ namespace CAD_AUTOMATION
 
                             if (feederfound)
                             {
+                                sidedoor = true;
                                 int feedernumberrow = 1;
                                 for (int i = feederaddress.Count - 1; i >= 0; i--)
                                 {
@@ -6711,6 +7421,13 @@ namespace CAD_AUTOMATION
                                     feedernumberrow++;
                                 }
                                 feedernumbercol++;
+                            }
+                            else
+                            {
+                                if (feederheights.Count > 0)
+                                {
+                                    feederheights.RemoveAt(feederheights.Count - 1);
+                                }
                             }
 
                             if (col == 1)
@@ -6746,7 +7463,7 @@ namespace CAD_AUTOMATION
                                     AlignedDimension dimbase = new AlignedDimension(
                                                 new Point3d(descPoint.X, descPoint.Y, 0),
                                                 new Point3d(descPoint.X, descPoint.Y - baseheight, 0),
-                                                new Point3d(descPoint.X - 150, descPoint.Y, 0),
+                                                new Point3d(descPoint.X - 120, descPoint.Y, 0),
                                                 "", // Dimension text (Auto-generated)
                                                 db.Dimstyle // Use current dimension style
                                                 );
@@ -6783,7 +7500,7 @@ namespace CAD_AUTOMATION
                                 AlignedDimension dimheight = new AlignedDimension(
                                                 new Point3d(descPoint.X, descPoint.Y, 0),
                                                 new Point3d(descPoint.X, descPoint.Y + panelheight, 0),
-                                                new Point3d(descPoint.X - 150, descPoint.Y + panelheight, 0),
+                                                new Point3d(descPoint.X - 220, descPoint.Y + panelheight, 0),
                                                 "", // Dimension text (Auto-generated)
                                                 db.Dimstyle // Use current dimension style
                                                 );
@@ -6821,10 +7538,10 @@ namespace CAD_AUTOMATION
                                 }
 
                                 Polyline doorline = new Polyline();
-                                doorline.AddVertexAt(0, new Point2d(sidetopright.X, sidebottomleft.Y + 20), 0, 0, 0);
-                                doorline.AddVertexAt(1, new Point2d(sidetopright.X + 20, sidebottomleft.Y + 20), 0, 0, 0);
-                                doorline.AddVertexAt(2, new Point2d(sidetopright.X + 20, sidetopright.Y - 20), 0, 0, 0);
-                                doorline.AddVertexAt(3, new Point2d(sidetopright.X, sidetopright.Y - 20), 0, 0, 0);
+                                doorline.AddVertexAt(0, new Point2d(descPoint.X - 800 - maxdepth, descPoint.Y + 10), 0, 0, 0);
+                                doorline.AddVertexAt(1, new Point2d(descPoint.X - 800 - 20 - maxdepth, descPoint.Y + 10), 0, 0, 0);
+                                doorline.AddVertexAt(2, new Point2d(descPoint.X - 800 - 20 - maxdepth, descPoint.Y + panelheight - 10), 0, 0, 0);
+                                doorline.AddVertexAt(3, new Point2d(descPoint.X - 800 - maxdepth, descPoint.Y + panelheight - 10), 0, 0, 0);
 
                                 blockTableRecord.AppendEntity(doorline);
                                 transaction.AddNewlyCreatedDBObject(doorline, true);
@@ -6841,7 +7558,7 @@ namespace CAD_AUTOMATION
                                     }
                                 }
                                 AlignedDimension dimsideheight = new AlignedDimension(
-                                                new Point3d(sidebottomleft.X, sidebottomleft.Y, 0),
+                                                new Point3d(sidebottomleft.X, sidebottomleft.Y - baseheight, 0),
                                                 new Point3d(sidebottomleft.X, sidetopright.Y, 0),
                                                 new Point3d(sidebottomleft.X - 150, sidetopright.Y, 0),
                                                 "", // Dimension text (Auto-generated)
@@ -6862,12 +7579,103 @@ namespace CAD_AUTOMATION
                                 blockTableRecord.AppendEntity(dimdepth);
                                 transaction.AddNewlyCreatedDBObject(dimdepth, true);
 
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "FLOOR", new Point3d(descPoint.X - 1150 - maxdepth, descPoint.Y  - baseheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "FLOOR", new Point3d(descPoint.X - 450, descPoint.Y - baseheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "FLOOR", new Point3d(shippingrigthX + 450, descPoint.Y  - baseheight, 0), 1.0);
+                                InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(descPoint.X - 500, descPoint.Y + (panelheight / 2), 0), 1.0);
+
+                                MText frontviewText = new MText
+                                {
+                                    Location = new Point3d((descPoint.X + shippingrigthX) / 2, descPoint.Y - 270, 0),
+                                    Height = 55,
+                                    TextHeight = 55,
+                                    Contents = @"\LFRONT VIEW",  // "\L" applies underline
+                                    Attachment = AttachmentPoint.MiddleCenter
+                                };
+                                blockTableRecord.AppendEntity(frontviewText);
+                                transaction.AddNewlyCreatedDBObject(frontviewText, true);
+
+                                MText sideviewText = new MText
+                                {
+                                    Location = new Point3d(descPoint.X - 800 - (maxdepth / 2), descPoint.Y - 230, 0),
+                                    Height = 55,
+                                    TextHeight = 55,
+                                    Contents = @"\LSIDE VIEW",  // "\L" applies underline
+                                    Attachment = AttachmentPoint.MiddleCenter
+                                };
+                                blockTableRecord.AppendEntity(sideviewText);
+                                transaction.AddNewlyCreatedDBObject(sideviewText, true);
+
+                                if (view == "TOPVIEW")
+                                {
+                                    MText topviewText = new MText
+                                    {
+                                        Location = new Point3d((descPoint.X + shippingrigthX) / 2, descPoint.Y + panelheight + 600, 0),
+                                        Height = 55,
+                                        TextHeight = 55,
+                                        Contents = @"\LTOP VIEW",  // "\L" applies underline
+                                        Attachment = AttachmentPoint.MiddleCenter
+                                    };
+                                    blockTableRecord.AppendEntity(topviewText);
+                                    transaction.AddNewlyCreatedDBObject(topviewText, true);
+
+                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y + panelheight + 550, 0), 1.0);
+                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y + panelheight + 550, 0), 1.0);
+                                    toptext1.Rotation = -Math.PI / 2;
+                                    toptext2.Rotation = -Math.PI / 2;
+                                }
+                                else if (view == "BOTTOMVIEW")
+                                {
+                                    MText topviewText = new MText
+                                    {
+                                        Location = new Point3d((descPoint.X + shippingrigthX) / 2, descPoint.Y - maxdepth - 950, 0),
+                                        Height = 55,
+                                        TextHeight = 55,
+                                        Contents = @"\LBOTTOM VIEW",  // "\L" applies underline
+                                        Attachment = AttachmentPoint.MiddleCenter
+                                    };
+                                    blockTableRecord.AppendEntity(topviewText);
+                                    transaction.AddNewlyCreatedDBObject(topviewText, true);
+
+                                    BlockReference toptext1 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) - 450, descPoint.Y - maxdepth - 1000, 0), 1.0);
+                                    BlockReference toptext2 = InsertBlock(db, sourceDb, transaction, blockTableRecord, "FRONT", new Point3d(((descPoint.X + shippingrigthX) / 2) + 450, descPoint.Y - maxdepth - 1000, 0), 1.0);
+                                    toptext1.Rotation = -Math.PI / 2;
+                                    toptext2.Rotation = -Math.PI / 2;
+                                }
+
+                                if (feederheights.Count > 0) // Ensure there is at least one list
+                                {
+                                    List<double> lastList = feederheights[feederheights.Count - 1]; // Get the last list
+                                    double previousY = descPoint.Y; // Start Y position
+
+                                    foreach (double value in lastList)
+                                    {
+                                        // Create an aligned dimension moving upwards
+                                        AlignedDimension dimrightsideheight = new AlignedDimension(
+                                            new Point3d(shippingrigthX, previousY, 0),
+                                            new Point3d(shippingrigthX, previousY + value, 0), // Increment Y-axis
+                                            new Point3d(shippingrigthX + 90, previousY + (value / 2), 0), // Midpoint for dimension line
+                                            "", // Auto-generated text
+                                            db.Dimstyle // Use current dimension style
+                                        );
+
+                                        // Append to drawing
+                                        blockTableRecord.AppendEntity(dimrightsideheight);
+                                        transaction.AddNewlyCreatedDBObject(dimrightsideheight, true);
+
+                                        // Update previous Y position for next dimension
+                                        previousY += value;
+                                    }
+                                }
+
+
 
                             }
 
                             startY = descPoint.Y;
                             startX += width;
                             width = 0.0;
+                            vbbfound = false;
                             //feederfound = false;
                         }
 
@@ -6876,7 +7684,7 @@ namespace CAD_AUTOMATION
                     }
                 }
 
-                acadDoc.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
+                //acadDoc.SendStringToExecute("._ZOOM _EXTENTS ", true, false, false);
 
                 if (error)
                 {
@@ -7089,644 +7897,706 @@ namespace CAD_AUTOMATION
             Database db = doc.Database;
             Editor ed = doc.Editor;
 
-            try
-            {
-                
-                PromptEntityOptions options = new PromptEntityOptions("\nSelect a rectangle: ");
-                options.SetRejectMessage("\nOnly rectangles (closed polylines) are allowed.");
-                options.AddAllowedClass(typeof(Polyline), true);
-                PromptEntityResult result = ed.GetEntity(options);
-
-                if (result.Status != PromptStatus.OK)
-                    return;
-
-                ObjectId rectId = result.ObjectId;
-
-                // Prompt for scale number
-                PromptDoubleOptions scaleOptions = new PromptDoubleOptions("\nEnter the scale number: ");
-                scaleOptions.DefaultValue = 0.8; // Set default value
-                scaleOptions.AllowNegative = false; // Optional: Prevent negative values
-                scaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
-                PromptDoubleResult scaleResult = ed.GetDouble(scaleOptions);
-
-                if (scaleResult.Status != PromptStatus.OK)
-                    return;
-
-                double userscale = scaleResult.Value;
-
-                // Prompt for scale number
-                PromptDoubleOptions linescaleOptions = new PromptDoubleOptions("\nEnter the scale number for line types: ");
-                linescaleOptions.DefaultValue = 0.03; // Set default value
-                linescaleOptions.AllowNegative = false; // Optional: Prevent negative values
-                linescaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
-                PromptDoubleResult linescaleResult = ed.GetDouble(linescaleOptions);
-
-                if (linescaleResult.Status != PromptStatus.OK)
-                    return;
-
-                double linescale = linescaleResult.Value;
-
-                PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nPLOT WITH LINE WEIGHT OR NOT [True/False]: ");
-                lineweightOptions.Keywords.Add("True");
-                lineweightOptions.Keywords.Add("False");
-                lineweightOptions.AllowNone = true; // Allow pressing Enter without choosing
-                lineweightOptions.Message = "\nEnter 'True' or 'False' (default is 'True'): ";
-
-                PromptResult lineweightResult = ed.GetKeywords(lineweightOptions);
-
-                // Handle the default manually
-                bool plotWithLineWeight;
-                if (lineweightResult.Status == PromptStatus.OK)
-                {
-                    plotWithLineWeight = lineweightResult.StringResult == "True";
-                }
-                else if (lineweightResult.Status == PromptStatus.None)
-                {
-                    plotWithLineWeight = true; // Default to True if Enter is pressed
-                }
-                else
-                {
-                    return; // Exit on Cancel or other statuses
-                }
-
-                // Prompt for file save location and name
-                SaveFileDialog saveFileDialog = new SaveFileDialog();
-                saveFileDialog.Filter = "PDF Files (*.pdf)|*.pdf";
-                saveFileDialog.Title = "Save PDF File";
-                saveFileDialog.DefaultExt = "pdf"; 
-                saveFileDialog.AddExtension = true; 
-
-                if (saveFileDialog.ShowDialog() != DialogResult.OK)
-                {
-                    return;
-                }
-                string filePath = saveFileDialog.FileName;
-
-                double oldlinescale = db.Ltscale;
-
-                db.Ltscale = linescale;
-
-                LayoutManager layoutMgr = LayoutManager.Current;
-                string currentLayout = layoutMgr.CurrentLayout;
-
-                if (string.IsNullOrEmpty(currentLayout))
-                    throw new InvalidOperationException("Current layout is not set.");
-
-                ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
-                if (layoutId == ObjectId.Null)
-                    throw new InvalidOperationException("Layout ID is invalid.");
-
-                Layout layout;
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
-                    if (layout == null)
-                        throw new InvalidOperationException("Layout object is null.");
-
-                    tr.Commit();
-                }
-
-                List<Extents3d> allRectangles = new List<Extents3d>();
-                //List<Extents3d> outerRectangles = new List<Extents3d>();
-                Point2d minPoint = new Point2d(0, 0);
-                Point2d maxPoint = new Point2d(0, 0);
-
-                using (Transaction acTrans = doc.TransactionManager.StartTransaction())
-                {
-                    Polyline rect = acTrans.GetObject(rectId, OpenMode.ForRead) as Polyline;
-
-                    if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
-                    {
-
-                        Extents3d selectedExtents = rect.GeometricExtents;
-                        minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
-                        maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
-
-                        using (Transaction tr = db.TransactionManager.StartTransaction())
-                        {
-                            BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                            BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
-
-                            string selectedLayer = rect.Layer;
-
-                            foreach (ObjectId objId in btr)
-                            {
-                                Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
-
-                                // Check if the entity is a BlockReference (i.e., a block)
-                                if (entity is BlockReference blockRef)
-                                {
-                                    // Get extents of the block
-                                    Extents3d blockExtents = blockRef.GeometricExtents;
-
-                                    // Check if the block is within the selected rectangle
-                                    if (IsRectangleWithin(selectedExtents, blockExtents))
-                                    {
-                                        // Explode the block to retrieve its components
-                                        DBObjectCollection explodedEntities = new DBObjectCollection();
-                                        blockRef.Explode(explodedEntities);
-
-                                        // Scan for rectangles within the exploded entities
-                                        foreach (DBObject explodedObj in explodedEntities)
-                                        {
-                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
-                                            {
-                                                Extents3d polyExtents = poly.GeometricExtents;
-
-                                                // Avoid including the original rectangle
-                                                if (polyExtents.Equals(selectedExtents))
-                                                    continue;
-
-                                                if (IsRectangleWithin(selectedExtents, polyExtents))
-                                                {
-                                                    allRectangles.Add(polyExtents);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
-                                {
-                                    Extents3d polyExtents = poly.GeometricExtents;
-
-                                    if (polyExtents.Equals(selectedExtents))
-                                        continue;
-
-                                    if (IsRectangleWithin(selectedExtents, polyExtents))
-                                    {
-                                        
-                                        allRectangles.Add(polyExtents);
-                                    }
-                                }
-                            }
-
-                            tr.Commit();
-                        }
-
-                        acTrans.Commit();
-                    }
-                    else
-                    {
-                        Application.ShowAlertDialog("NOT A RECTANGLE");
-                        db.Ltscale = 1;
-                        return;
-                    }
-
-                    allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
-
-                    if (allRectangles.Count > 0)
-                    {
-
-                        using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
-                        {
-                            using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
-                            {
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
-                                progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
-                                progressDialog.LowerPlotProgressRange = 0;
-                                progressDialog.UpperPlotProgressRange = allRectangles.Count;
-                                progressDialog.LowerSheetProgressRange = 0;
-                                progressDialog.UpperSheetProgressRange = allRectangles.Count;
-
-                                progressDialog.OnBeginPlot();
-                                progressDialog.IsVisible = true;
-
-                                int pageNumber = 1;
-
-                                plotEngine.BeginPlot(progressDialog, null);
-                                // Create a new layout for each page
-                                using (Transaction tr = db.TransactionManager.StartTransaction())
-                                {
-                                    foreach (var polyExtents in allRectangles)
-                                    {
-
-                                        LayoutManager layoutManager = LayoutManager.Current;
-                                        Layout newLayout = new Layout();
-                                        newLayout.LayoutName = $"Page {pageNumber}";
-                                        layoutManager.CreateLayout(newLayout.LayoutName);
-                                        layoutManager.CurrentLayout = newLayout.LayoutName;
-
-                                        // Get the new layout's ID
-                                        ObjectId newLayoutId = LayoutManager.Current.GetLayoutId($"Page {pageNumber}");
-
-
-                                        Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
-                                        layout1.PrintLineweights = plotWithLineWeight;
-
-                                        // Set the layout page size to A4 landscape
-                                        PlotSettingsValidator validator = PlotSettingsValidator.Current;
-                                        validator.SetPlotConfigurationName(layout1, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
-                                        validator.SetPlotPaperUnits(layout1, PlotPaperUnit.Millimeters);
-                                        validator.SetPlotRotation(layout1, PlotRotation.Degrees090);
-                                        validator.SetCurrentStyleSheet(layout1, "Monochrome.ctb");
-
-
-
-                                        // Get the block table record associated with the layout
-                                        BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;                                      
-
-                                        foreach (ObjectId id in layoutBlock)
-                                        {
-                                            if (id.ObjectClass.DxfName == "VIEWPORT")
-                                            {
-                                                Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-                                                vp2.Erase();
-                                                //vp2.Visible = false;
-                                            }
-                                        }
-
-                                        Viewport vp = new Viewport();
-                                        layoutBlock.AppendEntity(vp);
-                                        tr.AddNewlyCreatedDBObject(vp, true);
-                                        vp.SetUcsToWorld();
-
-                                        // Calculate the center and dimensions of the extents
-                                        Point2d center1 = new Point2d(
-                                            (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
-                                            (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
-                                        );
-                                        vp.ViewCenter = center1;
-                                        
-                                        double paperWidth = layout1.PlotPaperSize.X;
-                                        double paperHeight = layout1.PlotPaperSize.Y;
-
-                                        // Set the viewport size to match the paper size
-                                        vp.Width = paperHeight;
-                                        vp.Height = paperWidth;
-
-                                        // Calculate the center of the paper
-                                        double paperCenterX = paperHeight / 2;
-                                        double paperCenterY = paperWidth / 2;
-
-                                        // Move the viewport to the center of the paper
-                                        vp.CenterPoint = new Point3d(131.5, 100, 0);
-
-                                        // Calculate the width and height of the rectangle in model space
-                                        double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
-                                        double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
-
-                                        // Calculate the scale factors for width and height
-                                        double scaleX = paperWidth / rectWidth;
-                                        double scaleY = paperHeight / rectHeight;
-
-                                        // Choose the smaller scale factor to ensure the rectangle fits within the viewport
-                                        double scale = Math.Min(scaleX, scaleY);
-                                        scale = scale / userscale;
-                                        vp.CustomScale = scale;
-                                        vp.On = true;
-
-                                        validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
-                                        
-                                        validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
-
-
-                                        PlotInfo plotInfo = new PlotInfo
-                                        {
-                                            Layout = newLayoutId,
-                                            OverrideSettings = layout1
-                                        };
-
-                                        PlotInfoValidator plotInfoValidator = new PlotInfoValidator();
-                                        plotInfoValidator.MediaMatchingPolicy = MatchingPolicy.MatchEnabled;
-                                        plotInfoValidator.Validate(plotInfo);
-
-                                        if (pageNumber == 1)
-                                        {
-                                            plotEngine.BeginDocument(plotInfo, doc.Name, null, 1, true, filePath);
-                                        }
-
-                                        PlotPageInfo plotPageInfo = new PlotPageInfo();
-                                        progressDialog.SheetProgressPos = pageNumber;
-                                        progressDialog.PlotProgressPos = pageNumber;
-                                        plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
-                                        plotEngine.BeginGenerateGraphics(null);
-                                        plotEngine.EndGenerateGraphics(null);
-                                        plotEngine.EndPage(null);
-                                        progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
-                                        pageNumber++;
-                                    }
-
-                                    plotEngine.EndDocument(null);
-                                    plotEngine.EndPlot(null);
-                                    progressDialog.OnEndPlot();
-                                    progressDialog.IsVisible = false;
-
-                                    tr.Commit();
-                                }
-                            }
-                        }
-
-                        using (Transaction tr2 = db.TransactionManager.StartTransaction())
-                        {
-                            DBDictionary layoutDict = tr2.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
-
-                            LayoutManager layoutManager = LayoutManager.Current;
-
-                            int pageNumberToDel = 1;
-
-                            foreach (var polyExtents in allRectangles) // Replace with your actual collection
-                            {
-                                string layoutName = $"Page {pageNumberToDel}";
-
-                                // Check if the layout exists
-                                if (layoutDict.Contains(layoutName))
-                                {
-                                    // Delete the layout
-                                    layoutManager.DeleteLayout(layoutName);
-                                }
-
-                                pageNumberToDel++;
-                            }
-
-                            tr2.Commit();
-
-                            layoutManager.CurrentLayout = "MODEL";
-                        }
-                    }
-
-                    db.Ltscale = oldlinescale;
-                    MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
-                }
-            }
-            catch (Exception ex)
-            {
-
-                Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
-            }
-            finally
-            {
-                
-            }
-            
-        }
-
-        [CommandMethod("YnotPDFALL")]
-        public void ExportPDFall()
-        {
-            if (!isEnabled)
-            {
-                MessageBox.Show("GaMeR Add-in is Disabled");
+            PromptEntityOptions options = new PromptEntityOptions("\nSelect a rectangle: ");
+            options.SetRejectMessage("\nOnly rectangles (closed polylines) are allowed.");
+            options.AddAllowedClass(typeof(Polyline), true);
+            PromptEntityResult result = ed.GetEntity(options);
+
+            if (result.Status != PromptStatus.OK)
                 return;
-            }
-            try
+            ObjectId rectId = result.ObjectId;
+
+            double userscale = 0.8;
+            double linescale = 0.03;
+            bool plotWithLineWeight = true;
+            bool bommerge = true;
+            string paneltype = "";
+
+            using (ynotform panelform = new ynotform())
             {
-                Document doc = Application.DocumentManager.MdiActiveDocument;
-                if (doc == null) throw new InvalidOperationException("Active document is null.");
-
-                Database db = doc.Database;
-                Editor ed = doc.Editor;
-
-                // Prompt for a rectangle selection
-                PromptEntityOptions options = new PromptEntityOptions("\nSelect a rectangle: ");
-                options.SetRejectMessage("\nOnly rectangles (closed polylines) are allowed.");
-                options.AddAllowedClass(typeof(Polyline), true);
-                PromptEntityResult result = ed.GetEntity(options);
-
-                if (result.Status != PromptStatus.OK)
-                    return;
-
-                ObjectId rectId = result.ObjectId;
-
-                // Prompt for scale number
-                PromptDoubleOptions scaleOptions = new PromptDoubleOptions("\nEnter the scale number: ");
-                scaleOptions.DefaultValue = 0.8; // Set default value
-                scaleOptions.AllowNegative = false; // Optional: Prevent negative values
-                scaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
-                PromptDoubleResult scaleResult = ed.GetDouble(scaleOptions);
-
-                if (scaleResult.Status != PromptStatus.OK)
-                    return;
-
-                double userscale = scaleResult.Value;
-
-                // Prompt for scale number
-                PromptDoubleOptions linescaleOptions = new PromptDoubleOptions("\nEnter the scale number for line types: ");
-                linescaleOptions.DefaultValue = 0.03; // Set default value
-                linescaleOptions.AllowNegative = false; // Optional: Prevent negative values
-                linescaleOptions.AllowZero = false; // Optional: Prevent zero value if not desired
-                PromptDoubleResult linescaleResult = ed.GetDouble(linescaleOptions);
-
-                if (linescaleResult.Status != PromptStatus.OK)
-                    return;
-
-                double linescale = linescaleResult.Value;
-
-                PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nPLOT WITH LINE WEIGHT OR NOT [True/False]: ");
-                lineweightOptions.Keywords.Add("True");
-                lineweightOptions.Keywords.Add("False");
-                lineweightOptions.AllowNone = true; // Allow pressing Enter without choosing
-                lineweightOptions.Message = "\nEnter 'True' or 'False' (default is 'True'): ";
-
-                PromptResult lineweightResult = ed.GetKeywords(lineweightOptions);
-
-                // Handle the default manually
-                bool plotWithLineWeight;
-                if (lineweightResult.Status == PromptStatus.OK)
+                if (panelform.ShowDialog() == DialogResult.OK)
                 {
-                    plotWithLineWeight = lineweightResult.StringResult == "True";
+
+                    double.TryParse(panelform.a4scale, out userscale);
+                    double.TryParse(panelform.ltscale, out linescale);
+                    plotWithLineWeight = panelform.lineweight;
+                    bommerge = panelform.mergebom;
+                    paneltype = panelform.panelselection;
+                    
                 }
-                else if (lineweightResult.Status == PromptStatus.None)
+            }
+
+            if( paneltype == "SINGLE_PANEL")
+            {
+                try
                 {
-                    plotWithLineWeight = true; // Default to True if Enter is pressed
-                }
-                else
-                {
-                    return; // Exit on Cancel or other statuses
-                }
+                    // Prompt for file save location and name
+                    SaveFileDialog saveFileDialog = new SaveFileDialog();
+                    saveFileDialog.Filter = "PDF Files (*.pdf)|*.pdf";
+                    saveFileDialog.Title = "Save PDF File";
+                    saveFileDialog.DefaultExt = "pdf";
+                    saveFileDialog.AddExtension = true;
 
-                string lastUsedFolder = null;
-                string folderPath = null;
-
-                using (var dialog = new CommonOpenFileDialog
-                {
-                    Title = "Select a folder",
-                    IsFolderPicker = true, // Enables folder selection
-                    RestoreDirectory = true // Restores the selected directory for future use
-                })
-                if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
-                {
-                        folderPath = dialog.FileName;
-                        lastUsedFolder = folderPath;
-                }
-                
-
-                double oldlinescale = db.Ltscale;
-
-                db.Ltscale = linescale;
-
-                LayoutManager layoutMgr = LayoutManager.Current;
-                string currentLayout = layoutMgr.CurrentLayout;
-
-                if (string.IsNullOrEmpty(currentLayout))
-                    throw new InvalidOperationException("Current layout is not set.");
-
-                ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
-                if (layoutId == ObjectId.Null)
-                    throw new InvalidOperationException("Layout ID is invalid.");
-
-                Layout layout;
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
-                    if (layout == null)
-                        throw new InvalidOperationException("Layout object is null.");
-
-                    tr.Commit();
-                }
-
-                List<Extents3d> allRectanglesfull = new List<Extents3d>();
-                //List<Extents3d> outerRectanglesfull = new List<Extents3d>();
-                Point2d minPointfull = new Point2d(0, 0);
-                Point2d maxPointfull = new Point2d(0, 0);
-
-                using (Transaction acTransfull = doc.TransactionManager.StartTransaction())
-                {
-                    Polyline rect = acTransfull.GetObject(rectId, OpenMode.ForRead) as Polyline;
-
-                    if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
+                    if (saveFileDialog.ShowDialog() != DialogResult.OK)
                     {
-
-                        Extents3d selectedExtents = rect.GeometricExtents;
-                        minPointfull = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
-                        maxPointfull = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
-
-
-                        using (Transaction trfull = db.TransactionManager.StartTransaction())
-                        {
-                            BlockTable btfull = trfull.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                            BlockTableRecord btrfull = trfull.GetObject(btfull[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
-
-                            string selectedLayerfull = rect.Layer;
-
-                            foreach (ObjectId objId in btrfull)
-                            {
-                                Entity entity = trfull.GetObject(objId, OpenMode.ForRead) as Entity;
-
-                                if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
-                                {
-                                    Extents3d polyExtents = poly.GeometricExtents;
-
-                                    if (polyExtents.Equals(selectedExtents))
-                                        continue;
-
-                                    if (IsRectangleWithin(selectedExtents, polyExtents))
-                                    {
-                                        allRectanglesfull.Add(polyExtents);
-                                    }
-                                }
-                            }
-
-                            trfull.Commit();
-                        }
-
-                        acTransfull.Commit();
-                    }
-                    else
-                    {
-                        Application.ShowAlertDialog("NOT A RECTANGLE");
-                        db.Ltscale = 1;
                         return;
                     }
-                }
+                    string filePath = saveFileDialog.FileName;
 
-                allRectanglesfull = allRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
+                    string fileNameOnly = Path.GetFileName(filePath).ToLower().Replace(" ", "");
 
-                int pdfnumber = 1;
-                int pagecount = 1;
-                int maxpagecount = 0;
+                    double oldlinescale = db.Ltscale;
 
-                foreach (var polyExtents3 in allRectanglesfull)
-                {
+                    db.Ltscale = linescale;
+
+                    LayoutManager layoutMgr = LayoutManager.Current;
+                    string currentLayout = layoutMgr.CurrentLayout;
+
+                    if (string.IsNullOrEmpty(currentLayout))
+                        throw new InvalidOperationException("Current layout is not set.");
+
+                    ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
+                    if (layoutId == ObjectId.Null)
+                        throw new InvalidOperationException("Layout ID is invalid.");
+
+                    Layout layout;
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                        if (layout == null)
+                            throw new InvalidOperationException("Layout object is null.");
+
+                        tr.Commit();
+                    }
+
+                    List<Extents3d> allRectangles = new List<Extents3d>();
+                    //List<Extents3d> outerRectangles = new List<Extents3d>();
+                    Point2d minPoint = new Point2d(0, 0);
+                    Point2d maxPoint = new Point2d(0, 0);
+
                     using (Transaction acTrans = doc.TransactionManager.StartTransaction())
                     {
-                        List<Extents3d> allRectanglescount = new List<Extents3d>();
-                        //List<Extents3d> outerRectangles = new List<Extents3d>();
-                        Point2d minPointcount = new Point2d(0, 0);
-                        Point2d maxPointcount = new Point2d(0, 0);
-                        Extents3d selectedExtents = polyExtents3;
-                        minPointcount = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
-                        maxPointcount = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+                        Polyline rect = acTrans.GetObject(rectId, OpenMode.ForRead) as Polyline;
 
-
-                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
                         {
-                            BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                            BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
 
-                            //string selectedLayer = rect.Layer;
+                            Extents3d selectedExtents = rect.GeometricExtents;
+                            minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
 
-                            foreach (ObjectId objId in btr)
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
                             {
-                                Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
 
-                                // Check if the entity is a BlockReference (i.e., a block)
-                                if (entity is BlockReference blockRef)
+                                string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
                                 {
-                                    // Get extents of the block
-                                    Extents3d blockExtents = blockRef.GeometricExtents;
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
 
-                                    // Check if the block is within the selected rectangle
-                                    if (IsRectangleWithin(selectedExtents, blockExtents))
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
                                     {
-                                        // Explode the block to retrieve its components
-                                        DBObjectCollection explodedEntities = new DBObjectCollection();
-                                        blockRef.Explode(explodedEntities);
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
 
-                                        // Scan for rectangles within the exploded entities
-                                        foreach (DBObject explodedObj in explodedEntities)
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
                                         {
-                                            if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
+
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
                                             {
-                                                Extents3d polyExtents = poly.GeometricExtents;
-
-                                                // Avoid including the original rectangle
-                                                if (polyExtents.Equals(selectedExtents))
-                                                    continue;
-
-                                                if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                                 {
-                                                    maxpagecount++;
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        allRectangles.Add(polyExtents);
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                }
-                                else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
-                                {
-                                    Extents3d polyExtents = poly.GeometricExtents;
-
-                                    if (polyExtents.Equals(selectedExtents))
-                                        continue;
-
-                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
                                     {
-                                        maxpagecount++;
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+
+                                            allRectangles.Add(polyExtents);
+                                        }
+                                    }
+                                }
+
+                                tr.Commit();
+                            }
+
+                            acTrans.Commit();
+                        }
+                        else
+                        {
+                            Application.ShowAlertDialog("NOT A RECTANGLE");
+                            db.Ltscale = 1;
+                            return;
+                        }
+
+                        if (!IsFileWritable(filePath))
+                        {
+                            MessageBox.Show($"Error: The file '{filePath}' is open in another application. Close it and try again.", "File In Use", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return; // Exit without plotting
+                        }
+
+                        allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+
+                        if (allRectangles.Count > 0)
+                        {
+
+                            using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
+                            {
+                                using (PlotProgressDialog progressDialog = new PlotProgressDialog(false, allRectangles.Count, true))
+                                {
+                                    progressDialog.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
+                                    progressDialog.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
+                                    progressDialog.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
+                                    progressDialog.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
+                                    progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
+                                    progressDialog.LowerPlotProgressRange = 0;
+                                    progressDialog.UpperPlotProgressRange = allRectangles.Count;
+                                    progressDialog.LowerSheetProgressRange = 0;
+                                    progressDialog.UpperSheetProgressRange = allRectangles.Count;
+
+                                    progressDialog.OnBeginPlot();
+                                    progressDialog.IsVisible = true;
+
+                                    int pageNumber = 1;
+
+                                    plotEngine.BeginPlot(progressDialog, null);
+                                    // Create a new layout for each page
+                                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                                    {
+                                        foreach (var polyExtents in allRectangles)
+                                        {
+
+                                            LayoutManager layoutManager = LayoutManager.Current;
+                                            Layout newLayout = new Layout();
+                                            newLayout.LayoutName = $"Page {pageNumber}";
+                                            layoutManager.CreateLayout(newLayout.LayoutName);
+                                            layoutManager.CurrentLayout = newLayout.LayoutName;
+
+                                            // Get the new layout's ID
+                                            ObjectId newLayoutId = LayoutManager.Current.GetLayoutId($"Page {pageNumber}");
+
+
+                                            Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
+                                            layout1.PrintLineweights = plotWithLineWeight;
+
+                                            // Set the layout page size to A4 landscape
+                                            PlotSettingsValidator validator = PlotSettingsValidator.Current;
+                                            validator.SetPlotConfigurationName(layout1, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                            validator.SetPlotPaperUnits(layout1, PlotPaperUnit.Millimeters);
+                                            validator.SetPlotRotation(layout1, PlotRotation.Degrees090);
+                                            validator.SetCurrentStyleSheet(layout1, "Monochrome.ctb");
+
+
+
+                                            // Get the block table record associated with the layout
+                                            BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+
+                                            foreach (ObjectId id in layoutBlock)
+                                            {
+                                                if (id.ObjectClass.DxfName == "VIEWPORT")
+                                                {
+                                                    Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                                                    vp2.Erase();
+                                                    //vp2.Visible = false;
+                                                }
+                                            }
+
+                                            Viewport vp = new Viewport();
+                                            layoutBlock.AppendEntity(vp);
+                                            tr.AddNewlyCreatedDBObject(vp, true);
+                                            vp.SetUcsToWorld();
+
+                                            // Calculate the center and dimensions of the extents
+                                            Point2d center1 = new Point2d(
+                                                (polyExtents.MinPoint.X + polyExtents.MaxPoint.X) / 2,
+                                                (polyExtents.MinPoint.Y + polyExtents.MaxPoint.Y) / 2
+                                            );
+                                            vp.ViewCenter = center1;
+
+                                            double paperWidth = layout1.PlotPaperSize.X;
+                                            double paperHeight = layout1.PlotPaperSize.Y;
+
+                                            // Set the viewport size to match the paper size
+                                            vp.Width = paperHeight;
+                                            vp.Height = paperWidth;
+
+                                            // Calculate the center of the paper
+                                            double paperCenterX = paperHeight / 2;
+                                            double paperCenterY = paperWidth / 2;
+
+                                            // Move the viewport to the center of the paper
+                                            vp.CenterPoint = new Point3d(131.5, 100, 0);
+
+                                            // Calculate the width and height of the rectangle in model space
+                                            double rectWidth = polyExtents.MaxPoint.X - polyExtents.MinPoint.X;
+                                            double rectHeight = polyExtents.MaxPoint.Y - polyExtents.MinPoint.Y;
+
+                                            // Calculate the scale factors for width and height
+                                            double scaleX = paperWidth / rectWidth;
+                                            double scaleY = paperHeight / rectHeight;
+
+                                            // Choose the smaller scale factor to ensure the rectangle fits within the viewport
+                                            double scale = Math.Min(scaleX, scaleY);
+                                            scale = scale / userscale;
+                                            vp.CustomScale = scale;
+                                            vp.On = true;
+
+                                            validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
+
+                                            validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
+
+
+                                            PlotInfo plotInfo = new PlotInfo
+                                            {
+                                                Layout = newLayoutId,
+                                                OverrideSettings = layout1
+                                            };
+
+                                            PlotInfoValidator plotInfoValidator = new PlotInfoValidator();
+                                            plotInfoValidator.MediaMatchingPolicy = MatchingPolicy.MatchEnabled;
+                                            plotInfoValidator.Validate(plotInfo);
+
+                                            if (pageNumber == 1)
+                                            {
+                                                plotEngine.BeginDocument(plotInfo, doc.Name, null, 1, true, filePath);
+                                            }
+
+                                            PlotPageInfo plotPageInfo = new PlotPageInfo();
+                                            progressDialog.SheetProgressPos = pageNumber;
+                                            progressDialog.PlotProgressPos = pageNumber;
+                                            plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
+                                            plotEngine.BeginGenerateGraphics(null);
+                                            plotEngine.EndGenerateGraphics(null);
+                                            plotEngine.EndPage(null);
+                                            progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
+                                            pageNumber++;
+                                        }
+
+                                        plotEngine.EndDocument(null);
+                                        plotEngine.EndPlot(null);
+                                        progressDialog.OnEndPlot();
+                                        progressDialog.IsVisible = false;
+
+                                        tr.Commit();
                                     }
                                 }
                             }
 
+                            using (Transaction tr2 = db.TransactionManager.StartTransaction())
+                            {
+                                DBDictionary layoutDict = tr2.GetObject(db.LayoutDictionaryId, OpenMode.ForRead) as DBDictionary;
 
+                                LayoutManager layoutManager = LayoutManager.Current;
 
-                            tr.Commit();
+                                int pageNumberToDel = 1;
 
+                                foreach (var polyExtents in allRectangles) // Replace with your actual collection
+                                {
+                                    string layoutName = $"Page {pageNumberToDel}";
 
+                                    // Check if the layout exists
+                                    if (layoutDict.Contains(layoutName))
+                                    {
+                                        // Delete the layout
+                                        layoutManager.DeleteLayout(layoutName);
+                                    }
+
+                                    pageNumberToDel++;
+                                }
+
+                                tr2.Commit();
+
+                                layoutManager.CurrentLayout = "MODEL";
+                            }
                         }
 
-                        acTrans.Commit();
+                        db.Ltscale = oldlinescale;
+                    }
+
+                    if (bommerge)
+                    {
+                        // Check if Excel is already running
+                        Excel.Application excelApp = null;
+                        try
+                        {
+                            excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+
+                        }
+                        catch (COMException)
+                        {
+                            // Excel is not running, show a message and return
+                            MessageBox.Show("Pdf Generated \n But Excel was not running for Bom Merge");
+                            return;
+                        }
+
+                        Excel.Workbook workbook = null;
+                        Excel.Worksheet worksheet = null;
+                        int matchCount = 0;
+                        Excel.Worksheet matchedWorksheet = null;
+                        Excel.Workbook matchedWorkbook = null;
+
+                        // Check if any workbooks are open
+                        if (excelApp.Workbooks.Count == 0)
+                        {
+                            MessageBox.Show("Pdf Generated \n But NO sheet opened for Bom Merge");
+                            return;
+                        }
+
+                        // Check all workbooks and sheets for a match
+                        foreach (Excel.Workbook wb in excelApp.Workbooks)
+                        {
+                            foreach (Excel.Worksheet ws in wb.Sheets)
+                            {
+                                if (fileNameOnly.Contains(ws.Name.ToLower().Replace(" ", "")))
+                                {
+                                    matchCount++;
+                                    matchedWorksheet = ws;
+                                    matchedWorkbook = wb;
+
+                                    if (matchCount > 1)
+                                    {
+                                        MessageBox.Show("PDF Generated \n But Error: Multiple sheets match the filename. Please check and rename.");
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
+                        // If exactly one match is found, proceed
+                        if (matchCount == 1)
+                        {
+                            workbook = matchedWorkbook;
+                            worksheet = matchedWorksheet;
+                        }
+                        else if (matchCount == 0)
+                        {
+                            MessageBox.Show("PDF Generated \n But No matching sheet found in any open workbook for merging bom.");
+                            return;
+                        }
+
+                        // Define the save path (same as CAD plotting save path)
+                        string cadSaveDirectory = Path.GetDirectoryName(filePath); // Extract folder from CAD save path
+                        string excelPdfSavePath = Path.Combine(cadSaveDirectory, "BOM.pdf");
+
+                        worksheet.PageSetup.Orientation = Excel.XlPageOrientation.xlLandscape; // Set to Landscape
+                        worksheet.PageSetup.Zoom = false;  // Disable Zoom
+                        worksheet.PageSetup.FitToPagesWide = 1;  // Fit all columns in one page
+                        worksheet.PageSetup.FitToPagesTall = false;  // Don't force rows to fit (let them flow)
+
+                        worksheet.PageSetup.LeftMargin = excelApp.InchesToPoints(0.45);
+                        worksheet.PageSetup.RightMargin = excelApp.InchesToPoints(0.45);
+                        worksheet.PageSetup.TopMargin = excelApp.InchesToPoints(0.55);
+                        worksheet.PageSetup.BottomMargin = excelApp.InchesToPoints(0.55);
+                        worksheet.PageSetup.HeaderMargin = excelApp.InchesToPoints(0.4);
+                        worksheet.PageSetup.FooterMargin = excelApp.InchesToPoints(0.4);
+
+                        worksheet.PageSetup.CenterHorizontally = true;
+
+                        try
+                        {
+
+                            worksheet.ExportAsFixedFormat(
+                                Excel.XlFixedFormatType.xlTypePDF,
+                                excelPdfSavePath,
+                                Excel.XlFixedFormatQuality.xlQualityStandard,
+                                true,  // Include Open Worksheets
+                                false,  // Fit to page
+                                1,     // From page
+                                Type.Missing,
+                                false  // Do not open after publish
+                            );
+
+                            string mergedPdfPath = Path.Combine(cadSaveDirectory, "Merged_Output.pdf"); // Final merged PDF
+
+                            // Check if both PDFs exist
+                            if (!File.Exists(filePath) || !File.Exists(excelPdfSavePath))
+                            {
+                                MessageBox.Show("Error: One or both PDFs are missing.");
+                                return;
+                            }
+
+                            // Create an empty output document
+                            PdfDocument outputDocument = new PdfDocument();
+
+                            PdfDocument inputPdf1 = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+                            foreach (PdfPage page in inputPdf1.Pages)
+                            {
+                                if (page.Height > page.Width)  // If portrait, rotate it
+                                {
+                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                }
+                                outputDocument.AddPage(page);
+                            }
+
+                            // Merge the second PDF (BOM)
+                            PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
+                            foreach (PdfPage page in inputPdf2.Pages)
+                            {
+                                if (page.Height > page.Width)  // If portrait, rotate it
+                                {
+                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                }
+                                outputDocument.AddPage(page);
+                            }
+
+                            // Save the merged PDF
+                            outputDocument.Save(mergedPdfPath);
+
+                            // Cleanup
+                            //inputPdf1.Close();
+                            //inputPdf2.Close();
+                            //outputDocument.Close();
+
+                            // Delete individual PDFs after merging (optional)
+                            File.Delete(filePath);
+                            File.Delete(excelPdfSavePath);
+                            File.Move(mergedPdfPath, filePath);
+
+                            MessageBox.Show($"Pdf Generated \nBOM sheet successfully plotted and Merged");
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Error while saving BOM sheet as PDF: " + ex.Message);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
                     }
                 }
-
-                foreach (var polyExtents2 in allRectanglesfull)
+                catch (Exception ex)
                 {
+
+                    Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
+                }
+                finally
+                {
+
+                }
+            }
+            else if( paneltype == "MULTIPLE_PANEL")
+            {
+                try
+                {
+
+                    string lastUsedFolder = null;
+                    string folderPath = null;
+                    StringBuilder errorLog = new StringBuilder();
+
+                    using (var dialog = new CommonOpenFileDialog
+                    {
+                        Title = "Select a folder",
+                        IsFolderPicker = true, // Enables folder selection
+                        RestoreDirectory = true // Restores the selected directory for future use
+                    })
+                        if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+                        {
+                            folderPath = dialog.FileName;
+                            lastUsedFolder = folderPath;
+                        }
+
+
+                    double oldlinescale = db.Ltscale;
+
+                    db.Ltscale = linescale;
+
+                    LayoutManager layoutMgr = LayoutManager.Current;
+                    string currentLayout = layoutMgr.CurrentLayout;
+
+                    if (string.IsNullOrEmpty(currentLayout))
+                        throw new InvalidOperationException("Current layout is not set.");
+
+                    ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
+                    if (layoutId == ObjectId.Null)
+                        throw new InvalidOperationException("Layout ID is invalid.");
+
+                    Layout layout;
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                        if (layout == null)
+                            throw new InvalidOperationException("Layout object is null.");
+
+                        tr.Commit();
+                    }
+
+                    List<Extents3d> allRectanglesfull = new List<Extents3d>();
+                    //List<Extents3d> outerRectanglesfull = new List<Extents3d>();
+                    Point2d minPointfull = new Point2d(0, 0);
+                    Point2d maxPointfull = new Point2d(0, 0);
+
+                    using (Transaction acTransfull = doc.TransactionManager.StartTransaction())
+                    {
+                        Polyline rect = acTransfull.GetObject(rectId, OpenMode.ForRead) as Polyline;
+
+                        if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
+                        {
+
+                            Extents3d selectedExtents = rect.GeometricExtents;
+                            minPointfull = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPointfull = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+
+                            using (Transaction trfull = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable btfull = trfull.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btrfull = trfull.GetObject(btfull[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                string selectedLayerfull = rect.Layer;
+
+                                foreach (ObjectId objId in btrfull)
+                                {
+                                    Entity entity = trfull.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+                                            allRectanglesfull.Add(polyExtents);
+                                        }
+                                    }
+                                }
+
+                                trfull.Commit();
+                            }
+
+                            acTransfull.Commit();
+                        }
+                        else
+                        {
+                            Application.ShowAlertDialog("NOT A RECTANGLE");
+                            db.Ltscale = 1;
+                            return;
+                        }
+                    }
+
+                    allRectanglesfull = allRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
+
+                    int pdfnumber = 1;
+                    int pagecount = 1;
+                    int maxpagecount = 0;
+
+                    foreach (var polyExtents3 in allRectanglesfull)
+                    {
+                        using (Transaction acTrans = doc.TransactionManager.StartTransaction())
+                        {
+                            List<Extents3d> allRectanglescount = new List<Extents3d>();
+                            //List<Extents3d> outerRectangles = new List<Extents3d>();
+                            Point2d minPointcount = new Point2d(0, 0);
+                            Point2d maxPointcount = new Point2d(0, 0);
+                            Extents3d selectedExtents = polyExtents3;
+                            minPointcount = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPointcount = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                //string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
+                                {
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
+                                    {
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
+
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
+                                        {
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
+
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
+                                            {
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                                {
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        maxpagecount++;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+                                            maxpagecount++;
+                                        }
+                                    }
+                                }
+
+
+
+                                tr.Commit();
+
+
+                            }
+
+                            acTrans.Commit();
+                        }
+                    }
+
+                    foreach (var polyExtents2 in allRectanglesfull)
+                    {
                         List<Extents3d> allRectangles = new List<Extents3d>();
                         //List<Extents3d> outerRectangles = new List<Extents3d>();
                         Point2d minPoint = new Point2d(0, 0);
                         Point2d maxPoint = new Point2d(0, 0);
 
-                        string pdfName = null;
+                        string pdfName = "";
+                        string pdfPath = "";
                         bool namefound = false;
 
                         using (Transaction acTrans = doc.TransactionManager.StartTransaction())
@@ -7838,8 +8708,8 @@ namespace CAD_AUTOMATION
                                             {
                                                 string todayDate = DateTime.Now.ToString("dd-MM-yyyy");
                                                 string timehour = DateTime.Now.ToString("HH");
-                                                string timemin = DateTime.Now.ToString("mm");                                                                                                                                                                                                                
-                                                pdfName = $"{dbText.TextString}-GA-{todayDate}_{timehour}Hrs-{timemin}min";
+                                                string timemin = DateTime.Now.ToString("mm");
+                                                pdfName = $"{dbText.TextString}-GA-{todayDate}.pdf";
                                                 namefound = true;
 
                                             }
@@ -7854,6 +8724,16 @@ namespace CAD_AUTOMATION
 
                             if (allRectangles.Count > 0)
                             {
+
+                                if (!IsFileWritable(Path.Combine(folderPath, pdfName)))
+                                {
+                                    errorLog.AppendLine($"Error: The file '{Path.Combine(folderPath, pdfName)}' is open in another application. Close it and try again.");
+                                    pdfnumber++;
+                                    System.Threading.Thread.Sleep(2000);
+                                    continue;
+                                }
+
+
 
                                 using (PlotEngine plotEngine = PlotFactory.CreatePublishEngine())
                                 {
@@ -7977,16 +8857,17 @@ namespace CAD_AUTOMATION
 
                                                 string fileName = "pdf.pdf";
 
-                                                if (pdfName != null)
+                                                if (pdfName != null || pdfName != "")
                                                 {
-                                                    fileName = $"{pdfName}.pdf";
+                                                    fileName = pdfName;
                                                 }
                                                 else
                                                 {
                                                     fileName = $"{pdfnumber}.pdf";
                                                 }
 
-                                                string pdfPath = Path.Combine(folderPath, fileName);
+                                                pdfPath = Path.Combine(folderPath, fileName);
+                                                //MessageBox.Show(pdfPath);
 
                                                 if (pageNumber == 1)
                                                 {
@@ -8049,21 +8930,212 @@ namespace CAD_AUTOMATION
 
 
                         }
+
+                        if (bommerge && pdfPath != "" && pdfName != "")
+                        {
+                            // Check if Excel is already running
+                            Excel.Application excelApp = null;
+                            try
+                            {
+                                excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+
+                            }
+                            catch (COMException)
+                            {
+                                // Excel is not running, show a message and return
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but Excel was not running for BOM Merge.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            Excel.Workbook workbook = null;
+                            Excel.Worksheet worksheet = null;
+                            int matchCount = 0;
+                            Excel.Worksheet matchedWorksheet = null;
+                            Excel.Workbook matchedWorkbook = null;
+
+                            // Check if any workbooks are open
+                            if (excelApp.Workbooks.Count == 0)
+                            {
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but NO Excel sheet was opened for BOM Merge.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            // Check all workbooks and sheets for a match
+                            foreach (Excel.Workbook wb in excelApp.Workbooks)
+                            {
+                                foreach (Excel.Worksheet ws in wb.Sheets)
+                                {
+                                    if (pdfName.ToLower().Replace(" ", "").Contains(ws.Name.ToLower().Replace(" ", "")))
+                                    {
+                                        matchCount++;
+                                        matchedWorksheet = ws;
+                                        matchedWorkbook = wb;
+
+                                        if (matchCount > 1)
+                                        {
+                                            errorLog.AppendLine($"Pdf Generated for {pdfName}, but Error: Multiple sheets match the filename.");
+                                            pdfnumber++;
+                                            System.Threading.Thread.Sleep(2000);
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // If exactly one match is found, proceed
+                            if (matchCount == 1)
+                            {
+                                workbook = matchedWorkbook;
+                                worksheet = matchedWorksheet;
+                            }
+                            else if (matchCount == 0)
+                            {
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but No matching sheet found in any open workbook.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            //MessageBox.Show(pdfPath);
+                            string cadSaveDirectory = folderPath; // Extract folder from CAD save path
+                            string excelPdfSavePath = Path.Combine(cadSaveDirectory, "BOM.pdf");
+
+                            worksheet.PageSetup.Orientation = Excel.XlPageOrientation.xlLandscape; // Set to Landscape
+                            worksheet.PageSetup.Zoom = false;  // Disable Zoom
+                            worksheet.PageSetup.FitToPagesWide = 1;  // Fit all columns in one page
+                            worksheet.PageSetup.FitToPagesTall = false;  // Don't force rows to fit (let them flow)
+
+                            worksheet.PageSetup.LeftMargin = excelApp.InchesToPoints(0.45);
+                            worksheet.PageSetup.RightMargin = excelApp.InchesToPoints(0.45);
+                            worksheet.PageSetup.TopMargin = excelApp.InchesToPoints(0.55);
+                            worksheet.PageSetup.BottomMargin = excelApp.InchesToPoints(0.55);
+                            worksheet.PageSetup.HeaderMargin = excelApp.InchesToPoints(0.4);
+                            worksheet.PageSetup.FooterMargin = excelApp.InchesToPoints(0.4);
+                            worksheet.PageSetup.CenterHorizontally = true;
+
+                            try
+                            {
+
+                                worksheet.ExportAsFixedFormat(
+                                    Excel.XlFixedFormatType.xlTypePDF,
+                                    excelPdfSavePath,
+                                    Excel.XlFixedFormatQuality.xlQualityStandard,
+                                    true,  // Include Open Worksheets
+                                    false,  // Fit to page
+                                    1,     // From page
+                                    Type.Missing,
+                                    false  // Do not open after publish
+                                );
+
+                                string mergedPdfPath = Path.Combine(cadSaveDirectory, "Merged_Output.pdf"); // Final merged PDF
+
+                                // Check if both PDFs exist
+                                if (!File.Exists(excelPdfSavePath))
+                                {
+                                    errorLog.AppendLine($"Error: BOM PDF was not generated for {pdfName}.");
+                                    pdfnumber++;
+                                    System.Threading.Thread.Sleep(2000);
+                                    continue;
+                                }
+
+                                // Create an empty output document
+                                PdfDocument outputDocument = new PdfDocument();
+
+                                PdfDocument inputPdf1 = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
+                                foreach (PdfPage page in inputPdf1.Pages)
+                                {
+                                    if (page.Height > page.Width)  // If portrait, rotate it
+                                    {
+                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                    }
+                                    outputDocument.AddPage(page);
+                                }
+
+                                // Merge the second PDF (BOM)
+                                PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
+                                foreach (PdfPage page in inputPdf2.Pages)
+                                {
+                                    if (page.Height > page.Width)  // If portrait, rotate it
+                                    {
+                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                    }
+                                    outputDocument.AddPage(page);
+                                }
+
+                                // Save the merged PDF
+                                outputDocument.Save(mergedPdfPath);
+
+                                // Delete individual PDFs after merging (optional)
+                                File.Delete(pdfPath);
+                                File.Delete(excelPdfSavePath);
+                                File.Move(mergedPdfPath, pdfPath);
+
+
+                            }
+                            catch (Exception ex)
+                            {
+                                errorLog.AppendLine($"Error while saving BOM sheet as PDF for {pdfName}: {ex.Message}");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+                        }
+
                         pdfnumber++;
                         System.Threading.Thread.Sleep(2000);
                     }
 
                     db.Ltscale = oldlinescale;
-                    MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
+                    if (errorLog.Length > 0)
+                    {
+                        MessageBox.Show(errorLog.ToString(), "Process Completed with Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        MessageBox.Show("All PDFs generated and merged successfully! \nAutomation by GaMeR", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
 
-                
+                }
+                catch (Exception ex)
+                {
+
+                    Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+
+            
+            
+        }
+        private bool IsFileWritable(string filePath)
+        {
+            try
             {
-
-                Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
+                // If the file does not exist, create it first to ensure CAD can write
+                if (!File.Exists(filePath))
+                {
+                    using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        // File created successfully
+                    }
+                }
+                else
+                {
+                    // If file exists, check if it is writable
+                    using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.None))
+                    {
+                        // File is writable
+                    }
+                }
+                return true; // No issues, file is writable
             }
-
+            catch (IOException)
+            {
+                return false; // File is in use by another process
+            }
         }
 
         [CommandMethod("DESCRIPTION")]
