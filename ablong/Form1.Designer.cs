@@ -206,7 +206,7 @@
             this.hbbpart2size.MinimumSize = new System.Drawing.Size(150, 20);
             this.hbbpart2size.Name = "hbbpart2size";
             this.hbbpart2size.Size = new System.Drawing.Size(150, 21);
-            this.hbbpart2size.TabIndex = 28;
+            this.hbbpart2size.TabIndex = 12;
             this.hbbpart2size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.hbbpart2size.Visible = false;
             // 
@@ -234,7 +234,7 @@
             this.hbbpart1size.MinimumSize = new System.Drawing.Size(150, 20);
             this.hbbpart1size.Name = "hbbpart1size";
             this.hbbpart1size.Size = new System.Drawing.Size(150, 21);
-            this.hbbpart1size.TabIndex = 26;
+            this.hbbpart1size.TabIndex = 11;
             this.hbbpart1size.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.hbbpart1size.Visible = false;
             // 
@@ -249,7 +249,7 @@
             this.hbbpartbox.Location = new System.Drawing.Point(576, 208);
             this.hbbpartbox.Name = "hbbpartbox";
             this.hbbpartbox.Size = new System.Drawing.Size(149, 35);
-            this.hbbpartbox.TabIndex = 25;
+            this.hbbpartbox.TabIndex = 10;
             this.hbbpartbox.Theme = MetroFramework.MetroThemeStyle.Dark;
             this.hbbpartbox.Visible = false;
             this.hbbpartbox.SelectedIndexChanged += new System.EventHandler(this.hbbpartbox_SelectedIndexChanged);
@@ -304,7 +304,7 @@
             this.sectionsbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.sectionsbox.Name = "sectionsbox";
             this.sectionsbox.Size = new System.Drawing.Size(150, 21);
-            this.sectionsbox.TabIndex = 21;
+            this.sectionsbox.TabIndex = 7;
             this.sectionsbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.sectionsbox.Visible = false;
             this.sectionsbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -333,7 +333,7 @@
             this.hbbsize.MinimumSize = new System.Drawing.Size(150, 20);
             this.hbbsize.Name = "hbbsize";
             this.hbbsize.Size = new System.Drawing.Size(150, 21);
-            this.hbbsize.TabIndex = 19;
+            this.hbbsize.TabIndex = 9;
             this.hbbsize.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.hbbsize.Visible = false;
             this.hbbsize.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -361,7 +361,7 @@
             this.hbbbox.Location = new System.Drawing.Point(576, 114);
             this.hbbbox.Name = "hbbbox";
             this.hbbbox.Size = new System.Drawing.Size(149, 35);
-            this.hbbbox.TabIndex = 16;
+            this.hbbbox.TabIndex = 8;
             this.hbbbox.Theme = MetroFramework.MetroThemeStyle.Dark;
             this.hbbbox.Visible = false;
             this.hbbbox.SelectedIndexChanged += new System.EventHandler(this.hbbbox_SelectedIndexChanged);
@@ -402,7 +402,7 @@
             this.depthbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.depthbox.Name = "depthbox";
             this.depthbox.Size = new System.Drawing.Size(150, 21);
-            this.depthbox.TabIndex = 10;
+            this.depthbox.TabIndex = 5;
             this.depthbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.depthbox.Visible = false;
             this.depthbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.sectionsbox_KeyPress);
@@ -467,7 +467,7 @@
             this.shellthickbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.shellthickbox.Name = "shellthickbox";
             this.shellthickbox.Size = new System.Drawing.Size(150, 21);
-            this.shellthickbox.TabIndex = 5;
+            this.shellthickbox.TabIndex = 6;
             this.shellthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.shellthickbox.Visible = false;
             this.shellthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
@@ -548,7 +548,7 @@
             this.mpthickbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.mpthickbox.Name = "mpthickbox";
             this.mpthickbox.Size = new System.Drawing.Size(150, 21);
-            this.mpthickbox.TabIndex = 25;
+            this.mpthickbox.TabIndex = 17;
             this.mpthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             // 
             // label14
@@ -574,7 +574,7 @@
             this.coverthickbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.coverthickbox.Name = "coverthickbox";
             this.coverthickbox.Size = new System.Drawing.Size(150, 21);
-            this.coverthickbox.TabIndex = 23;
+            this.coverthickbox.TabIndex = 16;
             this.coverthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.coverthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
             // 
@@ -590,7 +590,7 @@
             this.inchtypebox.Location = new System.Drawing.Point(184, 117);
             this.inchtypebox.Name = "inchtypebox";
             this.inchtypebox.Size = new System.Drawing.Size(149, 35);
-            this.inchtypebox.TabIndex = 22;
+            this.inchtypebox.TabIndex = 15;
             this.inchtypebox.Theme = MetroFramework.MetroThemeStyle.Dark;
             // 
             // label12
@@ -627,7 +627,7 @@
             this.doorthickbox.MinimumSize = new System.Drawing.Size(150, 20);
             this.doorthickbox.Name = "doorthickbox";
             this.doorthickbox.Size = new System.Drawing.Size(150, 21);
-            this.doorthickbox.TabIndex = 19;
+            this.doorthickbox.TabIndex = 14;
             this.doorthickbox.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.doorthickbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.doorthickbox_KeyPress);
             // 

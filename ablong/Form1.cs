@@ -365,6 +365,7 @@ namespace CAD_AUTOMATION
                                     Font = new Font("Microsoft Tai Le", 12F, FontStyle.Regular),
                                     ForeColor = Color.White,
                                     BackColor = Color.FromArgb(64, 64, 64),
+                                    TabIndex = i+10,
                                     BorderStyle = BorderStyle.None,
                                     TextAlign = HorizontalAlignment.Center,
                                     MinimumSize = new Size(textBoxWidth, textBoxHeight),
@@ -430,6 +431,7 @@ namespace CAD_AUTOMATION
                                 FontSize = MetroFramework.MetroLinkSize.Tall,
                                 FormattingEnabled = true,
                                 ItemHeight = 29,
+                                TabIndex = 1,
                                 Location = new Point(170, 70),
                                 Size = new System.Drawing.Size(165, 35),
                                 Theme = MetroFramework.MetroThemeStyle.Dark
@@ -904,7 +906,12 @@ namespace CAD_AUTOMATION
                 outdoordoorclearx = Convert.ToDouble(config["outdoorpanel_door&cover_clearence_x"]);
                 outdoordoorcleary = Convert.ToDouble(config["outdoorpanel_door&cover_clearence_y"]);
                 hbusbarposition = hbbbox.Text;
-                hbussize = Convert.ToDouble(hbbsize.Text);
+
+                if (hbusbarposition == "Top" || hbusbarposition == "Bottom")
+                {
+                    hbussize = Convert.ToDouble(hbbsize.Text);
+                }
+                    
 
                 using (Transaction trans = db.TransactionManager.StartTransaction())
                 {
