@@ -208,6 +208,12 @@
   <ItemGroup>
     <EmbeddedResource Include="Icons\automation.bmp" />
     <EmbeddedResource Include="Icons\about.bmp" />
+    <EmbeddedResource Include="Icons\TIDOORS.bmp" />
+    <EmbeddedResource Include="Icons\pdf.bmp" />
+    <EmbeddedResource Include="Icons\GA.bmp" />
+    <EmbeddedResource Include="Icons\mechga.bmp" />
+    <EmbeddedResource Include="Icons\bill.bmp" />
+    <EmbeddedResource Include="Icons\parts.bmp" />
     <Content Include="MetroFramework.txt" />
   </ItemGroup>
   <ItemGroup>

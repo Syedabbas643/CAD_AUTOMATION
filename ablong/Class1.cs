@@ -1710,31 +1710,32 @@ namespace CAD_AUTOMATION
 
                             if (!dimStyleTable.Has(dimStyleName))
                             {
-                                // If it doesn't exist, create it
-                                DimStyleTableRecord newDimStyle = new DimStyleTableRecord();
-                                newDimStyle.Name = dimStyleName;
+                                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                                {
+                                    Name = dimStyleName,
 
-                                // Add the new dimension style to the drawing
+                                    // Set dimension style properties here
+                                    Dimclrd = Color.FromColorIndex(ColorMethod.ByColor, 6),
+                                    Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3),
+                                    Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 6),
+                                    Dimasz = 35,
+                                    Dimtxt = 45,
+                                    Dimexo = 4.0,
+                                    Dimdec = 0,
+                                    Dimtad = 0,
+                                    Dimjust = 0,
+                                    Dimtoh = true,
+                                    Dimtih = false,
+                                    Dimupt = false,
+                                    Dimgap = 5
+                                };
+
+                                // Open the dim style table for write before adding
                                 dimStyleTable.UpgradeOpen();
+
+                                // Add the new dimension style to the table and transaction
                                 dimStyleId = dimStyleTable.Add(newDimStyle);
                                 transaction.AddNewlyCreatedDBObject(newDimStyle, true);
-
-                                // Set properties for the new dimension style
-                                newDimStyle.Dimclrd = Color.FromColorIndex(ColorMethod.ByColor, 6);
-                                newDimStyle.Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3);
-                                newDimStyle.Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 6);
-                                newDimStyle.Dimasz = 35;
-                                newDimStyle.Dimtxt = 45;
-                                newDimStyle.Dimexo = 4.0;
-                                newDimStyle.Dimdec = 0;
-                                newDimStyle.Dimtad = 0;
-                                newDimStyle.Dimjust = 0;
-                                newDimStyle.Dimtoh = true;
-                                newDimStyle.Dimtih = false;
-                                newDimStyle.Dimupt = false;
-                                newDimStyle.Dimgap = 5;
-
-                                dimStyleTable.DowngradeOpen();
                             }
                             else
                             {
@@ -5079,29 +5080,32 @@ namespace CAD_AUTOMATION
 
                             if (!dimStyleTable.Has(dimStyleName))
                             {
-                                // If it doesn't exist, create it
-                                DimStyleTableRecord newDimStyle = new DimStyleTableRecord();
-                                newDimStyle.Name = dimStyleName;
+                                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                                {
+                                    Name = dimStyleName,
 
-                                // Add the new dimension style to the drawing
+                                    // Set dimension style properties here
+                                    Dimclrd = Color.FromColorIndex(ColorMethod.ByColor, 6),
+                                    Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3),
+                                    Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 6),
+                                    Dimasz = 35,
+                                    Dimtxt = 45,
+                                    Dimexo = 4.0,
+                                    Dimdec = 0,
+                                    Dimtad = 0,
+                                    Dimjust = 0,
+                                    Dimtoh = true,
+                                    Dimtih = false,
+                                    Dimupt = false,
+                                    Dimgap = 5
+                                };
+
+                                // Open the dim style table for write before adding
                                 dimStyleTable.UpgradeOpen();
+
+                                // Add the new dimension style to the table and transaction
                                 dimStyleId = dimStyleTable.Add(newDimStyle);
                                 transaction.AddNewlyCreatedDBObject(newDimStyle, true);
-
-                                // Set properties for the new dimension style
-                                newDimStyle.Dimclrd = Color.FromColorIndex(ColorMethod.ByColor, 6);
-                                newDimStyle.Dimclrt = Color.FromColorIndex(ColorMethod.ByColor, 3);
-                                newDimStyle.Dimclre = Color.FromColorIndex(ColorMethod.ByColor, 6);
-                                newDimStyle.Dimasz = 35;
-                                newDimStyle.Dimtxt = 45;
-                                newDimStyle.Dimexo = 4.0;
-                                newDimStyle.Dimdec = 0;
-                                newDimStyle.Dimtad = 0;
-                                newDimStyle.Dimjust = 0;
-                                newDimStyle.Dimtoh = true;
-                                newDimStyle.Dimtih = false;
-                                newDimStyle.Dimupt = false;
-                                newDimStyle.Dimgap = 5;
 
 
                             }
