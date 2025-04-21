@@ -8004,46 +8004,35 @@ namespace CAD_AUTOMATION
                                     {
                                         foreach (var polyExtents in allRectangles)
                                         {
-
+                                            string layoutName = $"Page {pageNumber}";
                                             LayoutManager layoutManager = LayoutManager.Current;
-                                            Layout newLayout = new Layout();
-                                            newLayout.LayoutName = $"Page {pageNumber}";
-                                            layoutManager.CreateLayout(newLayout.LayoutName);
-                                            layoutManager.CurrentLayout = newLayout.LayoutName;
+                                            layoutManager.CreateLayout(layoutName); // No new Layout(), just use manager
 
-                                            // Get the new layout's ID
-                                            ObjectId newLayoutId = LayoutManager.Current.GetLayoutId($"Page {pageNumber}");
+                                            ObjectId layoutId1 = layoutManager.GetLayoutId(layoutName);
+                                            layoutManager.CurrentLayout = layoutName;
+                                            Layout layout1 = tr.GetObject(layoutId1, OpenMode.ForWrite) as Layout;
 
-
-                                            Layout layout1 = tr.GetObject(newLayoutId, OpenMode.ForWrite) as Layout;
-                                            layout1.PrintLineweights = plotWithLineWeight;
-
-                                            // Set the layout page size to A4 landscape
-                                            PlotSettingsValidator validator = PlotSettingsValidator.Current;
-                                            validator.SetPlotConfigurationName(layout1, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
-                                            validator.SetPlotPaperUnits(layout1, PlotPaperUnit.Millimeters);
-                                            validator.SetPlotRotation(layout1, PlotRotation.Degrees090);
-                                            validator.SetCurrentStyleSheet(layout1, "Monochrome.ctb");
-
-
-
-                                            // Get the block table record associated with the layout
+                                            // Create viewport manually — skip switching layout
                                             BlockTableRecord layoutBlock = tr.GetObject(layout1.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
 
+                                            // Erase old viewports
                                             foreach (ObjectId id in layoutBlock)
                                             {
                                                 if (id.ObjectClass.DxfName == "VIEWPORT")
                                                 {
-                                                    Viewport vp2 = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-                                                    vp2.Erase();
-                                                    //vp2.Visible = false;
+                                                    Viewport oldVp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                                                    oldVp.Erase();
                                                 }
                                             }
 
                                             Viewport vp = new Viewport();
                                             layoutBlock.AppendEntity(vp);
                                             tr.AddNewlyCreatedDBObject(vp, true);
+
                                             vp.SetUcsToWorld();
+                                            vp.On = true;
+                                            vp.GridOn = false;
+                                            vp.FastZoomOn = true;
 
                                             // Calculate the center and dimensions of the extents
                                             Point2d center1 = new Point2d(
@@ -8080,15 +8069,22 @@ namespace CAD_AUTOMATION
                                             vp.CustomScale = scale;
                                             vp.On = true;
 
-                                            validator.SetPlotType(layout1, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
+                                            // Fast PlotSettings override instead of modifying layout
+                                            PlotSettings ps = new PlotSettings(layout1.ModelType);
+                                            ps.CopyFrom(layout1);
 
-                                            validator.SetStdScaleType(layout1, StdScaleType.ScaleToFit);
-
+                                            PlotSettingsValidator validator = PlotSettingsValidator.Current;
+                                            validator.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                            validator.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                                            validator.SetPlotRotation(ps, PlotRotation.Degrees090);
+                                            validator.SetCurrentStyleSheet(ps, "Monochrome.ctb");
+                                            validator.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
+                                            validator.SetStdScaleType(ps, StdScaleType.ScaleToFit);
 
                                             PlotInfo plotInfo = new PlotInfo
                                             {
-                                                Layout = newLayoutId,
-                                                OverrideSettings = layout1
+                                                Layout = layoutId1,
+                                                OverrideSettings = ps
                                             };
 
                                             PlotInfoValidator plotInfoValidator = new PlotInfoValidator();
@@ -8103,11 +8099,17 @@ namespace CAD_AUTOMATION
                                             PlotPageInfo plotPageInfo = new PlotPageInfo();
                                             progressDialog.SheetProgressPos = pageNumber;
                                             progressDialog.PlotProgressPos = pageNumber;
+
                                             plotEngine.BeginPage(plotPageInfo, plotInfo, pageNumber == allRectangles.Count, null);
                                             plotEngine.BeginGenerateGraphics(null);
                                             plotEngine.EndGenerateGraphics(null);
                                             plotEngine.EndPage(null);
-                                            progressDialog.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pageNumber} of {allRectangles.Count}");
+
+                                            progressDialog.set_PlotMsgString(
+                                                PlotMessageIndex.SheetProgressCaption,
+                                                $"Processing page {pageNumber} of {allRectangles.Count}"
+                                            );
+
                                             pageNumber++;
                                         }
 
@@ -9022,6 +9024,1338 @@ namespace CAD_AUTOMATION
 
             
             
+        }
+
+        [CommandMethod("YnotPDF2")]
+        public void ExportPDF2()
+        {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) throw new InvalidOperationException("Active document is null.");
+
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+
+            PromptEntityOptions options = new PromptEntityOptions("\nSelect a rectangle: ");
+            options.SetRejectMessage("\nOnly rectangles (closed polylines) are allowed.");
+            options.AddAllowedClass(typeof(Polyline), true);
+            PromptEntityResult result = ed.GetEntity(options);
+
+            if (result.Status != PromptStatus.OK)
+                return;
+            ObjectId rectId = result.ObjectId;
+
+            double userscale = 0.8;
+            double linescale = 0.03;
+            bool plotWithLineWeight = true;
+            bool bommerge = true;
+            string paneltype = "";
+
+            using (ynotform panelform = new ynotform())
+            {
+                if (panelform.ShowDialog() == DialogResult.OK)
+                {
+
+                    double.TryParse(panelform.a4scale, out userscale);
+                    double.TryParse(panelform.ltscale, out linescale);
+                    plotWithLineWeight = panelform.lineweight;
+                    bommerge = panelform.mergebom;
+                    paneltype = panelform.panelselection;
+
+                }
+            }
+
+            if (paneltype == "SINGLE_PANEL")
+            {
+                try
+                {
+                    SaveFileDialog saveFileDialog = new SaveFileDialog();
+                    saveFileDialog.Filter = "PDF Files (*.pdf)|*.pdf";
+                    saveFileDialog.Title = "Save PDF File";
+                    saveFileDialog.DefaultExt = "pdf";
+                    saveFileDialog.AddExtension = true;
+
+                    if (saveFileDialog.ShowDialog() != DialogResult.OK)
+                    {
+                        return;
+                    }
+                    string filePath = saveFileDialog.FileName;
+
+                    string fileNameOnly = Path.GetFileName(filePath).ToLower().Replace(" ", "");
+
+                    double oldlinescale = db.Ltscale;
+
+                    db.Ltscale = linescale;
+
+                    LayoutManager layoutMgr = LayoutManager.Current;
+                    string currentLayout = layoutMgr.CurrentLayout;
+
+                    if (string.IsNullOrEmpty(currentLayout))
+                        throw new InvalidOperationException("Current layout is not set.");
+
+                    ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
+                    if (layoutId == ObjectId.Null)
+                        throw new InvalidOperationException("Layout ID is invalid.");
+
+                    Layout layout;
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                        if (layout == null)
+                            throw new InvalidOperationException("Layout object is null.");
+
+                        tr.Commit();
+                    }
+
+                    List<Extents3d> allRectangles = new List<Extents3d>();
+                    //List<Extents3d> outerRectangles = new List<Extents3d>();
+                    Point2d minPoint = new Point2d(0, 0);
+                    Point2d maxPoint = new Point2d(0, 0);
+
+                    using (Transaction acTrans = doc.TransactionManager.StartTransaction())
+                    {
+                        Polyline rect = acTrans.GetObject(rectId, OpenMode.ForRead) as Polyline;
+
+                        if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
+                        {
+
+                            Extents3d selectedExtents = rect.GeometricExtents;
+                            minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
+                                {
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
+                                    {
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
+
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
+                                        {
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
+
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
+                                            {
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                                {
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        allRectangles.Add(polyExtents);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+
+                                            allRectangles.Add(polyExtents);
+                                        }
+                                    }
+                                }
+
+                                tr.Commit();
+                            }
+
+                            acTrans.Commit();
+                        }
+                        else
+                        {
+                            Application.ShowAlertDialog("NOT A RECTANGLE");
+                            db.Ltscale = 1;
+                            return;
+                        }
+
+                        if (!IsFileWritable(filePath))
+                        {
+                            MessageBox.Show($"Error: The file '{filePath}' is open in another application. Close it and try again.", "File In Use", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return; // Exit without plotting
+                        }
+
+                        allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+
+                        if (allRectangles.Count > 0)
+                        {
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                ViewTableRecord view = ed.GetCurrentView();
+
+                                view.Target = Point3d.Origin;
+                                view.ViewDirection = new Vector3d(0, 0, 1);
+                                view.ViewTwist = 0;
+                                ed.SetCurrentView(view);
+
+                                tr.Commit();
+                            }
+
+                            List<string> tempPdfPaths = new List<string>();
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                int pagecount = 1;
+                                
+
+                                //foreach (var rect1 in allRectangles)
+                                //{
+                                    
+                                //    string baseName = Path.GetFileNameWithoutExtension(filePath);
+                                //    string dir = Path.GetDirectoryName(filePath);
+                                //    string temppath = Path.Combine(dir, $"{baseName}-page{pagecount}.pdf");
+                                //    tempPdfPaths.Add(temppath);
+
+                                //    DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+                                //    Layout modelLayout = null;
+
+                                //    // Find the model space layout (ModelType = true)
+                                //    foreach (DBDictionaryEntry entry in layoutDict)
+                                //    {
+                                //        Layout lyt = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
+                                //        if (lyt != null && lyt.ModelType)
+                                //        {
+                                //            modelLayout = lyt;
+                                //            break;
+                                //        }
+                                //    }
+
+                                //    if (modelLayout == null)
+                                //    {
+                                //        doc.Editor.WriteMessage("\nModel layout not found.");
+                                //        return;
+                                //    }
+
+                                //    // Create PlotSettings from model layout
+                                //    PlotSettings ps = new PlotSettings(modelLayout.ModelType);
+                                //    ps.CopyFrom(modelLayout);
+
+                                //    PlotSettingsValidator psv = PlotSettingsValidator.Current;
+
+                                //    psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                //    psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                                //    //psv.SetPlotRotation(ps, PlotRotation.Degrees090);
+                                //    //psv.SetCurrentStyleSheet(ps, "monochrome.ctb");
+                                //    psv.SetPlotCentered(ps, true);
+                                //    psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
+                                //    psv.SetPlotWindowArea(ps, new Extents2d(
+                                //        rect1.MinPoint.X, rect1.MinPoint.Y,
+                                //        rect1.MaxPoint.X, rect1.MaxPoint.Y
+                                //    ));
+                                //    psv.SetUseStandardScale(ps, true);
+                                //    psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+
+                                //    // PlotInfo
+                                //    PlotInfo pi = new PlotInfo
+                                //    {
+                                //        Layout = modelLayout.ObjectId,
+                                //        OverrideSettings = ps
+                                //    };
+
+                                //    PlotInfoValidator piv = new PlotInfoValidator
+                                //    {
+                                //        MediaMatchingPolicy = MatchingPolicy.MatchEnabled
+                                //    };
+                                //    piv.Validate(pi);
+
+                                //    if (PlotFactory.ProcessPlotState == ProcessPlotState.NotPlotting)
+                                //    {
+                                //        using (PlotEngine pe = PlotFactory.CreatePublishEngine())
+                                //        {
+                                //            using (PlotProgressDialog dlg = new PlotProgressDialog(false, 1, true))
+                                //            {
+                                //                dlg.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting");
+                                //                dlg.set_PlotMsgString(PlotMessageIndex.Status, "Creating PDF...");
+                                //                dlg.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
+                                //                dlg.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Sheet Set Progress");
+
+                                //                dlg.LowerPlotProgressRange = 0;
+                                //                dlg.UpperPlotProgressRange = 100;
+                                //                dlg.LowerSheetProgressRange = 0;
+                                //                dlg.UpperSheetProgressRange = 100;
+                                //                dlg.PlotProgressPos = 0;
+
+                                //                dlg.OnBeginPlot();
+                                //                dlg.IsVisible = true;
+
+                                //                pe.BeginPlot(dlg, null);
+                                //                pe.BeginDocument(pi, doc.Name, null, 1, true, temppath);
+
+                                //                PlotPageInfo ppi = new PlotPageInfo();
+                                //                pe.BeginPage(ppi, pi, true, null);
+                                //                pe.BeginGenerateGraphics(null);
+                                //                pe.EndGenerateGraphics(null);
+                                //                pe.EndPage(null);
+
+                                //                pe.EndDocument(null);
+                                //                dlg.PlotProgressPos = 100;
+                                //                dlg.OnEndPlot();
+                                //                pe.EndPlot(null);
+                                //            }
+                                //        }
+                                //    }
+                                    
+                                //    pagecount++;
+                                //}
+
+                                if (PlotFactory.ProcessPlotState == ProcessPlotState.NotPlotting)
+                                {
+                                    using (PlotEngine pe = PlotFactory.CreatePublishEngine())
+                                    {
+                                        using (PlotProgressDialog dlg = new PlotProgressDialog(false, allRectangles.Count, true))
+                                        {
+                                            dlg.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
+                                            dlg.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
+                                            dlg.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
+                                            dlg.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
+                                            dlg.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
+                                            dlg.LowerPlotProgressRange = 0;
+                                            dlg.UpperPlotProgressRange = allRectangles.Count;
+                                            dlg.LowerSheetProgressRange = 0;
+                                            dlg.UpperSheetProgressRange = allRectangles.Count;
+                                            dlg.PlotProgressPos = 0;
+
+                                            dlg.OnBeginPlot();
+                                            dlg.IsVisible = true;
+
+                                            pe.BeginPlot(dlg, null);
+
+                                            foreach (var rect1 in allRectangles)
+                                            {
+                                                string baseName = Path.GetFileNameWithoutExtension(filePath);
+                                                string dir = Path.GetDirectoryName(filePath);
+                                                string temppath = Path.Combine(dir, $"{baseName}-page{pagecount}.pdf");
+                                                tempPdfPaths.Add(temppath);
+
+                                                DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+                                                Layout modelLayout = null;
+
+                                                // Find the model space layout (ModelType = true)
+                                                foreach (DBDictionaryEntry entry in layoutDict)
+                                                {
+                                                    Layout lyt = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
+                                                    if (lyt != null && lyt.ModelType)
+                                                    {
+                                                        modelLayout = lyt;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if (modelLayout == null)
+                                                {
+                                                    doc.Editor.WriteMessage("\nModel layout not found.");
+                                                    return;
+                                                }
+
+                                                // Create PlotSettings from model layout
+                                                PlotSettings ps = new PlotSettings(modelLayout.ModelType);
+                                                ps.CopyFrom(modelLayout);
+
+                                                PlotSettingsValidator psv = PlotSettingsValidator.Current;
+
+                                                psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                                psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                                                psv.SetPlotCentered(ps, true);
+                                                psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
+                                                psv.SetPlotWindowArea(ps, new Extents2d(
+                                                    rect1.MinPoint.X, rect1.MinPoint.Y,
+                                                    rect1.MaxPoint.X, rect1.MaxPoint.Y
+                                                ));
+                                                psv.SetUseStandardScale(ps, true);
+                                                psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+
+                                                PlotInfo pi = new PlotInfo
+                                                {
+                                                    Layout = modelLayout.ObjectId,
+                                                    OverrideSettings = ps
+                                                };
+
+                                                PlotInfoValidator piv = new PlotInfoValidator
+                                                {
+                                                    MediaMatchingPolicy = MatchingPolicy.MatchEnabled
+                                                };
+                                                piv.Validate(pi);
+
+                                                pe.BeginDocument(pi, doc.Name, null, 1, true, temppath);
+
+                                                dlg.OnBeginSheet();
+                                                //dlg.SheetProgressPos = 0;
+
+                                                PlotPageInfo ppi = new PlotPageInfo();
+                                                dlg.SheetProgressPos = pagecount;
+                                                dlg.PlotProgressPos = pagecount;
+                                                pe.BeginPage(ppi, pi, true, null);
+                                                pe.BeginGenerateGraphics(null);
+                                                pe.EndGenerateGraphics(null);
+                                                pe.EndPage(null);
+
+                                                //dlg.SheetProgressPos = 100;
+                                                dlg.OnEndSheet();
+
+                                                pe.EndDocument(null);
+
+                                                pagecount++;
+                                            }
+
+                                            //dlg.PlotProgressPos = 100;
+                                            dlg.OnEndPlot();
+                                            pe.EndPlot(null);
+                                        }
+                                    }
+                                }
+
+                                tr.Commit();
+                            }
+
+                            if (tempPdfPaths.Count > 0)
+                            {
+                                string mergedPdfPath = Path.Combine(Path.GetDirectoryName(filePath), "Merged_Output_GA.pdf");
+
+                                // Create an empty PDF document for merging
+                                PdfDocument outputDocument = new PdfDocument();
+
+                                foreach (var tempPdf in tempPdfPaths)
+                                {
+                                    if (File.Exists(tempPdf))
+                                    {
+                                        // Open each PDF
+                                        PdfDocument inputPdf = PdfReader.Open(tempPdf, PdfDocumentOpenMode.Import);
+
+                                        // Loop through all pages in the current input PDF
+                                        foreach (PdfPage page in inputPdf.Pages)
+                                        {
+                                            // If the page is portrait, rotate it to landscape
+                                            if (page.Height > page.Width)
+                                            {
+                                                page.Rotate = 270; // Rotate by 90 degrees to make it landscape
+                                            }
+                                            outputDocument.AddPage(page);
+                                        }
+
+                                        // Close the input PDF
+                                        //inputPdf.Close();
+                                    }
+                                }
+
+                                // Save the merged PDF to the final destination
+                                outputDocument.Save(mergedPdfPath);
+                                //outputDocument.Close();
+
+                                // Delete the individual PDFs after merging
+                                foreach (var tempPdf in tempPdfPaths)
+                                {
+                                    if (File.Exists(tempPdf))
+                                    {
+                                        File.Delete(tempPdf);
+                                    }
+                                }
+
+                                if (File.Exists(filePath))
+                                {
+                                    File.Delete(filePath);
+                                }
+
+                                // Move the merged PDF to the target file path
+                                File.Move(mergedPdfPath, filePath);
+                            }
+
+
+                        }
+
+                        db.Ltscale = oldlinescale;
+                    }
+
+                    if (bommerge)
+                    {
+                        // Check if Excel is already running
+                        Excel.Application excelApp = null;
+                        try
+                        {
+                            excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+
+                        }
+                        catch (COMException)
+                        {
+                            // Excel is not running, show a message and return
+                            MessageBox.Show("Pdf Generated \n But Excel was not running for Bom Merge");
+                            return;
+                        }
+
+                        Excel.Workbook workbook = null;
+                        Excel.Worksheet worksheet = null;
+                        int matchCount = 0;
+                        Excel.Worksheet matchedWorksheet = null;
+                        Excel.Workbook matchedWorkbook = null;
+
+                        // Check if any workbooks are open
+                        if (excelApp.Workbooks.Count == 0)
+                        {
+                            MessageBox.Show("Pdf Generated \n But NO sheet opened for Bom Merge");
+                            return;
+                        }
+
+                        // Check all workbooks and sheets for a match
+                        foreach (Excel.Workbook wb in excelApp.Workbooks)
+                        {
+                            foreach (Excel.Worksheet ws in wb.Sheets)
+                            {
+                                if (fileNameOnly.Contains(ws.Name.ToLower().Replace(" ", "")))
+                                {
+                                    matchCount++;
+                                    matchedWorksheet = ws;
+                                    matchedWorkbook = wb;
+
+                                    if (matchCount > 1)
+                                    {
+                                        MessageBox.Show("PDF Generated \n But Error: Multiple sheets match the filename. Please check and rename.");
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
+                        // If exactly one match is found, proceed
+                        if (matchCount == 1)
+                        {
+                            workbook = matchedWorkbook;
+                            worksheet = matchedWorksheet;
+                        }
+                        else if (matchCount == 0)
+                        {
+                            MessageBox.Show("PDF Generated \n But No matching sheet found in any open workbook for merging bom.");
+                            return;
+                        }
+
+                        // Define the save path (same as CAD plotting save path)
+                        string cadSaveDirectory = Path.GetDirectoryName(filePath); // Extract folder from CAD save path
+                        string excelPdfSavePath = Path.Combine(cadSaveDirectory, "BOM.pdf");
+
+                        worksheet.PageSetup.Orientation = Excel.XlPageOrientation.xlLandscape; // Set to Landscape
+                        worksheet.PageSetup.Zoom = false;  // Disable Zoom
+                        worksheet.PageSetup.FitToPagesWide = 1;  // Fit all columns in one page
+                        worksheet.PageSetup.FitToPagesTall = false;  // Don't force rows to fit (let them flow)
+
+                        worksheet.PageSetup.LeftMargin = excelApp.InchesToPoints(0.45);
+                        worksheet.PageSetup.RightMargin = excelApp.InchesToPoints(0.45);
+                        worksheet.PageSetup.TopMargin = excelApp.InchesToPoints(0.55);
+                        worksheet.PageSetup.BottomMargin = excelApp.InchesToPoints(0.55);
+                        worksheet.PageSetup.HeaderMargin = excelApp.InchesToPoints(0.4);
+                        worksheet.PageSetup.FooterMargin = excelApp.InchesToPoints(0.4);
+
+                        worksheet.PageSetup.CenterHorizontally = true;
+
+                        try
+                        {
+
+                            worksheet.ExportAsFixedFormat(
+                                Excel.XlFixedFormatType.xlTypePDF,
+                                excelPdfSavePath,
+                                Excel.XlFixedFormatQuality.xlQualityStandard,
+                                true,  // Include Open Worksheets
+                                false,  // Fit to page
+                                1,     // From page
+                                Type.Missing,
+                                false  // Do not open after publish
+                            );
+
+                            string mergedPdfPath = Path.Combine(cadSaveDirectory, "Merged_Output.pdf"); // Final merged PDF
+
+                            // Check if both PDFs exist
+                            if (!File.Exists(filePath) || !File.Exists(excelPdfSavePath))
+                            {
+                                MessageBox.Show("Error: One or both PDFs are missing.");
+                                return;
+                            }
+
+                            // Create an empty output document
+                            PdfDocument outputDocument = new PdfDocument();
+
+                            PdfDocument inputPdf1 = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+                            foreach (PdfPage page in inputPdf1.Pages)
+                            {
+                                if (page.Height > page.Width)  // If portrait, rotate it
+                                {
+                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                }
+                                outputDocument.AddPage(page);
+                            }
+
+                            // Merge the second PDF (BOM)
+                            PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
+                            foreach (PdfPage page in inputPdf2.Pages)
+                            {
+                                if (page.Height > page.Width)  // If portrait, rotate it
+                                {
+                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                }
+                                outputDocument.AddPage(page);
+                            }
+
+                            // Save the merged PDF
+                            outputDocument.Save(mergedPdfPath);
+
+                            // Cleanup
+                            //inputPdf1.Close();
+                            //inputPdf2.Close();
+                            //outputDocument.Close();
+
+                            // Delete individual PDFs after merging (optional)
+                            File.Delete(filePath);
+                            File.Delete(excelPdfSavePath);
+                            File.Move(mergedPdfPath, filePath);
+
+                            MessageBox.Show($"Pdf Generated \nBOM sheet successfully plotted and Merged");
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Error while saving BOM sheet as PDF: " + ex.Message);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("Pdf Generated \nAutomation by GaMeR");
+                    }
+
+                }
+                catch (Exception ex)
+                {
+
+                    Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
+                }
+                  
+                
+            }
+            else if (paneltype == "MULTIPLE_PANEL")
+            {
+                try
+                {
+
+                    string lastUsedFolder = null;
+                    string folderPath = null;
+                    StringBuilder errorLog = new StringBuilder();
+
+                    using (var dialog = new CommonOpenFileDialog
+                    {
+                        Title = "Select a folder",
+                        IsFolderPicker = true, // Enables folder selection
+                        RestoreDirectory = true // Restores the selected directory for future use
+                    })
+                        if (dialog.ShowDialog() == CommonFileDialogResult.Ok)
+                        {
+                            folderPath = dialog.FileName;
+                            lastUsedFolder = folderPath;
+                        }
+
+
+                    double oldlinescale = db.Ltscale;
+
+                    db.Ltscale = linescale;
+
+                    LayoutManager layoutMgr = LayoutManager.Current;
+                    string currentLayout = layoutMgr.CurrentLayout;
+
+                    if (string.IsNullOrEmpty(currentLayout))
+                        throw new InvalidOperationException("Current layout is not set.");
+
+                    ObjectId layoutId = layoutMgr.GetLayoutId(currentLayout);
+                    if (layoutId == ObjectId.Null)
+                        throw new InvalidOperationException("Layout ID is invalid.");
+
+                    Layout layout;
+                    using (Transaction tr = db.TransactionManager.StartTransaction())
+                    {
+                        layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                        if (layout == null)
+                            throw new InvalidOperationException("Layout object is null.");
+
+                        tr.Commit();
+                    }
+
+                    List<Extents3d> allRectanglesfull = new List<Extents3d>();
+                    //List<Extents3d> outerRectanglesfull = new List<Extents3d>();
+                    Point2d minPointfull = new Point2d(0, 0);
+                    Point2d maxPointfull = new Point2d(0, 0);
+
+                    using (Transaction acTransfull = doc.TransactionManager.StartTransaction())
+                    {
+                        Polyline rect = acTransfull.GetObject(rectId, OpenMode.ForRead) as Polyline;
+
+                        if (rect != null && rect.Closed && rect.NumberOfVertices == 4)
+                        {
+
+                            Extents3d selectedExtents = rect.GeometricExtents;
+                            minPointfull = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPointfull = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+
+                            using (Transaction trfull = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable btfull = trfull.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btrfull = trfull.GetObject(btfull[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                string selectedLayerfull = rect.Layer;
+
+                                foreach (ObjectId objId in btrfull)
+                                {
+                                    Entity entity = trfull.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+                                            allRectanglesfull.Add(polyExtents);
+                                        }
+                                    }
+                                }
+
+                                trfull.Commit();
+                            }
+
+                            acTransfull.Commit();
+                        }
+                        else
+                        {
+                            Application.ShowAlertDialog("NOT A RECTANGLE");
+                            db.Ltscale = 1;
+                            return;
+                        }
+                    }
+
+                    allRectanglesfull = allRectanglesfull.OrderByDescending(rect => rect.MaxPoint.Y).ToList();
+
+                    int pdfnumber = 1;
+                    int pagecount = 1;
+                    int maxpagecount = 0;
+
+                    foreach (var polyExtents3 in allRectanglesfull)
+                    {
+                        using (Transaction acTrans = doc.TransactionManager.StartTransaction())
+                        {
+                            List<Extents3d> allRectanglescount = new List<Extents3d>();
+                            //List<Extents3d> outerRectangles = new List<Extents3d>();
+                            Point2d minPointcount = new Point2d(0, 0);
+                            Point2d maxPointcount = new Point2d(0, 0);
+                            Extents3d selectedExtents = polyExtents3;
+                            minPointcount = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPointcount = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                //string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
+                                {
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
+                                    {
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
+
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
+                                        {
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
+
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
+                                            {
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                                {
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        maxpagecount++;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+                                            maxpagecount++;
+                                        }
+                                    }
+                                }
+
+
+
+                                tr.Commit();
+
+
+                            }
+
+                            acTrans.Commit();
+                        }
+                    }
+
+                    foreach (var polyExtents2 in allRectanglesfull)
+                    {
+                        List<Extents3d> allRectangles = new List<Extents3d>();
+                        //List<Extents3d> outerRectangles = new List<Extents3d>();
+                        Point2d minPoint = new Point2d(0, 0);
+                        Point2d maxPoint = new Point2d(0, 0);
+
+                        string pdfName = "";
+                        string pdfPath = "";
+                        bool namefound = false;
+
+                        using (Transaction acTrans = doc.TransactionManager.StartTransaction())
+                        {
+
+                            Extents3d selectedExtents = polyExtents2;
+                            minPoint = new Point2d(selectedExtents.MinPoint.X, selectedExtents.MinPoint.Y);
+                            maxPoint = new Point2d(selectedExtents.MaxPoint.X, selectedExtents.MaxPoint.Y);
+
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+                                //string selectedLayer = rect.Layer;
+
+                                foreach (ObjectId objId in btr)
+                                {
+                                    Entity entity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+
+                                    // Check if the entity is a BlockReference (i.e., a block)
+                                    if (entity is BlockReference blockRef)
+                                    {
+                                        // Get extents of the block
+                                        Extents3d blockExtents = blockRef.GeometricExtents;
+
+                                        // Check if the block is within the selected rectangle
+                                        if (IsRectangleWithin(selectedExtents, blockExtents))
+                                        {
+                                            // Explode the block to retrieve its components
+                                            DBObjectCollection explodedEntities = new DBObjectCollection();
+                                            blockRef.Explode(explodedEntities);
+
+                                            // Scan for rectangles within the exploded entities
+                                            foreach (DBObject explodedObj in explodedEntities)
+                                            {
+                                                if (explodedObj is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                                {
+                                                    Extents3d polyExtents = poly.GeometricExtents;
+
+                                                    // Avoid including the original rectangle
+                                                    if (polyExtents.Equals(selectedExtents))
+                                                        continue;
+
+                                                    if (IsRectangleWithin(selectedExtents, polyExtents))
+                                                    {
+                                                        allRectangles.Add(polyExtents);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (entity is Polyline poly && poly.Closed && poly.NumberOfVertices == 4 && poly.Layer == "YNOT")
+                                    {
+                                        Extents3d polyExtents = poly.GeometricExtents;
+
+                                        if (polyExtents.Equals(selectedExtents))
+                                            continue;
+
+                                        if (IsRectangleWithin(selectedExtents, polyExtents))
+                                        {
+                                            allRectangles.Add(polyExtents);
+                                        }
+                                    }
+                                }
+
+
+
+                                tr.Commit();
+                            }
+
+                            acTrans.Commit();
+
+                            using (Transaction tr = db.TransactionManager.StartTransaction())
+                            {
+                                BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+
+
+                                foreach (ObjectId entId in btr)
+                                {
+                                    Entity ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
+
+                                    if (ent is DBText dbText)
+                                    {
+                                        Point3d insertionPoint = dbText.Position; ;
+
+                                        if (insertionPoint.X >= minPoint.X && insertionPoint.X <= maxPoint.X &&
+                                            insertionPoint.Y >= minPoint.Y && insertionPoint.Y <= maxPoint.Y)
+                                        {
+                                            bool isInsideInnerRectangle = false;
+
+
+                                            foreach (var innerRect in allRectangles)
+                                            {
+                                                Point3d innerMinPoint = innerRect.MinPoint;
+                                                Point3d innerMaxPoint = innerRect.MaxPoint;
+
+                                                if (insertionPoint.X >= innerMinPoint.X && insertionPoint.X <= innerMaxPoint.X &&
+                                                    insertionPoint.Y >= innerMinPoint.Y && insertionPoint.Y <= innerMaxPoint.Y)
+                                                {
+                                                    isInsideInnerRectangle = true;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (!isInsideInnerRectangle && !namefound)
+                                            {
+                                                string todayDate = DateTime.Now.ToString("dd-MM-yyyy");
+                                                string timehour = DateTime.Now.ToString("HH");
+                                                string timemin = DateTime.Now.ToString("mm");
+                                                pdfName = $"{dbText.TextString}-GA-{todayDate}.pdf";
+                                                namefound = true;
+
+                                            }
+                                        }
+                                    }
+                                }
+
+                                tr.Commit();
+                            }
+
+                            allRectangles = allRectangles.OrderBy(rect1 => rect1.MinPoint.X).ToList();
+
+                            if (allRectangles.Count > 0)
+                            {
+
+                                if (!IsFileWritable(Path.Combine(folderPath, pdfName)))
+                                {
+                                    errorLog.AppendLine($"Error: The file '{Path.Combine(folderPath, pdfName)}' is open in another application. Close it and try again.");
+                                    pdfnumber++;
+                                    System.Threading.Thread.Sleep(2000);
+                                    continue;
+                                }
+
+                                using (Transaction tr = db.TransactionManager.StartTransaction())
+                                {
+                                    // Get the current view
+                                    ViewTableRecord view = ed.GetCurrentView();
+                                    view.Target = Point3d.Origin;
+                                    view.ViewDirection = new Vector3d(0, 0, 1);
+                                    view.ViewTwist = 0;
+                                    ed.SetCurrentView(view);
+                                    tr.Commit();
+                                }
+
+                                List<string> tempPdfPaths = new List<string>();
+
+                                using (Transaction tr = db.TransactionManager.StartTransaction())
+                                {
+                                    int pagecount2 = 1;
+
+                                    string fileName = "pdf.pdf";
+
+                                    if (pdfName != null || pdfName != "")
+                                    {
+                                        fileName = pdfName;
+                                    }
+                                    else
+                                    {
+                                        fileName = $"{pdfnumber}.pdf";
+                                    }
+
+                                    pdfPath = Path.Combine(folderPath, fileName);
+
+                                    if (PlotFactory.ProcessPlotState == ProcessPlotState.NotPlotting)
+                                    {
+                                        using (PlotEngine pe = PlotFactory.CreatePublishEngine())
+                                        {
+                                            using (PlotProgressDialog dlg = new PlotProgressDialog(false, allRectangles.Count, true))
+                                            {
+                                                dlg.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting to PDF");
+                                                dlg.set_PlotMsgString(PlotMessageIndex.CancelJobButtonMessage, "Cancel Job");
+                                                dlg.set_PlotMsgString(PlotMessageIndex.Status, "Creating PDF...");
+                                                dlg.set_PlotMsgString(PlotMessageIndex.CancelSheetButtonMessage, "Cancel Sheet");
+                                                dlg.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Total Sheet Progress");
+                                                dlg.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
+                                                dlg.LowerPlotProgressRange = 0;
+                                                dlg.UpperPlotProgressRange = maxpagecount;
+                                                dlg.LowerSheetProgressRange = 0;
+                                                dlg.UpperSheetProgressRange = allRectangles.Count;
+                                                dlg.PlotProgressPos = 0;
+
+                                                dlg.OnBeginPlot();
+                                                dlg.IsVisible = true;
+
+                                                pe.BeginPlot(dlg, null);
+
+                                                foreach (var rect1 in allRectangles)
+                                                {
+                                                    string baseName = Path.GetFileNameWithoutExtension(pdfPath);
+                                                    string dir = Path.GetDirectoryName(pdfPath);
+                                                    string temppath = Path.Combine(dir, $"{baseName}-page{pagecount2}.pdf");
+                                                    tempPdfPaths.Add(temppath);
+
+                                                    DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+                                                    Layout modelLayout = null;
+
+                                                    foreach (DBDictionaryEntry entry in layoutDict)
+                                                    {
+                                                        Layout lyt = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
+                                                        if (lyt != null && lyt.ModelType)
+                                                        {
+                                                            modelLayout = lyt;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if (modelLayout == null)
+                                                    {
+                                                        doc.Editor.WriteMessage("\nModel layout not found.");
+                                                        return;
+                                                    }
+
+                                                    PlotSettings ps = new PlotSettings(modelLayout.ModelType);
+                                                    ps.CopyFrom(modelLayout);
+
+                                                    PlotSettingsValidator psv = PlotSettingsValidator.Current;
+                                                    psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                                    psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                                                    psv.SetPlotCentered(ps, true);
+                                                    psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
+                                                    psv.SetPlotWindowArea(ps, new Extents2d(
+                                                        rect1.MinPoint.X, rect1.MinPoint.Y,
+                                                        rect1.MaxPoint.X, rect1.MaxPoint.Y
+                                                    ));
+                                                    psv.SetUseStandardScale(ps, true);
+                                                    psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+
+                                                    PlotInfo pi = new PlotInfo
+                                                    {
+                                                        Layout = modelLayout.ObjectId,
+                                                        OverrideSettings = ps
+                                                    };
+
+                                                    PlotInfoValidator piv = new PlotInfoValidator
+                                                    {
+                                                        MediaMatchingPolicy = MatchingPolicy.MatchEnabled
+                                                    };
+                                                    piv.Validate(pi);
+
+                                                    dlg.OnBeginSheet();
+                                                    dlg.SheetProgressPos = pagecount2;
+                                                    dlg.PlotProgressPos = pagecount;
+                                                    dlg.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, $"Processing page {pagecount2} of {allRectangles.Count}");
+                                                    dlg.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, $"Processing Total page {pagecount} of {maxpagecount}");
+
+                                                    pe.BeginDocument(pi, doc.Name, null, 1, true, temppath);
+
+                                                    PlotPageInfo ppi = new PlotPageInfo();
+                                                    pe.BeginPage(ppi, pi, true, null);
+                                                    pe.BeginGenerateGraphics(null);
+                                                    pe.EndGenerateGraphics(null);
+                                                    pe.EndPage(null);
+
+                                                    pe.EndDocument(null);
+                                                    dlg.OnEndSheet();
+
+                                                    pagecount2++;
+                                                    pagecount++;
+                                                }
+
+                                                dlg.OnEndPlot();
+                                                pe.EndPlot(null);
+                                            }
+                                        }
+                                    }
+
+                                    tr.Commit();
+                                }
+
+                                if (tempPdfPaths.Count > 0)
+                                {
+                                    string mergedPdfPath = Path.Combine(Path.GetDirectoryName(pdfPath), "Merged_Output_GA.pdf");
+
+                                    // Create an empty PDF document for merging
+                                    PdfDocument outputDocument = new PdfDocument();
+
+                                    foreach (var tempPdf in tempPdfPaths)
+                                    {
+                                        if (File.Exists(tempPdf))
+                                        {
+                                            // Open each PDF
+                                            PdfDocument inputPdf = PdfReader.Open(tempPdf, PdfDocumentOpenMode.Import);
+
+                                            // Loop through all pages in the current input PDF
+                                            foreach (PdfPage page in inputPdf.Pages)
+                                            {
+                                                // If the page is portrait, rotate it to landscape
+                                                if (page.Height > page.Width)
+                                                {
+                                                    page.Rotate = 270; // Rotate by 90 degrees to make it landscape
+                                                }
+                                                outputDocument.AddPage(page);
+                                            }
+
+                                            // Close the input PDF
+                                            //inputPdf.Close();
+                                        }
+                                    }
+
+                                    // Save the merged PDF to the final destination
+                                    outputDocument.Save(mergedPdfPath);
+                                    //outputDocument.Close();
+
+                                    // Delete the individual PDFs after merging
+                                    foreach (var tempPdf in tempPdfPaths)
+                                    {
+                                        if (File.Exists(tempPdf))
+                                        {
+                                            File.Delete(tempPdf);
+                                        }
+                                    }
+
+                                    if (File.Exists(pdfPath))
+                                    {
+                                        File.Delete(pdfPath);
+                                    }
+
+                                    // Move the merged PDF to the target file path
+                                    File.Move(mergedPdfPath, pdfPath);
+                                }
+                                
+                            }
+                        }
+
+                        if (bommerge && pdfPath != "" && pdfName != "")
+                        {
+                            // Check if Excel is already running
+                            Excel.Application excelApp = null;
+                            try
+                            {
+                                excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
+
+                            }
+                            catch (COMException)
+                            {
+                                // Excel is not running, show a message and return
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but Excel was not running for BOM Merge.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            Excel.Workbook workbook = null;
+                            Excel.Worksheet worksheet = null;
+                            int matchCount = 0;
+                            Excel.Worksheet matchedWorksheet = null;
+                            Excel.Workbook matchedWorkbook = null;
+
+                            // Check if any workbooks are open
+                            if (excelApp.Workbooks.Count == 0)
+                            {
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but NO Excel sheet was opened for BOM Merge.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            // Check all workbooks and sheets for a match
+                            foreach (Excel.Workbook wb in excelApp.Workbooks)
+                            {
+                                foreach (Excel.Worksheet ws in wb.Sheets)
+                                {
+                                    if (pdfName.ToLower().Replace(" ", "").Contains(ws.Name.ToLower().Replace(" ", "")))
+                                    {
+                                        matchCount++;
+                                        matchedWorksheet = ws;
+                                        matchedWorkbook = wb;
+
+                                        if (matchCount > 1)
+                                        {
+                                            errorLog.AppendLine($"Pdf Generated for {pdfName}, but Error: Multiple sheets match the filename.");
+                                            pdfnumber++;
+                                            System.Threading.Thread.Sleep(2000);
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // If exactly one match is found, proceed
+                            if (matchCount == 1)
+                            {
+                                workbook = matchedWorkbook;
+                                worksheet = matchedWorksheet;
+                            }
+                            else if (matchCount == 0)
+                            {
+                                errorLog.AppendLine($"Pdf Generated for {pdfName}, but No matching sheet found in any open workbook.");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+
+                            //MessageBox.Show(pdfPath);
+                            string cadSaveDirectory = folderPath; // Extract folder from CAD save path
+                            string excelPdfSavePath = Path.Combine(cadSaveDirectory, "BOM.pdf");
+
+                            worksheet.PageSetup.Orientation = Excel.XlPageOrientation.xlLandscape; // Set to Landscape
+                            worksheet.PageSetup.Zoom = false;  // Disable Zoom
+                            worksheet.PageSetup.FitToPagesWide = 1;  // Fit all columns in one page
+                            worksheet.PageSetup.FitToPagesTall = false;  // Don't force rows to fit (let them flow)
+
+                            worksheet.PageSetup.LeftMargin = excelApp.InchesToPoints(0.45);
+                            worksheet.PageSetup.RightMargin = excelApp.InchesToPoints(0.45);
+                            worksheet.PageSetup.TopMargin = excelApp.InchesToPoints(0.55);
+                            worksheet.PageSetup.BottomMargin = excelApp.InchesToPoints(0.55);
+                            worksheet.PageSetup.HeaderMargin = excelApp.InchesToPoints(0.4);
+                            worksheet.PageSetup.FooterMargin = excelApp.InchesToPoints(0.4);
+                            worksheet.PageSetup.CenterHorizontally = true;
+
+                            try
+                            {
+
+                                worksheet.ExportAsFixedFormat(
+                                    Excel.XlFixedFormatType.xlTypePDF,
+                                    excelPdfSavePath,
+                                    Excel.XlFixedFormatQuality.xlQualityStandard,
+                                    true,  // Include Open Worksheets
+                                    false,  // Fit to page
+                                    1,     // From page
+                                    Type.Missing,
+                                    false  // Do not open after publish
+                                );
+
+                                string mergedPdfPath = Path.Combine(cadSaveDirectory, "Merged_Output.pdf"); // Final merged PDF
+
+                                // Check if both PDFs exist
+                                if (!File.Exists(excelPdfSavePath))
+                                {
+                                    errorLog.AppendLine($"Error: BOM PDF was not generated for {pdfName}.");
+                                    pdfnumber++;
+                                    System.Threading.Thread.Sleep(2000);
+                                    continue;
+                                }
+
+                                // Create an empty output document
+                                PdfDocument outputDocument = new PdfDocument();
+
+                                PdfDocument inputPdf1 = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
+                                foreach (PdfPage page in inputPdf1.Pages)
+                                {
+                                    if (page.Height > page.Width)  // If portrait, rotate it
+                                    {
+                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                    }
+                                    outputDocument.AddPage(page);
+                                }
+
+                                // Merge the second PDF (BOM)
+                                PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
+                                foreach (PdfPage page in inputPdf2.Pages)
+                                {
+                                    if (page.Height > page.Width)  // If portrait, rotate it
+                                    {
+                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                    }
+                                    outputDocument.AddPage(page);
+                                }
+
+                                // Save the merged PDF
+                                outputDocument.Save(mergedPdfPath);
+
+                                // Delete individual PDFs after merging (optional)
+                                File.Delete(pdfPath);
+                                File.Delete(excelPdfSavePath);
+                                File.Move(mergedPdfPath, pdfPath);
+
+
+                            }
+                            catch (Exception ex)
+                            {
+                                errorLog.AppendLine($"Error while saving BOM sheet as PDF for {pdfName}: {ex.Message}");
+                                pdfnumber++;
+                                System.Threading.Thread.Sleep(2000);
+                                continue;
+                            }
+                        }
+
+                        pdfnumber++;
+                        System.Threading.Thread.Sleep(500);
+                    }
+
+                    db.Ltscale = oldlinescale;
+                    if (errorLog.Length > 0)
+                    {
+                        MessageBox.Show(errorLog.ToString(), "Process Completed with Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        MessageBox.Show("All PDFs generated and merged successfully! \nAutomation by GaMeR", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+
+                }
+                catch (Exception ex)
+                {
+
+                    Application.ShowAlertDialog($"Error exporting PDF: {ex.Message}");
+                }
+            }
+
+
+
         }
 
         private bool IsFileWritable(string filePath)

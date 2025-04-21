@@ -87,7 +87,7 @@ namespace CAD_AUTOMATION
                 Orientation = System.Windows.Controls.Orientation.Vertical,
                 Size = RibbonItemSize.Large,
                 LargeImage = LoadBitmap("pdf"),
-                CommandHandler = new RibbonCommandHandler("YnotPDF")
+                CommandHandler = new RibbonCommandHandler("YnotPDF2")
             };
 
             RibbonButton mechgabutton = new RibbonButton
