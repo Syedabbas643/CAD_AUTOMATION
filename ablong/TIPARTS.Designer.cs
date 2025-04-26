@@ -52,7 +52,7 @@
             this.metroLabel1.CustomForeColor = true;
             this.metroLabel1.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel1.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel1.Location = new System.Drawing.Point(37, 251);
+            this.metroLabel1.Location = new System.Drawing.Point(37, 139);
             this.metroLabel1.Name = "metroLabel1";
             this.metroLabel1.Size = new System.Drawing.Size(128, 27);
             this.metroLabel1.TabIndex = 0;
@@ -65,7 +65,7 @@
             this.metroLabel2.CustomForeColor = true;
             this.metroLabel2.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel2.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel2.Location = new System.Drawing.Point(37, 307);
+            this.metroLabel2.Location = new System.Drawing.Point(37, 195);
             this.metroLabel2.Name = "metroLabel2";
             this.metroLabel2.Size = new System.Drawing.Size(97, 27);
             this.metroLabel2.TabIndex = 1;
@@ -77,7 +77,7 @@
             this.heightbox.CustomBackground = true;
             this.heightbox.CustomForeColor = true;
             this.heightbox.FontSize = MetroFramework.MetroTextBoxSize.Tall;
-            this.heightbox.Location = new System.Drawing.Point(201, 248);
+            this.heightbox.Location = new System.Drawing.Point(201, 136);
             this.heightbox.Name = "heightbox";
             this.heightbox.Size = new System.Drawing.Size(118, 30);
             this.heightbox.TabIndex = 2;
@@ -89,7 +89,7 @@
             this.hbbbox.CustomBackground = true;
             this.hbbbox.CustomForeColor = true;
             this.hbbbox.FontSize = MetroFramework.MetroTextBoxSize.Tall;
-            this.hbbbox.Location = new System.Drawing.Point(201, 304);
+            this.hbbbox.Location = new System.Drawing.Point(201, 192);
             this.hbbbox.Name = "hbbbox";
             this.hbbbox.Size = new System.Drawing.Size(118, 30);
             this.hbbbox.TabIndex = 3;
@@ -110,7 +110,7 @@
             this.widthbox.CustomBackground = true;
             this.widthbox.CustomForeColor = true;
             this.widthbox.FontSize = MetroFramework.MetroTextBoxSize.Tall;
-            this.widthbox.Location = new System.Drawing.Point(201, 356);
+            this.widthbox.Location = new System.Drawing.Point(201, 244);
             this.widthbox.Name = "widthbox";
             this.widthbox.Size = new System.Drawing.Size(118, 30);
             this.widthbox.TabIndex = 6;
@@ -123,7 +123,7 @@
             this.metroLabel3.CustomForeColor = true;
             this.metroLabel3.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel3.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel3.Location = new System.Drawing.Point(37, 359);
+            this.metroLabel3.Location = new System.Drawing.Point(37, 247);
             this.metroLabel3.Name = "metroLabel3";
             this.metroLabel3.Size = new System.Drawing.Size(97, 27);
             this.metroLabel3.TabIndex = 5;
@@ -136,7 +136,7 @@
             this.metroLabel4.CustomForeColor = true;
             this.metroLabel4.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel4.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel4.Location = new System.Drawing.Point(37, 144);
+            this.metroLabel4.Location = new System.Drawing.Point(37, 298);
             this.metroLabel4.Name = "metroLabel4";
             this.metroLabel4.Size = new System.Drawing.Size(128, 27);
             this.metroLabel4.TabIndex = 7;
@@ -149,7 +149,7 @@
             this.readsidecombobox.Items.AddRange(new object[] {
             "DOOR",
             "COVER"});
-            this.readsidecombobox.Location = new System.Drawing.Point(201, 142);
+            this.readsidecombobox.Location = new System.Drawing.Point(201, 296);
             this.readsidecombobox.Name = "readsidecombobox";
             this.readsidecombobox.Size = new System.Drawing.Size(121, 29);
             this.readsidecombobox.TabIndex = 8;
@@ -163,7 +163,7 @@
             "CAM_LOCK_&_GRIP",
             "CAM_LOCK",
             "KNOB"});
-            this.locktypecombobox.Location = new System.Drawing.Point(201, 193);
+            this.locktypecombobox.Location = new System.Drawing.Point(201, 347);
             this.locktypecombobox.Name = "locktypecombobox";
             this.locktypecombobox.Size = new System.Drawing.Size(121, 29);
             this.locktypecombobox.TabIndex = 10;
@@ -176,7 +176,7 @@
             this.metroLabel5.CustomForeColor = true;
             this.metroLabel5.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel5.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel5.Location = new System.Drawing.Point(37, 195);
+            this.metroLabel5.Location = new System.Drawing.Point(37, 349);
             this.metroLabel5.Name = "metroLabel5";
             this.metroLabel5.Size = new System.Drawing.Size(128, 27);
             this.metroLabel5.TabIndex = 9;
@@ -230,7 +230,7 @@
             this.metroLabel8.FontSize = MetroFramework.MetroLabelSize.Tall;
             this.metroLabel8.FontWeight = MetroFramework.MetroLabelWeight.Bold;
             this.metroLabel8.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.metroLabel8.Location = new System.Drawing.Point(92, 23);
+            this.metroLabel8.Location = new System.Drawing.Point(283, 22);
             this.metroLabel8.Name = "metroLabel8";
             this.metroLabel8.Size = new System.Drawing.Size(177, 27);
             this.metroLabel8.TabIndex = 16;
@@ -242,7 +242,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.ClientSize = new System.Drawing.Size(362, 495);
+            this.ClientSize = new System.Drawing.Size(738, 495);
             this.Controls.Add(this.metroLabel8);
             this.Controls.Add(this.metroComboBox2);
             this.Controls.Add(this.metroLabel7);

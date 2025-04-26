@@ -1,21 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Office.Interop.Excel;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.AutoCAD.GraphicsInterface;
 using Autodesk.AutoCAD.PlottingServices;
 using Autodesk.AutoCAD.Runtime;
-using Autodesk.AutoCAD.Windows;
-using static Autodesk.AutoCAD.LayerManager.LayerFilter;
 using Exception = System.Exception;
 using Polyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 using Line = Autodesk.AutoCAD.DatabaseServices.Line;
@@ -23,50 +18,34 @@ using Arc = Autodesk.AutoCAD.DatabaseServices.Arc;
 using Color = Autodesk.AutoCAD.Colors.Color;
 using Viewport = Autodesk.AutoCAD.DatabaseServices.Viewport;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
-using ExcelApplication = Microsoft.Office.Interop.Excel.Application;
 using Excel = Microsoft.Office.Interop.Excel;
 using SaveFileDialog = System.Windows.Forms.SaveFileDialog;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using DialogResult = System.Windows.Forms.DialogResult;
 using System.Runtime.InteropServices;
-using Autodesk.AutoCAD.GraphicsSystem;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Windows.Documents;
-using System.Windows.Shapes;
 using Path = System.IO.Path;
-using System.Windows.Media.Media3D;
-using System.Security.Cryptography;
 using Autodesk.AutoCAD.Colors;
 using System.Text.RegularExpressions;
-using System.Reflection;
-using System.Drawing;
 using Point = System.Drawing.Point;
-using System.Windows;
 using MessageBox = System.Windows.Forms.MessageBox;
-using System.Net.NetworkInformation;
-using System.Net;
-using System.Security.Policy;
-using System.Windows.Media;
-using System.Runtime.ConstrainedExecution;
-using OpenFileDialog = System.Windows.Forms.OpenFileDialog;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf;
-using System.Runtime.InteropServices.ComTypes;
-using Autodesk.AutoCAD.Internal.Calculator;
+using System.Collections.Specialized;
 
 namespace CAD_AUTOMATION
 {
-    
+
     public class RectangleDrawer : IExtensionApplication
     {
         private static string lastFolderName = string.Empty;
         private static string lastFileName = string.Empty;
         private static double lastoblen;
         private static double lastobwid;
-        private static bool isEnabled = false;
+        private static bool isEnabled = true;
+        string layerName = "BENDING LINE";
         //update 28feb
         [DllImport("user32.dll")]
         static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -87,58 +66,61 @@ namespace CAD_AUTOMATION
         }
         public void Initialize()
         {
-            
-            string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-
-            // Define the path to the http.exe
-            string httpExePath = Path.Combine(pluginDirectory, "http.exe");
-
-            if (File.Exists(httpExePath))
+            if (!isEnabled)
             {
-                // Start the external http.exe with command-line argument
-                ProcessStartInfo startInfo = new ProcessStartInfo(httpExePath, "/fromautocad");
-                startInfo.UseShellExecute = false;
-                startInfo.CreateNoWindow = true;
+                string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 
-                // Start the process (http.exe)
-                Process process = Process.Start(startInfo);
+                // Define the path to the http.exe
+                string httpExePath = Path.Combine(pluginDirectory, "http.exe");
 
-                // Listen to the pipe for the message
-                Thread pipeListenerThread = new Thread(() =>
+                if (File.Exists(httpExePath))
                 {
-                    try
+                    // Start the external http.exe with command-line argument
+                    ProcessStartInfo startInfo = new ProcessStartInfo(httpExePath, "/fromautocad");
+                    startInfo.UseShellExecute = false;
+                    startInfo.CreateNoWindow = true;
+
+                    // Start the process (http.exe)
+                    Process process = Process.Start(startInfo);
+
+                    // Listen to the pipe for the message
+                    Thread pipeListenerThread = new Thread(() =>
                     {
-                        // Create a named pipe server to listen for messages
-                        using (var pipeServer = new NamedPipeServerStream("AutoCADPipe", PipeDirection.In))
+                        try
                         {
-                            pipeServer.WaitForConnection();
-
-                            // Read the message sent by the WinForms app (http.exe)
-                            using (var reader = new StreamReader(pipeServer, Encoding.UTF8))
+                            // Create a named pipe server to listen for messages
+                            using (var pipeServer = new NamedPipeServerStream("AutoCADPipe", PipeDirection.In))
                             {
-                                string message = reader.ReadLine();
-                                if (message == "OK") 
+                                pipeServer.WaitForConnection();
+
+                                // Read the message sent by the WinForms app (http.exe)
+                                using (var reader = new StreamReader(pipeServer, Encoding.UTF8))
                                 {
-                                    isEnabled = true;
+                                    string message = reader.ReadLine();
+                                    if (message == "OK")
+                                    {
+                                        isEnabled = true;
+                                    }
                                 }
+
+                                pipeServer.Close();
                             }
-
-                            pipeServer.Close();
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"Error listening to pipe: {ex.Message}");
-                    }
-                });
+                        catch (Exception ex)
+                        {
+                            Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage($"Error listening to pipe: {ex.Message}");
+                        }
+                    });
 
-                pipeListenerThread.Start();
-                //process.WaitForExit();
+                    pipeListenerThread.Start();
+                    //process.WaitForExit();
+                }
+                else
+                {
+                    Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("http.exe not found in the same directory as the plugin.");
+                }
             }
-            else
-            {
-                Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("http.exe not found in the same directory as the plugin.");
-            }
+            
 
             RibbonClass ribbon = new RibbonClass();
             ribbon.CreateRibbon();
@@ -232,6 +214,298 @@ namespace CAD_AUTOMATION
             }
         }
 
+        [CommandMethod("D_STIFFNER")]
+        public void DOORSTIFFNER()
+        {
+            if (!isEnabled)
+            {
+                MessageBox.Show("GaMeR Add-in is Disabled");
+                return;
+            }
+            // Get the current document and database
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            NameValueCollection config;
+
+            string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string cadFilePath = Path.Combine(pluginDirectory, "blocks.dwg");
+            string iniFilePath = Path.Combine(pluginDirectory, "gi_config_in.ini");
+
+            using (Database sourceDb = new Database(false, true))
+            {
+                sourceDb.ReadDwgFile(cadFilePath, FileOpenMode.OpenForReadAndReadShare, false, null);
+                // Start a transaction
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    // Open the Block Table for read
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+
+                    // Open the Block Table Record Model space for write
+                    BlockTableRecord modelSpace = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+
+                    // Get the user input for the center point
+                    PromptPointResult centerResult = doc.Editor.GetPoint("\nSpecify the center point: ");
+
+                    if (centerResult.Status != PromptStatus.OK)
+                        return;
+
+                    Point3d centerPoint = centerResult.Value;
+
+
+                    PromptKeywordOptions typeOptions = new PromptKeywordOptions("\nSTIFFNER_TYPE : ");
+                    typeOptions.Keywords.Add("Welding", "Welding", "Welding Danfoss Type");
+                    typeOptions.Keywords.Add("Rod", "Rod", "Rod Type");
+                    typeOptions.AllowNone = false;
+
+                    // Set default option (optional)
+                    //heightOptions.Keywords.Default = "Medium";
+
+                    PromptResult typeResult = doc.Editor.GetKeywords(typeOptions);
+
+                    if (typeResult.Status != PromptStatus.OK)
+                        return;
+
+                    // Store the selected value
+                    string STIFFNER_TYPE = typeResult.StringResult;
+
+                    config = new System.Collections.Specialized.NameValueCollection();
+
+                    if (File.Exists(iniFilePath))
+                    {
+                        var lines = File.ReadAllLines(iniFilePath);
+                        foreach (var line in lines)
+                        {
+                            var parts = line.Split('=');
+                            if (parts.Length == 2)
+                            {
+                                config[parts[0].Trim()] = parts[1].Trim();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("\nConfiguration file not found: " + iniFilePath);
+                        return;
+                    }
+
+                    if (STIFFNER_TYPE == "Welding")
+                    {
+                        // Get the user input for length and width
+                        PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
+                        PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
+                        if (heightResult.Status != PromptStatus.OK)
+                            return;
+                        double height = heightResult.Value;
+
+
+                        PromptDoubleOptions widthOptions = new PromptDoubleOptions("\n STIFFNER WIDTH ");
+                        PromptDoubleResult widthResult = doc.Editor.GetDouble(widthOptions);
+                        if (widthResult.Status != PromptStatus.OK)
+                            return;
+                        double width = widthResult.Value;
+
+                        double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+                        double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+                        double thick = Convert.ToDouble(config["stiffner_thick"]);
+                        string midholes = config["stiffner_holes_on_mid"];
+                        double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+                        double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
+
+                        BlockTableRecord mainBlock = new BlockTableRecord();
+                        string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
+                        bt.UpgradeOpen();
+                        mainBlock.Name = mainBlockName;
+                        bt.Add(mainBlock);
+                        tr.AddNewlyCreatedDBObject(mainBlock, true);
+
+                        BlockTableRecord block1 = new BlockTableRecord();
+                        string blockName = "CustomBlock_" + Guid.NewGuid().ToString("N");
+                        block1.Name = blockName;
+                        bt.Add(block1);
+                        tr.AddNewlyCreatedDBObject(block1, true);
+
+                        Polyline rectangle1 = Addrectangle(tr, block1, new Point3d(0,0,0), new Point3d(folding1,height, 0));
+
+                        int arrayCount = (int)((height - pitch) / pitch);
+                        int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
+
+                            // Add circles directly inside block1
+                            for (int i = 0; i < arrayCount; i++)
+                            {
+                                double yPos = pitch + (i * pitch);
+                                Circle circle = new Circle
+                                {
+                                    Center = new Point3d(folding1 / 2.0, yPos, 0),
+                                    Radius = (holesdia / 2)
+                                };
+
+                                block1.AppendEntity(circle);
+                                tr.AddNewlyCreatedDBObject(circle, true);
+                            }
+
+                            // Optionally, adjust vertical position of all circles if balanceHeight ≠ 50
+                            if (balanceheight != pitch)
+                            {
+                                double moveY = balanceheight / 2.0;
+                                Matrix3d moveYMatrix = Matrix3d.Displacement(new Vector3d(0, moveY, 0));
+
+                                // Move all the circles inside block1
+                                foreach (ObjectId entId in block1)
+                                {
+                                    Entity ent = (Entity)tr.GetObject(entId, OpenMode.ForWrite);
+                                    if (ent is Circle)
+                                        ent.TransformBy(moveYMatrix);
+                                }
+                            }
+                        
+                        BlockTableRecord block2 = new BlockTableRecord();
+                        string blockName2 = "CustomBlock_" + Guid.NewGuid().ToString("N");
+                        block2.Name = blockName2;
+                        bt.Add(block2);
+                        tr.AddNewlyCreatedDBObject(block2, true);
+
+                        Addrectangle(tr, block2, new Point3d(folding1, 0,0), new Point3d((width -folding1),folding1, 0));
+
+                        //BlockReference holes1 = InsertBlock(db, sourceDb, tr, modelSpace, "TRUFF", new Point3d(centerPoint.X + folding1 + 50, centerPoint.Y + (folding1 / 2), 0), 1.0);
+
+                        int arrayCount1 = (int)((((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - pitch) / pitch);
+                        int balancewidth = (int)(((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - (arrayCount1 * pitch) -pitch);
+
+                            for (int i = 0; i < arrayCount1; i++)
+                            {
+                                double xPos = folding1 + pitch + (i * pitch);
+                                Circle circle = new Circle
+                                {
+                                    Center = new Point3d(xPos, folding1 /2, 0),
+                                    Radius = (holesdia / 2)
+                                };
+
+                                block2.AppendEntity(circle);
+                                tr.AddNewlyCreatedDBObject(circle, true);
+                            }
+
+                            // Optionally, adjust vertical position of all circles if balanceHeight ≠ 50
+                            if (balancewidth != pitch)
+                            {
+                                double moveX = balancewidth / 2.0;
+                                Matrix3d moveXMatrix = Matrix3d.Displacement(new Vector3d(moveX, 0, 0));
+
+                                // Move all the circles inside block1
+                                foreach (ObjectId entId in block2)
+                                {
+                                    Entity ent = (Entity)tr.GetObject(entId, OpenMode.ForWrite);
+                                    if (ent is Circle)
+                                        ent.TransformBy(moveXMatrix);
+                                }
+                            }
+                        
+
+                        BlockReference ref1 = new BlockReference(new Point3d(0, 0, 0), block1.ObjectId);
+                        mainBlock.AppendEntity(ref1);
+                        tr.AddNewlyCreatedDBObject(ref1, true);
+
+                        BlockReference ref2 = new BlockReference(new Point3d(width - folding1, 0, 0), block1.ObjectId);
+                        mainBlock.AppendEntity(ref2);
+                        tr.AddNewlyCreatedDBObject(ref2, true);
+
+                        BlockReference ref3 = new BlockReference(new Point3d(0, 0, 0), block2.ObjectId);
+                        mainBlock.AppendEntity(ref3);
+                        tr.AddNewlyCreatedDBObject(ref3, true);
+
+                        BlockReference ref4 = new BlockReference(new Point3d(0, height - folding1, 0), block2.ObjectId);
+                        mainBlock.AppendEntity(ref4);
+                        tr.AddNewlyCreatedDBObject(ref4, true);
+
+                        BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
+                        modelSpace.AppendEntity(mainRef);
+                        tr.AddNewlyCreatedDBObject(mainRef, true);
+
+
+                        Drawstiffnerheight(tr, bt, modelSpace, db,sourceDb,config,STIFFNER_TYPE, new Point3d(centerPoint.X + width + 500, centerPoint.Y, 0), height, width);
+                        DrawstiffnerWdithnotching(tr, bt, modelSpace, db, sourceDb, config, new Point3d(centerPoint.X + width + 500 + 500, centerPoint.Y, 0), height, width);
+
+
+
+                    }
+                    else if (STIFFNER_TYPE == "Rod")
+                    {
+                        PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
+                        PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
+                        if (heightResult.Status != PromptStatus.OK)
+                            return;
+                        double height = heightResult.Value;
+
+                        double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+                        double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+                        double thick = Convert.ToDouble(config["stiffner_thick"]);
+                        string midholes = config["stiffner_holes_on_mid"];
+                        double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+                        double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
+
+                        BlockTableRecord mainBlock = new BlockTableRecord();
+                        string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
+                        bt.UpgradeOpen();
+                        mainBlock.Name = mainBlockName;
+                        bt.Add(mainBlock);
+                        tr.AddNewlyCreatedDBObject(mainBlock, true);
+
+                        Polyline rectangle1 = Addrectangle(tr, mainBlock, new Point3d(0, 0, 0), new Point3d(folding1, height, 0));
+
+                        int arrayCount = (int)((height - pitch) / pitch);
+                        int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
+
+                        // Add circles directly inside block1
+                        for (int i = 0; i < arrayCount; i++)
+                        {
+                            double yPos = pitch + (i * pitch);
+                            Circle circle = new Circle
+                            {
+                                Center = new Point3d(folding1 / 2.0, yPos, 0),
+                                Radius = (holesdia / 2)
+                            };
+
+                            mainBlock.AppendEntity(circle);
+                            tr.AddNewlyCreatedDBObject(circle, true);
+                        }
+
+                        // Optionally, adjust vertical position of all circles if balanceHeight ≠ 50
+                        if (balanceheight != pitch)
+                        {
+                            double moveY = balanceheight / 2.0;
+                            Matrix3d moveYMatrix = Matrix3d.Displacement(new Vector3d(0, moveY, 0));
+
+                            // Move all the circles inside block1
+                            foreach (ObjectId entId in mainBlock)
+                            {
+                                Entity ent = (Entity)tr.GetObject(entId, OpenMode.ForWrite);
+                                if (ent is Circle)
+                                    ent.TransformBy(moveYMatrix);
+                            }
+                        }
+
+                        BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
+                        modelSpace.AppendEntity(mainRef);
+                        tr.AddNewlyCreatedDBObject(mainRef, true);
+
+                        Drawstiffnerheight(tr, bt, modelSpace, db, sourceDb, config, STIFFNER_TYPE, new Point3d(centerPoint.X + 500, centerPoint.Y, 0), height, 0);
+
+
+
+                    }
+
+
+
+
+                    // Commit the transaction
+                    tr.Commit();
+
+                    // Display a message
+                    doc.Editor.WriteMessage("\nRectangle created successfully.");
+                }
+            }
+        }
+
         [CommandMethod("enterpartnumbers")]
         public static void NumberPartNumbers()
         {
@@ -243,6 +517,7 @@ namespace CAD_AUTOMATION
             // Get the current document and database
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
+            Editor ed = doc.Editor;
 
             // Start a transaction
             using (Transaction tr = db.TransactionManager.StartTransaction())
@@ -253,32 +528,115 @@ namespace CAD_AUTOMATION
                 // Open the Block Table Record Model space for write
                 BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
 
-                // Initialize a counter for the DBText with "PART NUMBER -"
-                int partNumberCount = 0;
+                PromptKeywordOptions typeOptions = new PromptKeywordOptions("\nPARTNUMBERS_TYPE : ");
+                typeOptions.Keywords.Add("normal", "normal", "NORMAL");
+                typeOptions.Keywords.Add("Increment", "Increment", "INCREMENT");
+                typeOptions.Keywords.Add("Decrement", "Decrement", "DECREMENT");
+                typeOptions.Keywords.Add("remove", "remove", "REMOVE");
+                typeOptions.AllowNone = false;
 
-                // Loop through all entities in the model space
-                foreach (ObjectId objId in btr)
+                PromptResult typeResult = doc.Editor.GetKeywords(typeOptions);
+
+                if (typeResult.Status != PromptStatus.OK)
+                    return;
+
+                // Store the selected value
+                string type = typeResult.StringResult;
+
+                if(type == "normal")
                 {
-                    // Attempt to open the object as DBText
-                    DBText dbText = tr.GetObject(objId, OpenMode.ForWrite) as DBText;
+                    // Initialize a counter for the DBText with "PART NUMBER -"
+                    int partNumberCount = 0;
 
-                    if (dbText != null)
+                    // Loop through all entities in the model space
+                    foreach (ObjectId objId in btr)
                     {
-                        // Check if the DBText contains the specified text
-                        if (dbText.TextString.Contains("PART NUMBER -"))
+                        // Attempt to open the object as DBText
+                        DBText dbText = tr.GetObject(objId, OpenMode.ForWrite) as DBText;
+
+                        if (dbText != null)
                         {
-                            partNumberCount++;
-                            // Format the new text with a three-digit number
-                            string newText = $"PART NUMBER - {partNumberCount:D3}";
-                            dbText.TextString = newText;
+                            // Check if the DBText contains the specified text
+                            if (dbText.TextString.Contains("PART NUMBER -"))
+                            {
+                                partNumberCount++;
+                                // Format the new text with a three-digit number
+                                string newText = $"PART NUMBER - {partNumberCount:D3}";
+                                dbText.TextString = newText;
+                            }
                         }
                     }
+
+                    // Display a message box with the total number of changes
+                    Application.ShowAlertDialog($"Number of 'PART NUMBER -' entries numbered: {partNumberCount}");
                 }
+                else if (type == "Increment" || type == "Decrement")
+                {
+                    PromptIntegerOptions pio = new PromptIntegerOptions($"\nEnter starting number for '{type}' numbering:");
+                    pio.AllowZero = false;
+                    pio.AllowNone = false;
 
-                // Display a message box with the total number of changes
-                Application.ShowAlertDialog($"Number of 'PART NUMBER -' entries numbered: {partNumberCount}");
+                    PromptIntegerResult pir = ed.GetInteger(pio);
+                    if (pir.Status != PromptStatus.OK)
+                    {
+                        Application.ShowAlertDialog("Numbering cancelled.");
+                        return;
+                    }
 
-                // Commit the transaction to save changes
+                    int targetNumber = pir.Value;
+                    int modifiedCount = 0;
+
+                    foreach (ObjectId objId in btr)
+                    {
+                        DBText dbText = tr.GetObject(objId, OpenMode.ForWrite) as DBText;
+                        if (dbText != null && dbText.TextString.Contains("PART NUMBER -"))
+                        {
+                            // Extract number part safely
+                            string[] parts = dbText.TextString.Split(new string[] { "PART NUMBER -" }, StringSplitOptions.None);
+                            if (parts.Length > 1 && int.TryParse(parts[1].Trim(), out int currentNumber))
+                            {
+                                if (currentNumber >= targetNumber)
+                                {
+                                    currentNumber += (type == "Increment") ? 1 : -1;
+                                    dbText.TextString = $"PART NUMBER - {currentNumber:D3}";
+                                    modifiedCount++;
+                                }
+                            }
+                        }
+                    }
+
+                    Application.ShowAlertDialog($"Incremented {modifiedCount} PART NUMBERs starting from {targetNumber:D3}.");
+                }
+                else if (type == "remove")
+                {
+                    PromptKeywordOptions pko = new PromptKeywordOptions("\nAre you sure you want to clear all PART NUMBER numbers?");
+                    pko.Keywords.Add("Yes");
+                    pko.Keywords.Add("No");
+                    pko.AllowNone = false;
+
+                    PromptResult pr = ed.GetKeywords(pko);
+
+                    if (pr.Status != PromptStatus.OK || pr.StringResult == "No")
+                    {
+                        Application.ShowAlertDialog("Clearing cancelled.");
+                        return;
+                    }
+
+                    int clearedCount = 0;
+
+                    foreach (ObjectId objId in btr)
+                    {
+                        DBText dbText = tr.GetObject(objId, OpenMode.ForWrite) as DBText;
+                        if (dbText != null && dbText.TextString.Contains("PART NUMBER -"))
+                        {
+                            dbText.TextString = "PART NUMBER -";
+                            clearedCount++;
+                        }
+                    }
+
+                    Application.ShowAlertDialog($"Cleared numbering on {clearedCount} PART NUMBER entries.");
+                }
+                
                 tr.Commit();
             }
         }
@@ -633,18 +991,11 @@ namespace CAD_AUTOMATION
             }
         }
 
-        [CommandMethod("1")]
+        [CommandMethod("Z")]
         static public void ZoomExtents()
         {
             // Zoom to the extents of the current space
             Zoom(new Point3d(), new Point3d(), new Point3d(), 1.01075);
-        }
-
-        [CommandMethod("2")]
-        static public void overkill()
-        {
-            Document doc = Application.DocumentManager.MdiActiveDocument;
-            doc.SendStringToExecute("._OVERKILL ", true, false, false);
         }
 
         [CommandMethod("PARTS_AUTOMATOR")]
@@ -9225,107 +9576,6 @@ namespace CAD_AUTOMATION
                             using (Transaction tr = db.TransactionManager.StartTransaction())
                             {
                                 int pagecount = 1;
-                                
-
-                                //foreach (var rect1 in allRectangles)
-                                //{
-                                    
-                                //    string baseName = Path.GetFileNameWithoutExtension(filePath);
-                                //    string dir = Path.GetDirectoryName(filePath);
-                                //    string temppath = Path.Combine(dir, $"{baseName}-page{pagecount}.pdf");
-                                //    tempPdfPaths.Add(temppath);
-
-                                //    DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
-                                //    Layout modelLayout = null;
-
-                                //    // Find the model space layout (ModelType = true)
-                                //    foreach (DBDictionaryEntry entry in layoutDict)
-                                //    {
-                                //        Layout lyt = tr.GetObject(entry.Value, OpenMode.ForRead) as Layout;
-                                //        if (lyt != null && lyt.ModelType)
-                                //        {
-                                //            modelLayout = lyt;
-                                //            break;
-                                //        }
-                                //    }
-
-                                //    if (modelLayout == null)
-                                //    {
-                                //        doc.Editor.WriteMessage("\nModel layout not found.");
-                                //        return;
-                                //    }
-
-                                //    // Create PlotSettings from model layout
-                                //    PlotSettings ps = new PlotSettings(modelLayout.ModelType);
-                                //    ps.CopyFrom(modelLayout);
-
-                                //    PlotSettingsValidator psv = PlotSettingsValidator.Current;
-
-                                //    psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
-                                //    psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
-                                //    //psv.SetPlotRotation(ps, PlotRotation.Degrees090);
-                                //    //psv.SetCurrentStyleSheet(ps, "monochrome.ctb");
-                                //    psv.SetPlotCentered(ps, true);
-                                //    psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
-                                //    psv.SetPlotWindowArea(ps, new Extents2d(
-                                //        rect1.MinPoint.X, rect1.MinPoint.Y,
-                                //        rect1.MaxPoint.X, rect1.MaxPoint.Y
-                                //    ));
-                                //    psv.SetUseStandardScale(ps, true);
-                                //    psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
-
-                                //    // PlotInfo
-                                //    PlotInfo pi = new PlotInfo
-                                //    {
-                                //        Layout = modelLayout.ObjectId,
-                                //        OverrideSettings = ps
-                                //    };
-
-                                //    PlotInfoValidator piv = new PlotInfoValidator
-                                //    {
-                                //        MediaMatchingPolicy = MatchingPolicy.MatchEnabled
-                                //    };
-                                //    piv.Validate(pi);
-
-                                //    if (PlotFactory.ProcessPlotState == ProcessPlotState.NotPlotting)
-                                //    {
-                                //        using (PlotEngine pe = PlotFactory.CreatePublishEngine())
-                                //        {
-                                //            using (PlotProgressDialog dlg = new PlotProgressDialog(false, 1, true))
-                                //            {
-                                //                dlg.set_PlotMsgString(PlotMessageIndex.DialogTitle, "Plotting");
-                                //                dlg.set_PlotMsgString(PlotMessageIndex.Status, "Creating PDF...");
-                                //                dlg.set_PlotMsgString(PlotMessageIndex.SheetProgressCaption, "Sheet Progress");
-                                //                dlg.set_PlotMsgString(PlotMessageIndex.SheetSetProgressCaption, "Sheet Set Progress");
-
-                                //                dlg.LowerPlotProgressRange = 0;
-                                //                dlg.UpperPlotProgressRange = 100;
-                                //                dlg.LowerSheetProgressRange = 0;
-                                //                dlg.UpperSheetProgressRange = 100;
-                                //                dlg.PlotProgressPos = 0;
-
-                                //                dlg.OnBeginPlot();
-                                //                dlg.IsVisible = true;
-
-                                //                pe.BeginPlot(dlg, null);
-                                //                pe.BeginDocument(pi, doc.Name, null, 1, true, temppath);
-
-                                //                PlotPageInfo ppi = new PlotPageInfo();
-                                //                pe.BeginPage(ppi, pi, true, null);
-                                //                pe.BeginGenerateGraphics(null);
-                                //                pe.EndGenerateGraphics(null);
-                                //                pe.EndPage(null);
-
-                                //                pe.EndDocument(null);
-                                //                dlg.PlotProgressPos = 100;
-                                //                dlg.OnEndPlot();
-                                //                pe.EndPlot(null);
-                                //            }
-                                //        }
-                                //    }
-                                    
-                                //    pagecount++;
-                                //}
 
                                 if (PlotFactory.ProcessPlotState == ProcessPlotState.NotPlotting)
                                 {
@@ -9382,7 +9632,7 @@ namespace CAD_AUTOMATION
 
                                                 PlotSettingsValidator psv = PlotSettingsValidator.Current;
 
-                                                psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                                //psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
                                                 psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
                                                 psv.SetPlotCentered(ps, true);
                                                 psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
@@ -10070,7 +10320,7 @@ namespace CAD_AUTOMATION
                                                     ps.CopyFrom(modelLayout);
 
                                                     PlotSettingsValidator psv = PlotSettingsValidator.Current;
-                                                    psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
+                                                    //psv.SetPlotConfigurationName(ps, "DWG To PDF.pc3", "ISO_A4_(210.00_x_297.00_MM)");
                                                     psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
                                                     psv.SetPlotCentered(ps, true);
                                                     psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
@@ -10357,7 +10607,6 @@ namespace CAD_AUTOMATION
 
 
         }
-
         private bool IsFileWritable(string filePath)
         {
             try
@@ -10782,7 +11031,7 @@ namespace CAD_AUTOMATION
                 ">>Nothing is impossible<<\n\n" +
                 "Developed by --- GaMeR " +
                 "",
-                "About GaMeR Add-In",
+                "About GaMeR Add-In.",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information
             );
@@ -11728,5 +11977,436 @@ namespace CAD_AUTOMATION
             return circle;
         }
 
+        private void Drawstiffnerheight(Transaction tr, BlockTable bt, BlockTableRecord modelSpace, Database db, Database sourceDb, NameValueCollection config,string type, Point3d centerpoint, double height, double width)
+        {
+            double thick = Convert.ToDouble(config["stiffner_thick"]);
+            double off = thick * 2;
+            double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+            double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+            double stiffner_height = height;
+            double stiffner_width = width;
+            double lx = centerpoint.X;
+            double ly = centerpoint.Y;
+            string midholes = config["stiffner_holes_on_mid"];
+            double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+
+            DimStyleTable dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
+
+            string dimStyleName = "ROHITH";
+            ObjectId dimStyleId;
+
+            if (!dimStyleTable.Has(dimStyleName))
+            {
+                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                {
+                    Name = dimStyleName,
+                    Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                    Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 3),
+                    Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                    Dimasz = 30,
+                    Dimtxt = 30,
+                    Dimexo = 4.0,
+                    Dimdec = 0,
+                    Dimtad = 0,
+                    Dimjust = 0,
+                    Dimtoh = true,
+                    Dimtih = false,
+                    Dimupt = false,
+                    Dimgap = 5
+                };
+
+                // Only add to table AFTER setting all properties
+                dimStyleTable.UpgradeOpen();
+                dimStyleId = dimStyleTable.Add(newDimStyle);
+                tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                //db.SetDimstyleData(newDimStyle);
+            }
+            else
+            {
+
+                dimStyleId = dimStyleTable[dimStyleName];
+            }
+
+            string dimStyleName2 = "BLANK SIZE";
+            ObjectId dimStyleId2;
+
+            if (!dimStyleTable.Has(dimStyleName2))
+            {
+                // Create the new dimension style record and set its name
+                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                {
+                    Name = dimStyleName2,
+                    Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                    Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 1),
+                    Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                    Dimasz = 30,
+                    Dimtxt = 30,
+                    Dimexo = 4.0,
+                    Dimdec = 0,
+                    Dimtad = 0,
+                    Dimjust = 0,
+                    Dimtoh = true,
+                    Dimtih = false,
+                    Dimupt = false,
+                    Dimgap = 5
+                };
+
+                // Add to the dim style table
+                dimStyleTable.UpgradeOpen(); // Upgrade BEFORE adding
+                dimStyleId2 = dimStyleTable.Add(newDimStyle);
+                tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                //db.SetDimstyleData(newDimStyle);
+            }
+            else
+            {
+                dimStyleId2 = dimStyleTable[dimStyleName2];
+            }
+
+
+            Point3d p1 = new Point3d(lx, ly, 0);
+            Point3d p2 = new Point3d(p1.X + folding1 - thick, ly, 0);
+            Point3d p3 = new Point3d(p2.X + folding2 - (thick * 2), ly, 0);
+            Point3d p4 = new Point3d(p3.X + folding1 - thick, ly, 0);
+            Point3d p5 = new Point3d(p4.X, stiffner_height + p4.Y, 0);
+            Point3d p6 = new Point3d(p3.X, p5.Y, 0);
+            Point3d p7 = new Point3d(p2.X, p5.Y, 0);
+            Point3d p8 = new Point3d(p1.X, p5.Y, 0);
+
+
+            Line line1 = new Line(p1, p2);
+            Line line2 = new Line(p2, p3);
+            Line line3 = new Line(p3, p4);
+            Line line4 = new Line(p4, p5);
+            Line line5 = new Line(p5, p6);
+            Line line6 = new Line(p6, p7);
+            Line line7 = new Line(p7, p8);
+            Line line8 = new Line(p8, p1);
+
+            LinetypeTable ltTable = (LinetypeTable)tr.GetObject(db.LinetypeTableId, OpenMode.ForRead);
+            if (!ltTable.Has("HIDDEN"))
+            {
+                db.LoadLineTypeFile("HIDDEN", "acad.lin");
+            }
+
+            LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+
+            if (!lt.Has(layerName))
+            {
+                // Open for write to add a new layer
+                lt.UpgradeOpen();
+
+                // Create new layer
+                LayerTableRecord ltr = new LayerTableRecord
+                {
+                    Name = layerName,
+                    Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 4),
+                    LinetypeObjectId = ltTable["HIDDEN"] // Default to "Continuous"
+                };
+
+                lt.Add(ltr);
+                tr.AddNewlyCreatedDBObject(ltr, true);
+            }
+
+
+            // Add lines to model space
+            modelSpace.AppendEntity(line1);
+            modelSpace.AppendEntity(line2);
+            modelSpace.AppendEntity(line3);
+            modelSpace.AppendEntity(line4);
+            modelSpace.AppendEntity(line5);
+            modelSpace.AppendEntity(line6);
+            modelSpace.AppendEntity(line7);
+            modelSpace.AppendEntity(line8);
+
+            // Commit the transaction
+            tr.AddNewlyCreatedDBObject(line1, true);
+            tr.AddNewlyCreatedDBObject(line2, true);
+            tr.AddNewlyCreatedDBObject(line3, true);
+            tr.AddNewlyCreatedDBObject(line4, true);
+            tr.AddNewlyCreatedDBObject(line5, true);
+            tr.AddNewlyCreatedDBObject(line6, true);
+            tr.AddNewlyCreatedDBObject(line7, true);
+            tr.AddNewlyCreatedDBObject(line8, true);
+
+            Line line9 = new Line(p2, p7);
+            modelSpace.AppendEntity(line9);
+            tr.AddNewlyCreatedDBObject(line9, true);
+            //line9.ColorIndex = 4;
+            //line9.Linetype = "HIDDEN";
+            line9.Layer = layerName;
+
+            Line line10 = new Line(p3, p6);
+            modelSpace.AppendEntity(line10);
+            tr.AddNewlyCreatedDBObject(line10, true);
+            //line14.ColorIndex = 4;
+            line10.Layer = layerName;
+
+            AlignedDimension dim1 = new AlignedDimension(p5, p8, new Point3d(p5.X, p5.Y + 40, 0), "", dimStyleId2);
+            modelSpace.AppendEntity(dim1);
+            tr.AddNewlyCreatedDBObject(dim1, true);
+
+            AlignedDimension dim2 = new AlignedDimension(p4, p5, new Point3d(p5.X + 50, p5.Y, 0), "", dimStyleId2);
+            modelSpace.AppendEntity(dim2);
+            tr.AddNewlyCreatedDBObject(dim2, true);
+
+            Polyline foldingview = new Polyline(4);
+            foldingview.AddVertexAt(0, new Point2d(p6.X + thick, p6.Y + 200), 0, 0, 0);
+            foldingview.AddVertexAt(1, new Point2d(p6.X + thick, p6.Y + 200 - folding1), 0, 0, 0);
+            foldingview.AddVertexAt(2, new Point2d(p7.X - thick, p7.Y + 200 - folding1), 0, 0, 0);
+            foldingview.AddVertexAt(3, new Point2d(p7.X - thick, p7.Y + 200), 0, 0, 0);
+
+            modelSpace.AppendEntity(foldingview);
+            tr.AddNewlyCreatedDBObject(foldingview,true);
+
+            AlignedDimension dim3 = new AlignedDimension(foldingview.GetPoint3dAt(1), foldingview.GetPoint3dAt(2), new Point3d(p5.X, p5.Y + 150, 0), "", dimStyleId);
+            modelSpace.AppendEntity(dim3);
+            tr.AddNewlyCreatedDBObject(dim3, true);
+
+            AlignedDimension dim4 = new AlignedDimension(foldingview.GetPoint3dAt(0), foldingview.GetPoint3dAt(1), new Point3d(p5.X + 50, p5.Y, 0), "", dimStyleId);
+            modelSpace.AppendEntity(dim4);
+            tr.AddNewlyCreatedDBObject(dim4, true);
+
+            Point3d insertpoint;
+
+            insertpoint = new Point3d(p1.X +( folding1 / 2), p3.Y + pitch, 0);
+            
+            BlockReference holes = InsertBlock(db, sourceDb, tr, modelSpace, "TRUFF", insertpoint, 1.0);
+
+            int arrayCount = (int)((height - pitch) / pitch);
+            int balanceheight = (int)(height - (arrayCount * pitch)-pitch);
+            var source = (BlockReference)tr.GetObject(holes.ObjectId, OpenMode.ForWrite);
+            var parameters = new AssocArrayRectangularParameters(pitch, pitch, 0, 1, arrayCount, 0, 0, 0);
+            var vertexRef = new VertexRef(source.Position);
+            var assocArray = AssocArray.CreateArray(new ObjectIdCollection { source.ObjectId }, vertexRef, parameters);
+            var assocArrayBlock = (BlockReference)tr.GetObject(assocArray.EntityId, OpenMode.ForWrite);
+            assocArrayBlock.Position = source.Position;
+
+            if (balanceheight != pitch)
+            {
+                Matrix3d moveUp = Matrix3d.Displacement(new Vector3d(0, balanceheight / 2.0, 0));
+                assocArrayBlock.TransformBy(moveUp);
+            }
+
+            if (type == "Rod")
+            {
+                // Create displacement
+                Matrix3d copyDisplacement = Matrix3d.Displacement(new Vector3d((folding1 / 2) + (folding2 / 2) - off, 0, 0));
+
+                // Clone the source holes block (not the array block)
+                BlockReference clonedHoles = (BlockReference)holes.Clone();
+                clonedHoles.TransformBy(copyDisplacement);
+                modelSpace.AppendEntity(clonedHoles);
+                tr.AddNewlyCreatedDBObject(clonedHoles, true);
+
+                // Now create a new array for the cloned holes block
+                var newAssocArrayParams = new AssocArrayRectangularParameters(pitch, pitch, 0, 1, arrayCount, 0, 0, 0);
+                var newVertexRef = new VertexRef(clonedHoles.Position);
+                var newAssocArray = AssocArray.CreateArray(new ObjectIdCollection { clonedHoles.ObjectId }, newVertexRef, newAssocArrayParams);
+                var newAssocArrayBlock = (BlockReference)tr.GetObject(newAssocArray.EntityId, OpenMode.ForWrite);
+                newAssocArrayBlock.Position = clonedHoles.Position;
+
+                if (balanceheight != pitch)
+                {
+                    Matrix3d moveUp = Matrix3d.Displacement(new Vector3d(0, balanceheight / 2.0, 0));
+                    newAssocArrayBlock.TransformBy(moveUp);
+                }
+
+                clonedHoles.Erase();
+
+            }
+
+            source.Erase();
+
+
+            
+
+        }
+
+        private void DrawstiffnerWdithnotching(Transaction tr, BlockTable bt, BlockTableRecord modelSpace, Database db, Database sourceDb, NameValueCollection config, Point3d centerpoint, double height, double width)
+        {
+            double thick = Convert.ToDouble(config["stiffner_thick"]);
+            double off = thick * 2;
+            double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+            double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+            double stiffner_height = height;
+            double stiffner_width = width;
+            double lx = centerpoint.X;
+            double ly = centerpoint.Y;
+            string midholes = config["stiffner_holes_on_mid"];
+            double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+            double radius = 3;
+
+
+
+            Point3d p1 = new Point3d(lx + folding1 - thick, ly, 0);
+            Point3d p2 = new Point3d(p1.X + width - (folding1 * 2) - off, ly, 0);
+            Point3d p3 = new Point3d(p2.X, p2.Y + folding1 - thick + 0.5, 0);
+            Point3d p4 = new Point3d(p3.X + folding1 - thick, p3.Y, 0);
+            Point3d p5 = new Point3d(p4.X, p4.Y + folding2 - off - 1, 0);
+            Point3d p6 = new Point3d(p3.X, p5.Y, 0);
+            Point3d p7 = new Point3d(p6.X, p6.Y + folding1 - thick + 0.5, 0);
+            Point3d p8 = new Point3d(p1.X, p7.Y, 0);
+            Point3d p9 = new Point3d(p1.X, p5.Y, 0);
+            Point3d p10 = new Point3d(p9.X - folding1 - thick, p9.Y, 0);
+            Point3d p11 = new Point3d(p10.X, p4.Y, 0);
+            Point3d p12 = new Point3d(p1.X, p4.Y, 0);
+
+
+            Line line1 = new Line(p1, p2);
+            Line line2 = new Line(p2, p3);
+            Line line3 = new Line(p3, p4);
+            Line line4 = new Line(p4, p5);
+            Line line5 = new Line(p5, p6);
+            Line line6 = new Line(p6, p7);
+            Line line7 = new Line(p7, p8);
+            Line line8 = new Line(p8, p9);
+            Line line9 = new Line(p9, p10);
+            Line line10 = new Line(p10, p11);
+            Line line11 = new Line(p11, p12);
+            Line line12 = new Line(p12, p1);
+
+            Line line13 = new Line(new Point3d(p1.X, p1.Y + folding1 - thick, 0), new Point3d(p2.X, p2.Y + folding1 - thick, 0));
+            modelSpace.AppendEntity(line13);
+            tr.AddNewlyCreatedDBObject(line13, true);
+            //line15.ColorIndex = 4;
+            line13.Layer = layerName;
+
+            Line line14 = new Line(new Point3d(p8.X, p8.Y - folding1 + thick, 0), new Point3d(p7.X, p7.Y - folding1 + thick, 0));
+            modelSpace.AppendEntity(line14);
+            tr.AddNewlyCreatedDBObject(line14, true);
+            //line15.ColorIndex = 4;
+            line14.Layer = layerName;
+
+            // Add lines to model space
+            modelSpace.AppendEntity(line1);
+            modelSpace.AppendEntity(line2);
+            modelSpace.AppendEntity(line3);
+            modelSpace.AppendEntity(line4);
+            modelSpace.AppendEntity(line5);
+            modelSpace.AppendEntity(line6);
+            modelSpace.AppendEntity(line7);
+            modelSpace.AppendEntity(line8);
+            modelSpace.AppendEntity(line9);
+            modelSpace.AppendEntity(line10);
+            modelSpace.AppendEntity(line11);
+            modelSpace.AppendEntity(line12);
+           
+            // Commit the transaction
+            tr.AddNewlyCreatedDBObject(line1, true);
+            tr.AddNewlyCreatedDBObject(line2, true);
+            tr.AddNewlyCreatedDBObject(line3, true);
+            tr.AddNewlyCreatedDBObject(line4, true);
+            tr.AddNewlyCreatedDBObject(line5, true);
+            tr.AddNewlyCreatedDBObject(line6, true);
+            tr.AddNewlyCreatedDBObject(line7, true);
+            tr.AddNewlyCreatedDBObject(line8, true);
+            tr.AddNewlyCreatedDBObject(line9, true);
+            tr.AddNewlyCreatedDBObject(line10, true);
+            tr.AddNewlyCreatedDBObject(line11, true);
+            tr.AddNewlyCreatedDBObject(line12, true);
+
+            ApplyFillet(tr, modelSpace, line3, line4, p3, p4, p5, radius);
+            ApplyFillet(tr, modelSpace, line4, line5, p4, p5, p6, radius);
+            ApplyFillet(tr, modelSpace, line9, line10, p9, p10, p11, radius);
+            ApplyFillet(tr, modelSpace, line10, line11, p10, p11, p12, radius);
+
+            Point3d insertpoint;
+
+            if (midholes == "yes")
+            {
+                insertpoint = new Point3d(p1.X + pitch,(p3.Y + p6.Y) / 2, 0);
+            }
+            else
+            {
+                insertpoint = new Point3d(p1.X + pitch, p1.Y + (folding1 / 2), 0);
+            }
+
+            BlockReference holes = InsertBlock(db, sourceDb, tr, modelSpace, "TRUFF", insertpoint, 1.0);
+
+            int arrayCount = (int)(((p2.X-p1.X) - pitch) / pitch);
+            int balancewidth = (int)((p2.X - p1.X) - (arrayCount * pitch) - pitch);
+            var source = (BlockReference)tr.GetObject(holes.ObjectId, OpenMode.ForWrite);
+            var parameters = new AssocArrayRectangularParameters(pitch, pitch, 0, arrayCount, 1, 0, 0, 0);
+            var vertexRef = new VertexRef(source.Position);
+            var assocArray = AssocArray.CreateArray(new ObjectIdCollection { source.ObjectId }, vertexRef, parameters);
+            var assocArrayBlock = (BlockReference)tr.GetObject(assocArray.EntityId, OpenMode.ForWrite);
+            assocArrayBlock.Position = source.Position;
+
+            if (balancewidth != pitch)
+            {
+                Matrix3d moveUp = Matrix3d.Displacement(new Vector3d(balancewidth / 2.0,0, 0));
+                assocArrayBlock.TransformBy(moveUp);
+            }
+            
+
+            source.Erase();
+
+        }
+
+        private void ApplyFillet(Transaction tr, BlockTableRecord modelSpace,
+                         Line line1, Line line2,
+                         Point3d p1, Point3d p2, Point3d p3,
+                         double radius)
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+            // Direction vectors from p2 (corner) to p1 and p3
+            Vector3d dir1 = (p1 - p2).GetNormal();
+            Vector3d dir2 = (p3 - p2).GetNormal();
+
+            // Half of the angle between lines
+            double angle = dir1.GetAngleTo(dir2) / 2.0;
+
+            // Tangent offset distance from corner
+            double offset = radius / Math.Tan(angle);
+
+            // Calculate fillet points on each line
+            Point3d filletPt1 = p2 + dir1 * offset;
+            Point3d filletPt2 = p2 + dir2 * offset;
+
+            // Direction bisector
+            Vector3d bisector = (dir1 + dir2).GetNormal();
+            Point3d arcCenter = p2 + bisector * (radius / Math.Sin(angle));
+
+            // Vectors from center to arc endpoints
+            Vector3d v1 = (filletPt1 - arcCenter).GetNormal();
+            Vector3d v2 = (filletPt2 - arcCenter).GetNormal();
+
+            // Compute angles
+            Plane plane = new Plane(Point3d.Origin, Vector3d.ZAxis);
+            double startAngle = v1.AngleOnPlane(plane);
+            double endAngle = v2.AngleOnPlane(plane);
+
+            // Check arc direction: ensure it's counterclockwise
+            Vector3d normal = v1.CrossProduct(v2);
+            bool isCounterClockwise = normal.Z > 0;
+
+            if (!isCounterClockwise)
+            {
+                // Swap angles to ensure proper direction
+                double temp = startAngle;
+                startAngle = endAngle;
+                endAngle = temp;
+            }
+
+            // Create the fillet arc
+            Arc filletArc = new Arc(arcCenter, radius, startAngle, endAngle);
+
+            // Trim line1 to fillet
+            if (line1.StartPoint.IsEqualTo(p2))
+                line1.StartPoint = filletPt1;
+            else if (line1.EndPoint.IsEqualTo(p2))
+                line1.EndPoint = filletPt1;
+
+            // Trim line2 to fillet
+            if (line2.StartPoint.IsEqualTo(p2))
+                line2.StartPoint = filletPt2;
+            else if (line2.EndPoint.IsEqualTo(p2))
+                line2.EndPoint = filletPt2;
+
+            // Add the arc to model space
+            modelSpace.AppendEntity(filletArc);
+            tr.AddNewlyCreatedDBObject(filletArc, true);
+        }
     }
     }
