@@ -10,6 +10,7 @@ using System.Windows;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using System.Windows.Media;
 using System.Linq;
+using System.Drawing.Printing;
 
 namespace CAD_AUTOMATION
 {
@@ -37,20 +38,47 @@ namespace CAD_AUTOMATION
             ComponentManager.Ribbon.Tabs.Add(ribbonTab);
 
             // Create the ribbon panel
-            RibbonPanelSource panelSource = new RibbonPanelSource
+            RibbonPanelSource tools = new RibbonPanelSource
             {
-                Title = "Tools"
+                Title = "TOOLS"
+            };
+            RibbonPanelSource elec = new RibbonPanelSource
+            {
+                Title = "ELECTRICAL"
+            };
+            RibbonPanelSource mech = new RibbonPanelSource
+            {
+                Title = "MECHANICAL"
             };
 
-            RibbonPanel ribbonPanel = new RibbonPanel
+            RibbonPanel ribbonPanel1 = new RibbonPanel
             {
-                Source = panelSource
+                Source = tools
+            };
+            RibbonPanel ribbonPanel2 = new RibbonPanel
+            {
+                Source = elec
+            };
+            RibbonPanel ribbonPanel3 = new RibbonPanel
+            {
+                Source = mech
             };
 
-            ribbonTab.Panels.Add(ribbonPanel);
+            
+            ribbonTab.Panels.Add(ribbonPanel2);
+            ribbonTab.Panels.Add(ribbonPanel3);
+            ribbonTab.Panels.Add(ribbonPanel1);
 
             // Wrap the button inside a RibbonRowPanel
-            RibbonRowPanel rowPanel = new RibbonRowPanel
+            RibbonRowPanel toolsPanel = new RibbonRowPanel
+            {
+                IsTopJustified = true // ensures proper vertical layout
+            };
+            RibbonRowPanel elecPanel = new RibbonRowPanel
+            {
+                IsTopJustified = true // ensures proper vertical layout
+            };
+            RibbonRowPanel mechPanel = new RibbonRowPanel
             {
                 IsTopJustified = true // ensures proper vertical layout
             };
@@ -114,7 +142,7 @@ namespace CAD_AUTOMATION
 
             RibbonButton partsbutton = new RibbonButton
             {
-                Text = "SPLIT ALL PARTS\nTO SINGLE DXF",
+                Text = "ALL PARTS\nTO SINGLE DXF",
                 ShowText = true,
                 ShowImage = true,
                 Orientation = System.Windows.Controls.Orientation.Vertical,
@@ -123,7 +151,7 @@ namespace CAD_AUTOMATION
                 CommandHandler = new RibbonCommandHandler("PARTS_AUTOMATOR")
             };
 
-            RibbonButton secondButton = new RibbonButton
+            RibbonButton partnumberButton = new RibbonButton
             {
                 Text = "Auto\nPart Numbers",
                 ShowText = true,
@@ -132,6 +160,28 @@ namespace CAD_AUTOMATION
                 Size = RibbonItemSize.Large,
                 LargeImage = LoadBitmap("automation"),
                 CommandHandler = new RibbonCommandHandler("enterpartnumbers")
+            };
+
+            RibbonButton sldbutton = new RibbonButton
+            {
+                Text = "SLD",
+                ShowText = true,
+                ShowImage = true,
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                Size = RibbonItemSize.Large,
+                LargeImage = LoadBitmap("diagram"),
+                CommandHandler = new RibbonCommandHandler("SLD")
+            };
+
+            RibbonButton stiffnerbutton = new RibbonButton
+            {
+                Text = "MECHANICAL\nPARTS",
+                ShowText = true,
+                ShowImage = true,
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                Size = RibbonItemSize.Large,
+                LargeImage = LoadBitmap("ratchet"),
+                CommandHandler = new RibbonCommandHandler("MECHPARTS")
             };
 
             RibbonButton aboutbutton = new RibbonButton
@@ -145,19 +195,23 @@ namespace CAD_AUTOMATION
                 CommandHandler = new RibbonCommandHandler("ABOUT_ME")
             };
 
-            rowPanel.Items.Add(pdfbutton);
-            rowPanel.Items.Add(rectButton);
-            rowPanel.Items.Add(gabutton);
-            rowPanel.Items.Add(bombutton);
-            rowPanel.Items.Add(mechgabutton);
-            rowPanel.Items.Add(partsbutton);
-            rowPanel.Items.Add(secondButton);
-            rowPanel.Items.Add(aboutbutton);
+            elecPanel.Items.Add(pdfbutton);
+            elecPanel.Items.Add(gabutton);
+            elecPanel.Items.Add(sldbutton);
+
+            mechPanel.Items.Add(rectButton);
+            mechPanel.Items.Add(bombutton);
+            mechPanel.Items.Add(mechgabutton);
+            mechPanel.Items.Add(partsbutton);
+            mechPanel.Items.Add(stiffnerbutton);
+            mechPanel.Items.Add(partnumberButton);
+
+            toolsPanel.Items.Add(aboutbutton);
             
-
-
-            // Add the row panel to the panel source
-            panelSource.Items.Add(rowPanel);
+   
+            elec.Items.Add(elecPanel);
+            mech.Items.Add(mechPanel);
+            tools.Items.Add(toolsPanel);
         }
 
         private ImageSource LoadBitmap(string resourceName)

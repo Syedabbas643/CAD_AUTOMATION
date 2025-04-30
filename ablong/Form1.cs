@@ -45,7 +45,6 @@ namespace CAD_AUTOMATION
         private Point dragCursorPoint;
         private Point dragFormPoint;
         double l;
-        double w = 0;
         private double width;
         private double length;
         private double shellthick;
@@ -917,7 +916,17 @@ namespace CAD_AUTOMATION
                 {
                     
                     BlockTable blockTable = (BlockTable)db.BlockTableId.GetObject(OpenMode.ForRead);
-                    BlockTableRecord modelSpace = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);    
+                    BlockTableRecord modelSpace = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);
+
+                    RegAppTable regTable = (RegAppTable)trans.GetObject(db.RegAppTableId, OpenMode.ForRead);
+                    if (!regTable.Has("MYAPP"))
+                    {
+                        regTable.UpgradeOpen();
+                        RegAppTableRecord regApp = new RegAppTableRecord();
+                        regApp.Name = "MYAPP";
+                        regTable.Add(regApp);
+                        trans.AddNewlyCreatedDBObject(regApp, true);
+                    }
 
                     if (paneltypebox.Text == "INDOOR")
                     {
@@ -1711,6 +1720,15 @@ namespace CAD_AUTOMATION
             BlockTableRecord bottomchannel = null;
             int topcolor = 0;
             int bottomcolor = 0;
+            double mptopclear = Convert.ToDouble(config["mounting_plate_top_clearence"]);
+            double mpbottomclear = Convert.ToDouble(config["mounting_plate_bottom_clearence"]);
+            double mpsideclear = Convert.ToDouble(config["mounting_plate_side_clearence"]);
+            double oblongclearx = Convert.ToDouble(config["mounting_plate_oblong_clearence_x"]);
+            double oblongcleary = Convert.ToDouble(config["mounting_plate_oblong_clearence_y"]);
+            double oblongsizex = Convert.ToDouble(config["mounting_plate_oblong_size_x"]);
+            double oblongsizey = Convert.ToDouble(config["mounting_plate_oblong_size_y"]);
+            double mpthick = Convert.ToDouble(mpthickbox.Text);
+            double bottombussize = 0;
 
             if (hbbbox.Text == "None")
             {
@@ -1742,6 +1760,7 @@ namespace CAD_AUTOMATION
                     bottomchannel = (BlockTableRecord)blockTable["hbb_1"].GetObject(OpenMode.ForWrite);
                     topcolor = shellcolor;
                     bottomcolor = channelcolor;
+                    bottombussize = hbussize;
                 }
                 else
                 {
@@ -1753,6 +1772,7 @@ namespace CAD_AUTOMATION
             double[] partSizes = new double[30]; // Array to store part sizes
             bool[] needmp = new bool[30];
             double partitioncount = 0;
+            bool needmpangle = false;
 
             string partboxName = $"sec{secnumber}partbox";
 
@@ -1811,6 +1831,10 @@ namespace CAD_AUTOMATION
                         if (foundControls3.Length > 0 && foundControls3[0] is CheckBox partcheckBox)
                         {
                            needmp[i - 1] = partcheckBox.Checked;
+                           if (partcheckBox.Checked)
+                           {
+                                needmpangle = true;
+                           }
                         }
                         else
                         {
@@ -1860,6 +1884,61 @@ namespace CAD_AUTOMATION
                 Line linecb7 = new Line(czb6, pz8) { ColorIndex = bottomcolor };
                 bottomchannel.AppendEntity(linecb7);
                 trans.AddNewlyCreatedDBObject(linecb7, true);
+
+                if (needmpangle)
+                {
+                    BlockTableRecord mpangleleft = new BlockTableRecord { Name = $"mpangle{secnumber}_1" };
+                    blockTable.Add(mpangleleft);
+                    trans.AddNewlyCreatedDBObject(mpangleleft, true);
+
+                    Point3d mp1 = new Point3d(l + shellthick + 0.5, bottombussize + shellthick + 0.5 ,0);
+                    Point3d mp2 = new Point3d(l + shellthick + zchannelside + mpsideclear + oblongclearx + (oblongsizex / 2) + 7, bottombussize + shellthick + 0.5 , 0);
+                    Point3d mp3 = new Point3d(mp2.X, bottombussize + width - shellthick - 0.5 , 0);
+                    Point3d mp4 = new Point3d(mp1.X, bottombussize + width - shellthick - 0.5, 0);
+
+                    Line mpline1 = drawline(trans, mpangleleft, mp1, mp2, 4, "mpangleline1");
+                    Line mpline2 = drawline(trans, mpangleleft, mp2, mp3, 4, "mpangleline2");
+                    Line mpline3 = drawline(trans, mpangleleft, mp3, mp4, 4, "mpangleline3");
+                    Line mpline4 = drawline(trans, mpangleleft, mp4, mp1, 4, "mpangleline4");
+                    drawline(trans, mpangleleft, new Point3d(mp1.X + shellthick,mp1.Y,0), new Point3d(mp4.X + shellthick, mp4.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleleft,mpline1,mpline2,mp1,mp2,mp3,3);
+                    ApplyFillet(trans, mpangleleft, mpline2, mpline3, mp2, mp3, mp4, 3);
+
+                    BlockReference shellLeftRef = new BlockReference(new Point3d(0,0,0), mpangleleft.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+
+                    BlockTableRecord mpangleright = new BlockTableRecord { Name = $"mpangle{secnumber}_2" };
+                    blockTable.Add(mpangleright);
+                    trans.AddNewlyCreatedDBObject(mpangleright, true);
+
+                    // Define a mirroring axis along Y-axis at X=0
+                    Line3d mirrorLine = new Line3d(
+                        new Point3d(l + (width / 2), 0, 0),
+                        new Point3d(l + (width / 2), 1, 0)
+                    );
+                    Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+
+                    // Open left block definition for read
+                    BlockTableRecord btrLeft = (BlockTableRecord)trans.GetObject(mpangleleft.ObjectId, OpenMode.ForRead);
+
+                    // Clone and mirror entities into right block definition
+                    foreach (ObjectId entId in btrLeft)
+                    {
+                        Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForRead);
+                        Entity clone = (Entity)ent.Clone();
+                        clone.TransformBy(mirrorMatrix);
+                        mpangleright.AppendEntity(clone);
+                        trans.AddNewlyCreatedDBObject(clone, true);
+                    }
+
+                    // Now you can insert mpangleright into model space if needed
+                    BlockReference shellRightRef = new BlockReference(new Point3d(l + width, 0, 0), mpangleright.ObjectId);
+                    modelSpace.AppendEntity(shellRightRef);
+                    trans.AddNewlyCreatedDBObject(shellRightRef, true);  
+                }
+
             }
             else if (position == "first")
             {
@@ -1888,13 +1967,91 @@ namespace CAD_AUTOMATION
                 drawline(trans, bottomchannel, czb2, czb3, bottomcolor);
                 drawline(trans, bottomchannel, czb3, czb6, bottomcolor);
 
-                drawline(trans, rightchannel, cz6, new Point3d(cz3.X + shellthick,cz6.Y,0),channelcolor);
                 drawline(trans, rightchannel, czb6, new Point3d(czb3.X + shellthick, czb6.Y, 0), channelcolor);
-                drawline(trans, rightchannel, new Point3d(cz3.X + shellthick, cz6.Y, 0), new Point3d(czb3.X + shellthick, czb6.Y, 0), channelcolor);
+                drawline(trans, rightchannel, cz6, new Point3d(cz3.X + shellthick,cz6.Y,0),channelcolor);
+                
+                Line line1 = drawline(trans, rightchannel, new Point3d(cz3.X + shellthick, cz6.Y, 0), new Point3d(czb3.X + shellthick, czb6.Y, 0), channelcolor);
+                ResultBuffer rb = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "vchbendline1")
+                    );
+                line1.XData = rb;
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), rightchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
                 trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+
+                if (needmpangle)
+                {
+                    BlockTableRecord mpangleleft = new BlockTableRecord { Name = $"mpangle{secnumber}_1" };
+                    blockTable.Add(mpangleleft);
+                    trans.AddNewlyCreatedDBObject(mpangleleft, true);
+
+                    Point3d mp1 = new Point3d(l+ shellthick + 0.5, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp2 = new Point3d(l + shellthick + zchannelside + mpsideclear + oblongclearx + (oblongsizex / 2) + 7, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp3 = new Point3d(mp2.X, bottombussize + width - shellthick  - 0.5, 0);
+                    Point3d mp4 = new Point3d(mp1.X, bottombussize + width - shellthick  - 0.5, 0);
+
+                    Line mpline1 = drawline(trans, mpangleleft, mp1, mp2, 4, "mpangleline1");
+                    Line mpline2 = drawline(trans, mpangleleft, mp2, mp3, 4, "mpangleline2");
+                    Line mpline3 = drawline(trans, mpangleleft, mp3, mp4, 4, "mpangleline3");
+                    Line mpline4 = drawline(trans, mpangleleft, mp4, mp1, 4, "mpangleline4");
+                    drawline(trans, mpangleleft, new Point3d(mp1.X + shellthick, mp1.Y, 0), new Point3d(mp4.X + shellthick, mp4.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleleft, mpline1, mpline2, mp1, mp2, mp3, 3);
+                    ApplyFillet(trans, mpangleleft, mpline2, mpline3, mp2, mp3, mp4, 3);
+
+                    BlockReference shellLeftRef1 = new BlockReference(new Point3d(0, 0, 0), mpangleleft.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef1);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef1, true);
+
+                    BlockTableRecord mpangleright = new BlockTableRecord { Name = $"mpangle{secnumber}_2" };
+                    blockTable.Add(mpangleright);
+                    trans.AddNewlyCreatedDBObject(mpangleright, true);
+
+                    Point3d mp21 = new Point3d(l + shellthick + 0.5, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp22 = new Point3d(l + (vchannelsize / 2) + mpsideclear + oblongclearx + (oblongsizex / 2) + 7, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp23 = new Point3d(mp22.X, bottombussize + width - shellthick - 0.5, 0);
+                    Point3d mp24 = new Point3d(mp21.X, bottombussize + width - shellthick - 0.5, 0);
+
+                    Line mpline21 = drawline(trans, mpangleright, mp21, mp22, 4, "mpangleline1");
+                    Line mpline22 = drawline(trans, mpangleright, mp22, mp23, 4, "mpangleline2");
+                    Line mpline23 = drawline(trans, mpangleright, mp23, mp24, 4, "mpangleline3");
+                    Line mpline24 = drawline(trans, mpangleright, mp24, mp21, 4, "mpangleline4");
+
+                    drawline(trans, mpangleright, new Point3d(mp21.X + shellthick, mp21.Y, 0), new Point3d(mp24.X + shellthick, mp24.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleright, mpline21, mpline22, mp21, mp22, mp23, 3);
+                    ApplyFillet(trans, mpangleright, mpline22, mpline23, mp22, mp23, mp4, 3);
+
+                    BlockTableRecord btr = (BlockTableRecord)trans.GetObject(mpangleright.ObjectId, OpenMode.ForWrite);
+
+                    Line3d mirrorLine = new Line3d(
+                        new Point3d(l + (sectionsize / 2), 0, 0),
+                        new Point3d(l + (sectionsize / 2), 1, 0)
+                    );
+                    Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+
+                    // Collect entities to mirror
+                    List<Entity> entitiesToMirror = new List<Entity>();
+
+                    foreach (ObjectId entId in btr)
+                    {
+                        Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+                        entitiesToMirror.Add(ent);
+                    }
+
+                    // Apply mirror transformation to each entity
+                    foreach (Entity ent in entitiesToMirror)
+                    {
+                        ent.TransformBy(mirrorMatrix);
+                    }
+
+                    // Now you can insert mpangleright into model space if needed
+                    BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), mpangleright.ObjectId);
+                    modelSpace.AppendEntity(shellRightRef);
+                    trans.AddNewlyCreatedDBObject(shellRightRef, true);
+                }
             }
             else if (position == "mid")
             {
@@ -1987,11 +2144,22 @@ namespace CAD_AUTOMATION
 
                 drawline(trans, leftchannel, cz1, new Point3d(cz2.X - shellthick, cz1.Y, 0), channelcolor);
                 drawline(trans, leftchannel, czb1, new Point3d(czb2.X - shellthick, czb1.Y, 0), channelcolor);
-                drawline(trans, leftchannel, new Point3d(cz2.X - shellthick, cz1.Y, 0), new Point3d(czb2.X - shellthick, czb1.Y, 0), channelcolor);
+                Line line1 = drawline(trans, leftchannel, new Point3d(cz2.X - shellthick, cz1.Y, 0), new Point3d(czb2.X - shellthick, czb1.Y, 0), channelcolor);
+                ResultBuffer rb = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "vchbendline2")
+                    );
+                line1.XData = rb;
 
-                drawline(trans, rightchannel, cz6, new Point3d(cz5.X + shellthick, cz6.Y, 0), channelcolor);
                 drawline(trans, rightchannel, czb6, new Point3d(czb5.X + shellthick, czb6.Y, 0), channelcolor);
-                drawline(trans, rightchannel, new Point3d(cz5.X + shellthick, cz6.Y, 0), new Point3d(czb5.X + shellthick, czb6.Y, 0), channelcolor);
+                drawline(trans, rightchannel, cz6, new Point3d(cz5.X + shellthick, cz6.Y, 0), channelcolor);
+                
+                Line line2= drawline(trans, rightchannel, new Point3d(cz5.X + shellthick, cz6.Y, 0), new Point3d(czb5.X + shellthick, czb6.Y, 0), channelcolor);
+                ResultBuffer rb2= new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "vchbendline1")
+                    );
+                line2.XData = rb2;
 
                 //BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), leftchannel.ObjectId);
                 //modelSpace.AppendEntity(shellLeftRef);
@@ -1999,6 +2167,60 @@ namespace CAD_AUTOMATION
                 BlockReference shellrightRef = new BlockReference(new Point3d(0, 0, 0), rightchannel.ObjectId);
                 modelSpace.AppendEntity(shellrightRef);
                 trans.AddNewlyCreatedDBObject(shellrightRef, true);
+
+                if (needmpangle)
+                {
+                    BlockTableRecord mpangleleft = new BlockTableRecord { Name = $"mpangle{secnumber}_1" };
+                    blockTable.Add(mpangleleft);
+                    trans.AddNewlyCreatedDBObject(mpangleleft, true);
+
+                    Point3d mp1 = new Point3d(l + sec + shellthick + 0.5, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp2 = new Point3d(l + sec + (vchannelsize/2) + mpsideclear + oblongclearx +(oblongsizex/2)+ 7, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp3 = new Point3d(mp2.X, bottombussize + width - shellthick - 0.5, 0);
+                    Point3d mp4 = new Point3d(mp1.X, bottombussize + width - shellthick - 0.5, 0);
+
+                    Line mpline1 = drawline(trans, mpangleleft, mp1, mp2, 4, "mpangleline1");
+                    Line mpline2 = drawline(trans, mpangleleft, mp2, mp3, 4, "mpangleline2");
+                    Line mpline3 = drawline(trans, mpangleleft, mp3, mp4, 4, "mpangleline3");
+                    Line mpline4 = drawline(trans, mpangleleft, mp4, mp1, 4, "mpangleline4");
+                    drawline(trans, mpangleleft, new Point3d(mp1.X + shellthick, mp1.Y, 0), new Point3d(mp4.X + shellthick, mp4.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleleft, mpline1, mpline2, mp1, mp2, mp3, 3);
+                    ApplyFillet(trans, mpangleleft, mpline2, mpline3, mp2, mp3, mp4, 3);
+
+                    BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), mpangleleft.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+
+                    BlockTableRecord mpangleright = new BlockTableRecord { Name = $"mpangle{secnumber}_2" };
+                    blockTable.Add(mpangleright);
+                    trans.AddNewlyCreatedDBObject(mpangleright, true);
+
+                    // Define a mirroring axis along Y-axis at X=0
+                    Line3d mirrorLine = new Line3d(
+                        new Point3d(l + sec + (sectionsize/2), 0, 0),
+                        new Point3d(l + sec + (sectionsize / 2), 1, 0)
+                    );
+                    Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+
+                    // Open left block definition for read
+                    BlockTableRecord btrLeft = (BlockTableRecord)trans.GetObject(mpangleleft.ObjectId, OpenMode.ForRead);
+
+                    // Clone and mirror entities into right block definition
+                    foreach (ObjectId entId in btrLeft)
+                    {
+                        Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForRead);
+                        Entity clone = (Entity)ent.Clone();
+                        clone.TransformBy(mirrorMatrix);
+                        mpangleright.AppendEntity(clone);
+                        trans.AddNewlyCreatedDBObject(clone, true);
+                    }
+
+                    // Now you can insert mpangleright into model space if needed
+                    BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), mpangleright.ObjectId);
+                    modelSpace.AppendEntity(shellRightRef);
+                    trans.AddNewlyCreatedDBObject(shellRightRef, true);
+                }
 
             }
             else if (position == "last")
@@ -2039,11 +2261,84 @@ namespace CAD_AUTOMATION
 
                 drawline(trans, leftchannel, cz6, new Point3d(cz3.X - shellthick, cz6.Y, 0), channelcolor);
                 drawline(trans, leftchannel, czb6, new Point3d(czb3.X - shellthick, czb6.Y, 0), channelcolor);
-                drawline(trans, leftchannel, new Point3d(cz3.X - shellthick, cz6.Y, 0), new Point3d(czb3.X - shellthick, czb6.Y, 0), channelcolor);
+                Line line1 = drawline(trans, leftchannel, new Point3d(cz3.X - shellthick, cz6.Y, 0), new Point3d(czb3.X - shellthick, czb6.Y, 0), channelcolor);
+                ResultBuffer rb = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "vchbendline2")
+                    );
+                line1.XData = rb;
 
-                //BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), leftchannel.ObjectId);
-                //modelSpace.AppendEntity(shellLeftRef);
-                //trans.AddNewlyCreatedDBObject(shellLeftRef, true);
+                if (needmpangle)
+                {
+                    BlockTableRecord mpangleleft = new BlockTableRecord { Name = $"mpangle{secnumber}_1" };
+                    blockTable.Add(mpangleleft);
+                    trans.AddNewlyCreatedDBObject(mpangleleft, true);
+
+                    Point3d mp1 = new Point3d(l + length - sectionsize + shellthick + 0.5, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp2 = new Point3d(l + length - sectionsize + (vchannelsize / 2) + mpsideclear + oblongclearx + (oblongsizex / 2) + 7, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp3 = new Point3d(mp2.X, bottombussize + width - shellthick - 0.5, 0);
+                    Point3d mp4 = new Point3d(mp1.X, bottombussize + width - shellthick - 0.5, 0);
+
+                    Line mpline1 = drawline(trans, mpangleleft, mp1, mp2, 4, "mpangleline1");
+                    Line mpline2 = drawline(trans, mpangleleft, mp2, mp3, 4, "mpangleline2");
+                    Line mpline3 = drawline(trans, mpangleleft, mp3, mp4, 4, "mpangleline3");
+                    Line mpline4 = drawline(trans, mpangleleft, mp4, mp1, 4, "mpangleline4");
+                    drawline(trans, mpangleleft, new Point3d(mp1.X + shellthick, mp1.Y, 0), new Point3d(mp4.X + shellthick, mp4.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleleft, mpline1, mpline2, mp1, mp2, mp3, 3);
+                    ApplyFillet(trans, mpangleleft, mpline2, mpline3, mp2, mp3, mp4, 3);
+
+                    BlockReference shellLeftRef1 = new BlockReference(new Point3d(0, 0, 0), mpangleleft.ObjectId);
+                    modelSpace.AppendEntity(shellLeftRef1);
+                    trans.AddNewlyCreatedDBObject(shellLeftRef1, true);
+
+                    BlockTableRecord mpangleright = new BlockTableRecord { Name = $"mpangle{secnumber}_2" };
+                    blockTable.Add(mpangleright);
+                    trans.AddNewlyCreatedDBObject(mpangleright, true);
+
+                    Point3d mp21 = new Point3d(l + length - sectionsize+shellthick + 0.5, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp22 = new Point3d(l + length - sectionsize+shellthick + zchannelside + mpsideclear + oblongclearx + (oblongsizex / 2) + 7, bottombussize + shellthick + 0.5, 0);
+                    Point3d mp23 = new Point3d(mp22.X, bottombussize + width - shellthick - 0.5, 0);
+                    Point3d mp24 = new Point3d(mp21.X, bottombussize + width - shellthick - 0.5, 0);
+
+                    Line mpline21 = drawline(trans, mpangleright, mp21, mp22, 4, "mpangleline1");
+                    Line mpline22 = drawline(trans, mpangleright, mp22, mp23, 4, "mpangleline2");
+                    Line mpline23 = drawline(trans, mpangleright, mp23, mp24, 4, "mpangleline3");
+                    Line mpline24 = drawline(trans, mpangleright, mp24, mp21, 4, "mpangleline4");
+
+                    drawline(trans, mpangleright, new Point3d(mp21.X + shellthick, mp21.Y, 0), new Point3d(mp24.X + shellthick, mp24.Y, 0), 4, "mpanglebendline1");
+
+                    ApplyFillet(trans, mpangleright, mpline21, mpline22, mp21, mp22, mp23, 3);
+                    ApplyFillet(trans, mpangleright, mpline22, mpline23, mp22, mp23, mp4, 3);
+
+                    BlockTableRecord btr = (BlockTableRecord)trans.GetObject(mpangleright.ObjectId, OpenMode.ForWrite);
+
+                    Line3d mirrorLine = new Line3d(
+                        new Point3d(l + length - (sectionsize / 2), 0, 0),
+                        new Point3d(l + length - (sectionsize / 2), 1, 0)
+                    );
+                    Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+
+                    // Collect entities to mirror
+                    List<Entity> entitiesToMirror = new List<Entity>();
+
+                    foreach (ObjectId entId in btr)
+                    {
+                        Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+                        entitiesToMirror.Add(ent);
+                    }
+
+                    // Apply mirror transformation to each entity
+                    foreach (Entity ent in entitiesToMirror)
+                    {
+                        ent.TransformBy(mirrorMatrix);
+                    }
+
+                    // Now you can insert mpangleright into model space if needed
+                    BlockReference shellRightRef = new BlockReference(new Point3d(0, 0, 0), mpangleright.ObjectId);
+                    modelSpace.AppendEntity(shellRightRef);
+                    trans.AddNewlyCreatedDBObject(shellRightRef, true);
+                }
 
             }
 
@@ -2188,7 +2483,11 @@ namespace CAD_AUTOMATION
                 Point3d r1 = new Point3d(rightpoint, pz1.Y, 0);
                 Point3d r6 = new Point3d(rightpoint, pz2.Y, 0);
                 drawline(trans, leftchannel, l1, l6,leftcolor);
+                drawline(trans, leftchannel, new Point3d(l1.X- shellthick,l1.Y,0), l1, leftcolor);
+                drawline(trans, leftchannel, new Point3d(l6.X - shellthick, l6.Y, 0), l6, leftcolor);
                 drawline(trans, rightchannel, r1, r6,rightcolor);
+                drawline(trans, rightchannel, new Point3d(r1.X + shellthick, r1.Y, 0), r1, rightcolor);
+                drawline(trans, rightchannel, new Point3d(r6.X + shellthick, r6.Y, 0), r6, rightcolor);
                 insertpointmpY = ps1.Y;
                 if (paneltypebox.Text == "INDOOR")
                 {
@@ -2227,10 +2526,12 @@ namespace CAD_AUTOMATION
                 Point3d r4 = new Point3d(rightpoint + shellthick, ps1.Y + partsize, 0);
 
                 drawline(trans, leftchannel, l1, l2, leftcolor);
+                drawline(trans, leftchannel, new Point3d(l1.X - shellthick, l1.Y, 0), l1, leftcolor);
                 drawline(trans, leftchannel, l2, l3, leftcolor);
                 drawline(trans, leftchannel, l3, l4, leftcolor);
 
                 drawline(trans, rightchannel, r1, r2, rightcolor);
+                drawline(trans, rightchannel, new Point3d(r1.X + shellthick, r1.Y, 0), r1, rightcolor);
                 drawline(trans, rightchannel, r2, r3, rightcolor);
                 drawline(trans, rightchannel, r3, r4, rightcolor);
 
@@ -2238,10 +2539,10 @@ namespace CAD_AUTOMATION
                 blockTable.Add(topchannel);
                 trans.AddNewlyCreatedDBObject(topchannel, true);
 
-                drawline(trans, topchannel, l3, l4,channelcolor);
-                drawline(trans, topchannel, r3, r4, channelcolor);
-                drawline(trans, topchannel, r3, l3, channelcolor);
-                drawline(trans, topchannel, new Point3d(l3.X,l3.Y + shellthick,0),new Point3d(r3.X,r3.Y + shellthick,0), channelcolor);
+                drawline(trans, topchannel, l3, l4,channelcolor, "hchline42");
+                drawline(trans, topchannel, r3, r4, channelcolor, "hchline21");
+                drawline(trans, topchannel, r3, l3, channelcolor, "hchline1");
+                drawline(trans, topchannel, new Point3d(l3.X,l3.Y + shellthick,0),new Point3d(r3.X,r3.Y + shellthick,0), channelcolor, "hchbendline");
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
@@ -2370,15 +2671,15 @@ namespace CAD_AUTOMATION
                 drawline(trans, rightchannel, r4, r5, rightcolor);
                 drawline(trans, rightchannel, r5, r6, rightcolor);
 
-                drawline(trans, bottomchannel, l1, l2, channelcolor);
-                drawline(trans, bottomchannel, l2, r2, channelcolor);
-                drawline(trans, bottomchannel, r2, r1, channelcolor);
-                drawline(trans, bottomchannel, new Point3d(l2.X, l2.Y - shellthick, 0), new Point3d(r2.X, r2.Y - shellthick, 0), channelcolor);
+                drawline(trans, bottomchannel, l2, l1, channelcolor, "hchline41");
+                drawline(trans, bottomchannel, l2, r2, channelcolor, "hchline3");
+                drawline(trans, bottomchannel, r2, r1, channelcolor, "hchline22");
+                drawline(trans, bottomchannel, new Point3d(l2.X, l2.Y - shellthick, 0), new Point3d(r2.X, r2.Y - shellthick, 0), channelcolor,"hchbendline");
 
-                drawline(trans, topchannel, l6, l5, channelcolor);
-                drawline(trans, topchannel, l5, r5, channelcolor);
-                drawline(trans, topchannel, r5, r6, channelcolor);
-                drawline(trans, topchannel, new Point3d(l5.X, l5.Y + shellthick, 0), new Point3d(r5.X, r5.Y + shellthick, 0), channelcolor);
+                drawline(trans, topchannel, l5, l6, channelcolor, "hchline42");
+                drawline(trans, topchannel, l5, r5, channelcolor, "hchline1");
+                drawline(trans, topchannel, r5, r6, channelcolor, "hchline21");
+                drawline(trans, topchannel, new Point3d(l5.X, l5.Y + shellthick, 0), new Point3d(r5.X, r5.Y + shellthick, 0), channelcolor, "hchbendline");
 
                 BlockReference shellLeftRef = new BlockReference(new Point3d(0, 0, 0), topchannel.ObjectId);
                 modelSpace.AppendEntity(shellLeftRef);
@@ -2400,10 +2701,12 @@ namespace CAD_AUTOMATION
                 Point3d r4 = new Point3d(rightpoint + shellthick, ps4.Y - partsize, 0);
 
                 drawline(trans, leftchannel, l1, l2,leftcolor);
+                drawline(trans, leftchannel, new Point3d(l1.X - shellthick, l1.Y, 0), l1, leftcolor);
                 drawline(trans, leftchannel, l2, l3, leftcolor);
                 drawline(trans, leftchannel, l3, l4, leftcolor);
 
                 drawline(trans, rightchannel, r1, r2,rightcolor);
+                drawline(trans, rightchannel, new Point3d(r1.X + shellthick, r1.Y, 0), r1, rightcolor);
                 drawline(trans, rightchannel, r2, r3, rightcolor);
                 drawline(trans, rightchannel, r3, r4, rightcolor);
 
@@ -2419,10 +2722,10 @@ namespace CAD_AUTOMATION
                     return;
                 }
 
-                drawline(trans, bottomchannel, l3, l4,channelcolor);
-                drawline(trans, bottomchannel, r3, r4, channelcolor);
-                drawline(trans, bottomchannel, r3, l3, channelcolor);
-                drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor);
+                drawline(trans, bottomchannel, l3, l4,channelcolor, "hchline41");
+                drawline(trans, bottomchannel, r3, r4, channelcolor, "hchline22");
+                drawline(trans, bottomchannel, r3, l3, channelcolor, "hchline3");
+                drawline(trans, bottomchannel, new Point3d(l3.X, l3.Y - shellthick, 0), new Point3d(r3.X, r3.Y - shellthick, 0), channelcolor, "hchbendline");
                 insertpointmpY = ps4.Y - partsize;
                 if (paneltypebox.Text == "INDOOR")
                 {
@@ -2502,6 +2805,8 @@ namespace CAD_AUTOMATION
             double oblongclearx = Convert.ToDouble(config["mounting_plate_oblong_clearence_x"]);
             double oblongcleary = Convert.ToDouble(config["mounting_plate_oblong_clearence_y"]);
             double mpthick = Convert.ToDouble(mpthickbox.Text);
+            BlockTableRecord leftangle = null;
+            BlockTableRecord rightangle = null;
 
             Point3d mp1 = new Point3d(leftpoint + mpsideclear, insertionpointdoor.Y + mpbottomclear, 0);
             Point3d mp2 = new Point3d(rightpoint - mpsideclear, insertionpointdoor.Y + mpbottomclear, 0);
@@ -2517,17 +2822,80 @@ namespace CAD_AUTOMATION
             blockTable.Add(mpblock);
             trans.AddNewlyCreatedDBObject(mpblock, true);
 
-            drawline(trans, mpblock, mp1, mp2, mpcolor);
-            drawline(trans, mpblock, mp2, mp3, mpcolor);
-            drawline(trans, mpblock, mp3, mp4, mpcolor);
-            drawline(trans, mpblock, mp4, mp1, mpcolor);
-            drawline(trans, mpblock, new Point3d(mp1.X,mp1.Y +mpthick,0 ), new Point3d(mp2.X, mp2.Y + mpthick, 0), mpcolor);
-            drawline(trans, mpblock, new Point3d(mp3.X, mp3.Y - mpthick, 0), new Point3d(mp4.X, mp4.Y - mpthick, 0), mpcolor);
-
+            Line line3 = drawline(trans, mpblock, mp1, mp2, mpcolor);
+            // Attach XData (like a name tag)
+            ResultBuffer rb3 = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpline1")
+            );
+            line3.XData = rb3;
+            Line line4 = drawline(trans, mpblock, mp2, mp3, mpcolor);
+            // Attach XData (like a name tag)
+            ResultBuffer rb4 = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpline2")
+            );
+            line4.XData = rb4;
+            Line line5 = drawline(trans, mpblock, mp3, mp4, mpcolor);
+            // Attach XData (like a name tag)
+            ResultBuffer rb5 = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpline3")
+            );
+            line5.XData = rb5;
+            Line line6 = drawline(trans, mpblock, mp4, mp1, mpcolor);
+            // Attach XData (like a name tag)
+            ResultBuffer rb6 = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpline4")
+            );
+            line6.XData = rb6;
+            Line line1 = drawline(trans, mpblock, new Point3d(mp1.X,mp1.Y +mpthick,0 ), new Point3d(mp2.X, mp2.Y + mpthick, 0), mpcolor);
+            Line line2 = drawline(trans, mpblock, new Point3d(mp3.X, mp3.Y - mpthick, 0), new Point3d(mp4.X, mp4.Y - mpthick, 0), mpcolor);
+            // Attach XData (like a name tag)
+            ResultBuffer rb = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpbendline1")
+            );
+            line1.XData = rb;
+            // Attach XData (like a name tag)
+            ResultBuffer rb2 = new ResultBuffer(
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, "mpbendline2")
+            );
+            line2.XData = rb2;
             drawoblong(trans,mpblock,ob1,mpNothidecolor);
             drawoblong(trans, mpblock, ob2, mpNothidecolor);
             drawoblong(trans, mpblock, ob3, mpNothidecolor);
             drawoblong(trans, mpblock, ob4, mpNothidecolor);
+
+            string leftsec = $"mpangle{secnumber}_1";
+            if (blockTable.Has(leftsec))
+            {
+                leftangle = (BlockTableRecord)blockTable[leftsec].GetObject(OpenMode.ForWrite);
+            }
+            else
+            {
+                MessageBox.Show("Cant find Block, please try in a new file");
+                return;
+            }
+
+            string rightsec = $"mpangle{secnumber}_2";
+            if (blockTable.Has(rightsec))
+            {
+                rightangle = (BlockTableRecord)blockTable[rightsec].GetObject(OpenMode.ForWrite);
+            }
+            else
+            {
+                MessageBox.Show("Cant find Block, please try in a new file");
+                return;
+            }
+
+            Addrectangle(trans, leftangle, new Point3d(ob1.X - 4.5, ob1.Y - 4.5, 0), new Point3d(ob1.X + 4.5, ob1.Y + 4.5, 0),4);
+            Addrectangle(trans, leftangle, new Point3d(ob4.X - 4.5, ob4.Y - 4.5, 0), new Point3d(ob4.X + 4.5, ob4.Y + 4.5, 0), 4);
+
+            Addrectangle(trans, rightangle, new Point3d(ob2.X - 4.5, ob2.Y - 4.5, 0), new Point3d(ob2.X + 4.5, ob2.Y + 4.5, 0), 4);
+            Addrectangle(trans, rightangle, new Point3d(ob3.X - 4.5, ob3.Y - 4.5, 0), new Point3d(ob3.X + 4.5, ob3.Y + 4.5, 0), 4);
 
             BlockReference shellLeftRef = new BlockReference(new Point3d(0,0,0), mpblock.ObjectId);
             modelSpace.AppendEntity(shellLeftRef);
@@ -2873,18 +3241,31 @@ namespace CAD_AUTOMATION
 
                     if (dooropen == "Rigth open")
                     {
-                        
-                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        // Get the BlockTableRecord for the block definition
+                        BlockTableRecord btr = (BlockTableRecord)trans.GetObject(doorblock.ObjectId, OpenMode.ForWrite);
 
-                        // Define the mirroring axis (vertical line through the insertion point)
+                        // Define a mirroring axis
                         Line3d mirrorLine = new Line3d(
-                            new Point3d(insertionpointdoor.X + (sectionsize/2), insertionpointdoor.Y, insertionpointdoor.Z),
-                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z) // A vertical direction vector
+                            new Point3d(doorclearx + (doorwidth/2), 0, 0),
+                            new Point3d(doorclearx + (doorwidth / 2), 1, 0) // Mirror along Y axis (adjust as needed)
                         );
-
-                        // Apply the mirroring transformation
                         Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
-                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Collect entities to mirror
+                        List<Entity> entitiesToMirror = new List<Entity>();
+                        foreach (ObjectId entId in btr)
+                        {
+                            Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+                            entitiesToMirror.Add(ent);
+                        }
+
+                        // Apply mirror transformation to each entity
+                        foreach (Entity ent in entitiesToMirror)
+                        {
+                            ent.TransformBy(mirrorMatrix);
+                        }
+
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
 
                         // Add the mirrored block reference to the model space
                         modelSpace.AppendEntity(shellLeftRef);
@@ -2986,17 +3367,30 @@ namespace CAD_AUTOMATION
 
                     if (dooropen == "Rigth open")
                     {
-                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        BlockTableRecord btr = (BlockTableRecord)trans.GetObject(doorblock.ObjectId, OpenMode.ForWrite);
 
-                        // Define the mirroring axis (vertical line through the insertion point)
+                        // Define a mirroring axis
                         Line3d mirrorLine = new Line3d(
-                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y, insertionpointdoor.Z),
-                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z)
+                            new Point3d(doorclearx + (doorwidth / 2), 0, 0),
+                            new Point3d(doorclearx + (doorwidth / 2), 1, 0) // Mirror along Y axis (adjust as needed)
                         );
-
-                        // Apply the mirroring transformation
                         Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
-                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Collect entities to mirror
+                        List<Entity> entitiesToMirror = new List<Entity>();
+                        foreach (ObjectId entId in btr)
+                        {
+                            Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+                            entitiesToMirror.Add(ent);
+                        }
+
+                        // Apply mirror transformation to each entity
+                        foreach (Entity ent in entitiesToMirror)
+                        {
+                            ent.TransformBy(mirrorMatrix);
+                        }
+
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
 
                         // Add the mirrored block reference to the model space
                         modelSpace.AppendEntity(shellLeftRef);
@@ -3099,16 +3493,30 @@ namespace CAD_AUTOMATION
 
                     if (dooropen == "Rigth open")
                     {
-                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
+                        BlockTableRecord btr = (BlockTableRecord)trans.GetObject(doorblock.ObjectId, OpenMode.ForWrite);
 
+                        // Define a mirroring axis
                         Line3d mirrorLine = new Line3d(
-                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y, insertionpointdoor.Z),
-                            new Point3d(insertionpointdoor.X + (sectionsize / 2), insertionpointdoor.Y + 1, insertionpointdoor.Z)
+                            new Point3d(doorclearx + (doorwidth / 2), 0, 0),
+                            new Point3d(doorclearx + (doorwidth / 2), 1, 0) // Mirror along Y axis (adjust as needed)
                         );
-
-                        // Apply the mirroring transformation
                         Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
-                        shellLeftRef.TransformBy(mirrorMatrix);
+
+                        // Collect entities to mirror
+                        List<Entity> entitiesToMirror = new List<Entity>();
+                        foreach (ObjectId entId in btr)
+                        {
+                            Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+                            entitiesToMirror.Add(ent);
+                        }
+
+                        // Apply mirror transformation to each entity
+                        foreach (Entity ent in entitiesToMirror)
+                        {
+                            ent.TransformBy(mirrorMatrix);
+                        }
+
+                        BlockReference shellLeftRef = new BlockReference(insertionpointdoor, doorblock.ObjectId);
 
                         // Add the mirrored block reference to the model space
                         modelSpace.AppendEntity(shellLeftRef);
@@ -3124,7 +3532,7 @@ namespace CAD_AUTOMATION
             }
 
         }
-        private Line drawline(Transaction trans, BlockTableRecord block, Point3d p1, Point3d p2, int? color = null)
+        private Line drawline(Transaction trans, BlockTableRecord block, Point3d p1, Point3d p2, int? color = null, string lineName = null)
         {
             
             Line line = new Line(p1, p2);
@@ -3133,7 +3541,30 @@ namespace CAD_AUTOMATION
             {
                 line.ColorIndex = color.Value; 
             }
-            
+
+            // If a line name is provided, attach XData
+            if (!string.IsNullOrEmpty(lineName))
+            {
+                // Make sure the RegApp is registered
+                Database db = block.Database;
+                RegAppTable regAppTable = (RegAppTable)trans.GetObject(db.RegAppTableId, OpenMode.ForRead);
+                if (!regAppTable.Has("MYAPP"))
+                {
+                    regAppTable.UpgradeOpen();
+                    RegAppTableRecord regApp = new RegAppTableRecord();
+                    regApp.Name = "MYAPP";
+                    regAppTable.Add(regApp);
+                    trans.AddNewlyCreatedDBObject(regApp, true);
+                }
+
+                ResultBuffer rb = new ResultBuffer(
+                    new TypedValue((int)DxfCode.ExtendedDataRegAppName, "MYAPP"),
+                    new TypedValue((int)DxfCode.ExtendedDataAsciiString, lineName)
+                );
+
+                line.XData = rb;
+            }
+
             block.AppendEntity(line);
             trans.AddNewlyCreatedDBObject(line, true);
 
@@ -3288,6 +3719,23 @@ namespace CAD_AUTOMATION
                 trans.AddNewlyCreatedDBObject(arc4, true);
             }
         }
+        public static Polyline Addrectangle(Transaction trans, BlockTableRecord btr, Point3d bottomLeft, Point3d topRight, int? color = null)
+        {
+            Polyline rectangle = new Polyline(4);
+            rectangle.AddVertexAt(0, new Point2d(bottomLeft.X, bottomLeft.Y), 0, 0, 0);
+            rectangle.AddVertexAt(1, new Point2d(topRight.X, bottomLeft.Y), 0, 0, 0);
+            rectangle.AddVertexAt(2, new Point2d(topRight.X, topRight.Y), 0, 0, 0);
+            rectangle.AddVertexAt(3, new Point2d(bottomLeft.X, topRight.Y), 0, 0, 0);
+            rectangle.Closed = true;
+            if (color.HasValue)
+            {
+                rectangle.ColorIndex = color.Value;
+            }
+            btr.AppendEntity(rectangle);
+            trans.AddNewlyCreatedDBObject(rectangle, true);
+
+            return rectangle;
+        }
         private void button1_Click(object sender, EventArgs e)
         {
             this.Close();
@@ -3342,6 +3790,71 @@ namespace CAD_AUTOMATION
             path.AddArc(rect.Left, rect.Bottom - radius, radius, radius, 90, 90); // Bottom left
             path.CloseAllFigures();
             return path;
+        }
+        private void ApplyFillet(Transaction tr, BlockTableRecord modelSpace,
+                         Line line1, Line line2,
+                         Point3d p1, Point3d p2, Point3d p3,
+                         double radius)
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+            // Direction vectors from p2 (corner) to p1 and p3
+            Vector3d dir1 = (p1 - p2).GetNormal();
+            Vector3d dir2 = (p3 - p2).GetNormal();
+
+            // Half of the angle between lines
+            double angle = dir1.GetAngleTo(dir2) / 2.0;
+
+            // Tangent offset distance from corner
+            double offset = radius / Math.Tan(angle);
+
+            // Calculate fillet points on each line
+            Point3d filletPt1 = p2 + dir1 * offset;
+            Point3d filletPt2 = p2 + dir2 * offset;
+
+            // Direction bisector
+            Vector3d bisector = (dir1 + dir2).GetNormal();
+            Point3d arcCenter = p2 + bisector * (radius / Math.Sin(angle));
+
+            // Vectors from center to arc endpoints
+            Vector3d v1 = (filletPt1 - arcCenter).GetNormal();
+            Vector3d v2 = (filletPt2 - arcCenter).GetNormal();
+
+            // Compute angles
+            Plane plane = new Plane(Point3d.Origin, Vector3d.ZAxis);
+            double startAngle = v1.AngleOnPlane(plane);
+            double endAngle = v2.AngleOnPlane(plane);
+
+            // Check arc direction: ensure it's counterclockwise
+            Vector3d normal = v1.CrossProduct(v2);
+            bool isCounterClockwise = normal.Z > 0;
+
+            if (!isCounterClockwise)
+            {
+                // Swap angles to ensure proper direction
+                double temp = startAngle;
+                startAngle = endAngle;
+                endAngle = temp;
+            }
+
+            // Create the fillet arc
+            Arc filletArc = new Arc(arcCenter, radius, startAngle, endAngle);
+
+            // Trim line1 to fillet
+            if (line1.StartPoint.IsEqualTo(p2))
+                line1.StartPoint = filletPt1;
+            else if (line1.EndPoint.IsEqualTo(p2))
+                line1.EndPoint = filletPt1;
+
+            // Trim line2 to fillet
+            if (line2.StartPoint.IsEqualTo(p2))
+                line2.StartPoint = filletPt2;
+            else if (line2.EndPoint.IsEqualTo(p2))
+                line2.EndPoint = filletPt2;
+
+            // Add the arc to model space
+            modelSpace.AppendEntity(filletArc);
+            tr.AddNewlyCreatedDBObject(filletArc, true);
         }
 
 

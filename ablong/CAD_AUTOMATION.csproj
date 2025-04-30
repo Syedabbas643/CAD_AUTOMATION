@@ -214,6 +214,8 @@
     <EmbeddedResource Include="Icons\mechga.bmp" />
     <EmbeddedResource Include="Icons\bill.bmp" />
     <EmbeddedResource Include="Icons\parts.bmp" />
+    <EmbeddedResource Include="Icons\ratchet.bmp" />
+    <EmbeddedResource Include="Icons\diagram.bmp" />
     <Content Include="MetroFramework.txt" />
   </ItemGroup>
   <ItemGroup>

@@ -26,6 +26,7 @@ using System.Security.Cryptography;
 using System.Collections.Specialized;
 using System.Windows.Documents;
 using System.Windows.Media;
+using TextBox = System.Windows.Forms.TextBox;
 
 namespace CAD_AUTOMATION
 {
@@ -77,6 +78,24 @@ namespace CAD_AUTOMATION
             {
                 locktype = locktypecombobox.SelectedItem?.ToString();
             }
+
+            if (!string.IsNullOrEmpty(partcountbox.SelectedItem?.ToString()))
+            {
+                // Get selected count
+                int selectedCount = int.Parse(partcountbox.SelectedItem.ToString());
+
+                // Now check each relevant textbox
+                for (int i = 1; i <= selectedCount; i++)
+                {
+                    TextBox tb = this.Controls["part" + i] as TextBox;
+                    if (tb != null && string.IsNullOrWhiteSpace(tb.Text))
+                    {
+                        errorlabel.Visible = true;
+                        return;
+                    }
+                }
+            }
+
 
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
@@ -928,5 +947,53 @@ namespace CAD_AUTOMATION
                 metroLabel5.Visible = false;
             }
         }
+
+        private void heightbox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))
+            {
+                e.Handled = true; // Suppress the key press
+            }
+        }
+
+        private void hbbbox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))
+            {
+                e.Handled = true; // Suppress the key press
+            }
+        }
+
+        private void widthbox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))
+            {
+                e.Handled = true; // Suppress the key press
+            }
+        }
+
+        private void partcountbox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Get selected number from ComboBox
+            if (int.TryParse(partcountbox.SelectedItem.ToString(), out int selectedCount))
+            {
+                // Loop through all 6
+                for (int i = 1; i <= 6; i++)
+                {
+                    // Find label and textbox controls by name
+                    Control label = this.Controls[$"part{i}label"];
+                    Control textbox = this.Controls["part" + i];
+
+                    if (label != null && textbox != null)
+                    {
+                        // Show/Hide based on selected count
+                        bool isVisible = i <= selectedCount;
+                        label.Visible = isVisible;
+                        textbox.Visible = isVisible;
+                    }
+                }
+            }
+        }
+
     }
 }

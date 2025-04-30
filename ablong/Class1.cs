@@ -34,6 +34,13 @@ using MessageBox = System.Windows.Forms.MessageBox;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf;
 using System.Collections.Specialized;
+using System.Security.Cryptography;
+using System.Windows;
+using Autodesk.AutoCAD.GraphicsSystem;
+using System.Windows.Data;
+using System.Windows.Media.Media3D;
+using System.Windows.Documents;
+using PdfSharp.Drawing;
 
 namespace CAD_AUTOMATION
 {
@@ -44,6 +51,7 @@ namespace CAD_AUTOMATION
         private static string lastFileName = string.Empty;
         private static double lastoblen;
         private static double lastobwid;
+        private int mpcolor = 210;
         private static bool isEnabled = true;
         string layerName = "BENDING LINE";
         //update 28feb
@@ -214,7 +222,7 @@ namespace CAD_AUTOMATION
             }
         }
 
-        [CommandMethod("D_STIFFNER")]
+        [CommandMethod("MECHPARTS")]
         public void DOORSTIFFNER()
         {
             if (!isEnabled)
@@ -225,6 +233,7 @@ namespace CAD_AUTOMATION
             // Get the current document and database
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Database db = doc.Database;
+            Editor editor = doc.Editor;
             NameValueCollection config;
 
             string pluginDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -238,36 +247,10 @@ namespace CAD_AUTOMATION
                 using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
                     // Open the Block Table for read
-                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForWrite) as BlockTable;
 
                     // Open the Block Table Record Model space for write
                     BlockTableRecord modelSpace = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
-
-
-                    // Get the user input for the center point
-                    PromptPointResult centerResult = doc.Editor.GetPoint("\nSpecify the center point: ");
-
-                    if (centerResult.Status != PromptStatus.OK)
-                        return;
-
-                    Point3d centerPoint = centerResult.Value;
-
-
-                    PromptKeywordOptions typeOptions = new PromptKeywordOptions("\nSTIFFNER_TYPE : ");
-                    typeOptions.Keywords.Add("Welding", "Welding", "Welding Danfoss Type");
-                    typeOptions.Keywords.Add("Rod", "Rod", "Rod Type");
-                    typeOptions.AllowNone = false;
-
-                    // Set default option (optional)
-                    //heightOptions.Keywords.Default = "Medium";
-
-                    PromptResult typeResult = doc.Editor.GetKeywords(typeOptions);
-
-                    if (typeResult.Status != PromptStatus.OK)
-                        return;
-
-                    // Store the selected value
-                    string STIFFNER_TYPE = typeResult.StringResult;
 
                     config = new System.Collections.Specialized.NameValueCollection();
 
@@ -289,46 +272,182 @@ namespace CAD_AUTOMATION
                         return;
                     }
 
-                    if (STIFFNER_TYPE == "Welding")
+                    PromptPointResult centerResult = doc.Editor.GetPoint("\nSpecify the center point: ");
+
+                    if (centerResult.Status != PromptStatus.OK)
+                        return;
+
+                    Point3d centerPoint = centerResult.Value;
+
+                    PromptKeywordOptions partOptions = new PromptKeywordOptions("\nSELECT PART TYPE TO DRAW : ");
+                    partOptions.Keywords.Add("DOOR");
+                    partOptions.Keywords.Add("MOUNTINGPLATE");
+                    partOptions.Keywords.Add("MOUNTINGANGLE");
+                    partOptions.Keywords.Add("PARTITIONCHANNEL");
+                    partOptions.Keywords.Add("STIFFNER");
+                    partOptions.AllowNone = false;
+
+                    PromptResult partResult = doc.Editor.GetKeywords(partOptions);
+
+                    if (partResult.Status != PromptStatus.OK)
+                        return;
+
+                    // Store the selected value
+                    string PARTTYPE = partResult.StringResult;
+
+                    DimStyleTable dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
+
+                    string dimStyleName = "ROHITH";
+                    ObjectId dimStyleId;
+
+                    if (!dimStyleTable.Has(dimStyleName))
                     {
-                        // Get the user input for length and width
-                        PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
-                        PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
-                        if (heightResult.Status != PromptStatus.OK)
+                        DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                        {
+                            Name = dimStyleName,
+                            Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                            Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 3),
+                            Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                            Dimasz = 30,
+                            Dimtxt = 30,
+                            Dimexo = 4.0,
+                            Dimdec = 0,
+                            Dimtad = 0,
+                            Dimjust = 0,
+                            Dimtoh = true,
+                            Dimtih = false,
+                            Dimupt = false,
+                            Dimgap = 5
+                        };
+
+                        // Only add to table AFTER setting all properties
+                        dimStyleTable.UpgradeOpen();
+                        dimStyleId = dimStyleTable.Add(newDimStyle);
+                        tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                        //db.SetDimstyleData(newDimStyle);
+                    }
+                    else
+                    {
+
+                        dimStyleId = dimStyleTable[dimStyleName];
+                    }
+
+                    string dimStyleName2 = "BLANK SIZE";
+                    ObjectId dimStyleId2;
+
+                    if (!dimStyleTable.Has(dimStyleName2))
+                    {
+                        // Create the new dimension style record and set its name
+                        DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                        {
+                            Name = dimStyleName2,
+                            Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                            Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 1),
+                            Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                            Dimasz = 30,
+                            Dimtxt = 30,
+                            Dimexo = 4.0,
+                            Dimdec = 0,
+                            Dimtad = 0,
+                            Dimjust = 0,
+                            Dimtoh = true,
+                            Dimtih = false,
+                            Dimupt = false,
+                            Dimgap = 5
+                        };
+
+                        // Add to the dim style table
+                        dimStyleTable.UpgradeOpen(); // Upgrade BEFORE adding
+                        dimStyleId2 = dimStyleTable.Add(newDimStyle);
+                        tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                        //db.SetDimstyleData(newDimStyle);
+                    }
+                    else
+                    {
+                        dimStyleId2 = dimStyleTable[dimStyleName2];
+                    }
+
+                    LinetypeTable ltTable = (LinetypeTable)tr.GetObject(db.LinetypeTableId, OpenMode.ForRead);
+                    if (!ltTable.Has("HIDDEN"))
+                    {
+                        db.LoadLineTypeFile("HIDDEN", "acad.lin");
+                    }
+
+                    LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+
+                    if (!lt.Has(layerName))
+                    {
+                        // Open for write to add a new layer
+                        lt.UpgradeOpen();
+
+                        // Create new layer
+                        LayerTableRecord ltr = new LayerTableRecord
+                        {
+                            Name = layerName,
+                            Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 4),
+                            LinetypeObjectId = ltTable["HIDDEN"] // Default to "Continuous"
+                        };
+
+                        lt.Add(ltr);
+                        tr.AddNewlyCreatedDBObject(ltr, true);
+                    }
+
+                    if (PARTTYPE == "STIFFNER")
+                    {
+                        PromptKeywordOptions typeOptions = new PromptKeywordOptions("\nSTIFFNER_TYPE : ");
+                        typeOptions.Keywords.Add("Welding", "Welding", "Welding Danfoss Type");
+                        typeOptions.Keywords.Add("Rod", "Rod", "Rod Type");
+                        typeOptions.AllowNone = false;
+
+                        PromptResult typeResult = doc.Editor.GetKeywords(typeOptions);
+
+                        if (typeResult.Status != PromptStatus.OK)
                             return;
-                        double height = heightResult.Value;
+
+                        // Store the selected value
+                        string STIFFNER_TYPE = typeResult.StringResult;
 
 
-                        PromptDoubleOptions widthOptions = new PromptDoubleOptions("\n STIFFNER WIDTH ");
-                        PromptDoubleResult widthResult = doc.Editor.GetDouble(widthOptions);
-                        if (widthResult.Status != PromptStatus.OK)
-                            return;
-                        double width = widthResult.Value;
+                        if (STIFFNER_TYPE == "Welding")
+                        {
+                            // Get the user input for length and width
+                            PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
+                            PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
+                            if (heightResult.Status != PromptStatus.OK)
+                                return;
+                            double height = heightResult.Value;
 
-                        double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
-                        double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
-                        double thick = Convert.ToDouble(config["stiffner_thick"]);
-                        string midholes = config["stiffner_holes_on_mid"];
-                        double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
-                        double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
 
-                        BlockTableRecord mainBlock = new BlockTableRecord();
-                        string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
-                        bt.UpgradeOpen();
-                        mainBlock.Name = mainBlockName;
-                        bt.Add(mainBlock);
-                        tr.AddNewlyCreatedDBObject(mainBlock, true);
+                            PromptDoubleOptions widthOptions = new PromptDoubleOptions("\n STIFFNER WIDTH ");
+                            PromptDoubleResult widthResult = doc.Editor.GetDouble(widthOptions);
+                            if (widthResult.Status != PromptStatus.OK)
+                                return;
+                            double width = widthResult.Value;
 
-                        BlockTableRecord block1 = new BlockTableRecord();
-                        string blockName = "CustomBlock_" + Guid.NewGuid().ToString("N");
-                        block1.Name = blockName;
-                        bt.Add(block1);
-                        tr.AddNewlyCreatedDBObject(block1, true);
+                            double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+                            double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+                            double thick = Convert.ToDouble(config["stiffner_thick"]);
+                            string midholes = config["stiffner_holes_on_mid"];
+                            double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+                            double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
 
-                        Polyline rectangle1 = Addrectangle(tr, block1, new Point3d(0,0,0), new Point3d(folding1,height, 0));
+                            BlockTableRecord mainBlock = new BlockTableRecord();
+                            string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
+                            bt.UpgradeOpen();
+                            mainBlock.Name = mainBlockName;
+                            bt.Add(mainBlock);
+                            tr.AddNewlyCreatedDBObject(mainBlock, true);
 
-                        int arrayCount = (int)((height - pitch) / pitch);
-                        int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
+                            BlockTableRecord block1 = new BlockTableRecord();
+                            string blockName = "CustomBlock_" + Guid.NewGuid().ToString("N");
+                            block1.Name = blockName;
+                            bt.Add(block1);
+                            tr.AddNewlyCreatedDBObject(block1, true);
+
+                            Polyline rectangle1 = Addrectangle(tr, block1, new Point3d(0, 0, 0), new Point3d(folding1, height, 0));
+
+                            int arrayCount = (int)((height - pitch) / pitch);
+                            int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
 
                             // Add circles directly inside block1
                             for (int i = 0; i < arrayCount; i++)
@@ -358,26 +477,26 @@ namespace CAD_AUTOMATION
                                         ent.TransformBy(moveYMatrix);
                                 }
                             }
-                        
-                        BlockTableRecord block2 = new BlockTableRecord();
-                        string blockName2 = "CustomBlock_" + Guid.NewGuid().ToString("N");
-                        block2.Name = blockName2;
-                        bt.Add(block2);
-                        tr.AddNewlyCreatedDBObject(block2, true);
 
-                        Addrectangle(tr, block2, new Point3d(folding1, 0,0), new Point3d((width -folding1),folding1, 0));
+                            BlockTableRecord block2 = new BlockTableRecord();
+                            string blockName2 = "CustomBlock_" + Guid.NewGuid().ToString("N");
+                            block2.Name = blockName2;
+                            bt.Add(block2);
+                            tr.AddNewlyCreatedDBObject(block2, true);
 
-                        //BlockReference holes1 = InsertBlock(db, sourceDb, tr, modelSpace, "TRUFF", new Point3d(centerPoint.X + folding1 + 50, centerPoint.Y + (folding1 / 2), 0), 1.0);
+                            Addrectangle(tr, block2, new Point3d(folding1, 0, 0), new Point3d((width - folding1), folding1, 0));
 
-                        int arrayCount1 = (int)((((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - pitch) / pitch);
-                        int balancewidth = (int)(((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - (arrayCount1 * pitch) -pitch);
+                            //BlockReference holes1 = InsertBlock(db, sourceDb, tr, modelSpace, "TRUFF", new Point3d(centerPoint.X + folding1 + 50, centerPoint.Y + (folding1 / 2), 0), 1.0);
+
+                            int arrayCount1 = (int)((((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - pitch) / pitch);
+                            int balancewidth = (int)(((centerPoint.X + width - folding1) - (centerPoint.X + folding1)) - (arrayCount1 * pitch) - pitch);
 
                             for (int i = 0; i < arrayCount1; i++)
                             {
                                 double xPos = folding1 + pitch + (i * pitch);
                                 Circle circle = new Circle
                                 {
-                                    Center = new Point3d(xPos, folding1 /2, 0),
+                                    Center = new Point3d(xPos, folding1 / 2, 0),
                                     Radius = (holesdia / 2)
                                 };
 
@@ -399,109 +518,1158 @@ namespace CAD_AUTOMATION
                                         ent.TransformBy(moveXMatrix);
                                 }
                             }
-                        
-
-                        BlockReference ref1 = new BlockReference(new Point3d(0, 0, 0), block1.ObjectId);
-                        mainBlock.AppendEntity(ref1);
-                        tr.AddNewlyCreatedDBObject(ref1, true);
-
-                        BlockReference ref2 = new BlockReference(new Point3d(width - folding1, 0, 0), block1.ObjectId);
-                        mainBlock.AppendEntity(ref2);
-                        tr.AddNewlyCreatedDBObject(ref2, true);
-
-                        BlockReference ref3 = new BlockReference(new Point3d(0, 0, 0), block2.ObjectId);
-                        mainBlock.AppendEntity(ref3);
-                        tr.AddNewlyCreatedDBObject(ref3, true);
-
-                        BlockReference ref4 = new BlockReference(new Point3d(0, height - folding1, 0), block2.ObjectId);
-                        mainBlock.AppendEntity(ref4);
-                        tr.AddNewlyCreatedDBObject(ref4, true);
-
-                        BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
-                        modelSpace.AppendEntity(mainRef);
-                        tr.AddNewlyCreatedDBObject(mainRef, true);
 
 
-                        Drawstiffnerheight(tr, bt, modelSpace, db,sourceDb,config,STIFFNER_TYPE, new Point3d(centerPoint.X + width + 500, centerPoint.Y, 0), height, width);
-                        DrawstiffnerWdithnotching(tr, bt, modelSpace, db, sourceDb, config, new Point3d(centerPoint.X + width + 500 + 500, centerPoint.Y, 0), height, width);
+                            BlockReference ref1 = new BlockReference(new Point3d(0, 0, 0), block1.ObjectId);
+                            mainBlock.AppendEntity(ref1);
+                            tr.AddNewlyCreatedDBObject(ref1, true);
+
+                            BlockReference ref2 = new BlockReference(new Point3d(width - folding1, 0, 0), block1.ObjectId);
+                            mainBlock.AppendEntity(ref2);
+                            tr.AddNewlyCreatedDBObject(ref2, true);
+
+                            BlockReference ref3 = new BlockReference(new Point3d(0, 0, 0), block2.ObjectId);
+                            mainBlock.AppendEntity(ref3);
+                            tr.AddNewlyCreatedDBObject(ref3, true);
+
+                            BlockReference ref4 = new BlockReference(new Point3d(0, height - folding1, 0), block2.ObjectId);
+                            mainBlock.AppendEntity(ref4);
+                            tr.AddNewlyCreatedDBObject(ref4, true);
+
+                            BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
+                            modelSpace.AppendEntity(mainRef);
+                            tr.AddNewlyCreatedDBObject(mainRef, true);
+
+
+                            Drawstiffnerheight(tr, bt, modelSpace, db, sourceDb, config, STIFFNER_TYPE, new Point3d(centerPoint.X + width + 500, centerPoint.Y, 0), height, width);
+                            DrawstiffnerWdithnotching(tr, bt, modelSpace, db, sourceDb, config, new Point3d(centerPoint.X + width + 500 + 500, centerPoint.Y, 0), height, width);
 
 
 
-                    }
-                    else if (STIFFNER_TYPE == "Rod")
-                    {
-                        PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
-                        PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
-                        if (heightResult.Status != PromptStatus.OK)
-                            return;
-                        double height = heightResult.Value;
-
-                        double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
-                        double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
-                        double thick = Convert.ToDouble(config["stiffner_thick"]);
-                        string midholes = config["stiffner_holes_on_mid"];
-                        double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
-                        double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
-
-                        BlockTableRecord mainBlock = new BlockTableRecord();
-                        string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
-                        bt.UpgradeOpen();
-                        mainBlock.Name = mainBlockName;
-                        bt.Add(mainBlock);
-                        tr.AddNewlyCreatedDBObject(mainBlock, true);
-
-                        Polyline rectangle1 = Addrectangle(tr, mainBlock, new Point3d(0, 0, 0), new Point3d(folding1, height, 0));
-
-                        int arrayCount = (int)((height - pitch) / pitch);
-                        int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
-
-                        // Add circles directly inside block1
-                        for (int i = 0; i < arrayCount; i++)
-                        {
-                            double yPos = pitch + (i * pitch);
-                            Circle circle = new Circle
-                            {
-                                Center = new Point3d(folding1 / 2.0, yPos, 0),
-                                Radius = (holesdia / 2)
-                            };
-
-                            mainBlock.AppendEntity(circle);
-                            tr.AddNewlyCreatedDBObject(circle, true);
                         }
-
-                        // Optionally, adjust vertical position of all circles if balanceHeight ≠ 50
-                        if (balanceheight != pitch)
+                        else if (STIFFNER_TYPE == "Rod")
                         {
-                            double moveY = balanceheight / 2.0;
-                            Matrix3d moveYMatrix = Matrix3d.Displacement(new Vector3d(0, moveY, 0));
+                            PromptDoubleOptions heightOptions = new PromptDoubleOptions("\n STIFFNER HEIGHT ");
+                            PromptDoubleResult heightResult = doc.Editor.GetDouble(heightOptions);
+                            if (heightResult.Status != PromptStatus.OK)
+                                return;
+                            double height = heightResult.Value;
 
-                            // Move all the circles inside block1
-                            foreach (ObjectId entId in mainBlock)
+                            double folding1 = Convert.ToDouble(config["stiffner_side_size"]);
+                            double folding2 = Convert.ToDouble(config["stiffner_mid_size"]);
+                            double thick = Convert.ToDouble(config["stiffner_thick"]);
+                            string midholes = config["stiffner_holes_on_mid"];
+                            double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
+                            double holesdia = Convert.ToDouble(config["stiffner_holes_dia"]);
+
+                            BlockTableRecord mainBlock = new BlockTableRecord();
+                            string mainBlockName = "MainStiffnerBlock_" + Guid.NewGuid().ToString("N");
+                            bt.UpgradeOpen();
+                            mainBlock.Name = mainBlockName;
+                            bt.Add(mainBlock);
+                            tr.AddNewlyCreatedDBObject(mainBlock, true);
+
+                            Polyline rectangle1 = Addrectangle(tr, mainBlock, new Point3d(0, 0, 0), new Point3d(folding1, height, 0));
+
+                            int arrayCount = (int)((height - pitch) / pitch);
+                            int balanceheight = (int)(height - (arrayCount * pitch)) - (int)pitch;
+
+                            // Add circles directly inside block1
+                            for (int i = 0; i < arrayCount; i++)
                             {
-                                Entity ent = (Entity)tr.GetObject(entId, OpenMode.ForWrite);
-                                if (ent is Circle)
-                                    ent.TransformBy(moveYMatrix);
+                                double yPos = pitch + (i * pitch);
+                                Circle circle = new Circle
+                                {
+                                    Center = new Point3d(folding1 / 2.0, yPos, 0),
+                                    Radius = (holesdia / 2)
+                                };
+
+                                mainBlock.AppendEntity(circle);
+                                tr.AddNewlyCreatedDBObject(circle, true);
                             }
+
+                            // Optionally, adjust vertical position of all circles if balanceHeight ≠ 50
+                            if (balanceheight != pitch)
+                            {
+                                double moveY = balanceheight / 2.0;
+                                Matrix3d moveYMatrix = Matrix3d.Displacement(new Vector3d(0, moveY, 0));
+
+                                // Move all the circles inside block1
+                                foreach (ObjectId entId in mainBlock)
+                                {
+                                    Entity ent = (Entity)tr.GetObject(entId, OpenMode.ForWrite);
+                                    if (ent is Circle)
+                                        ent.TransformBy(moveYMatrix);
+                                }
+                            }
+
+                            BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
+                            modelSpace.AppendEntity(mainRef);
+                            tr.AddNewlyCreatedDBObject(mainRef, true);
+
+                            Drawstiffnerheight(tr, bt, modelSpace, db, sourceDb, config, STIFFNER_TYPE, new Point3d(centerPoint.X + 500, centerPoint.Y, 0), height, 0);
+
+
+
+                        }
+                    }
+                    else if (PARTTYPE == "DOOR")
+                    {
+                        string blockName = null;
+                        
+                        double doorthick = 0;
+                        double folding = 0;
+
+                        PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
+                        promptOptions.SetRejectMessage("\nYou can only select a block.");
+                        promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
+
+                        // Get the user input
+                        PromptEntityResult result = editor.GetEntity(promptOptions);
+
+                        // Check if the user selected a valid entity
+                        if (result.Status == PromptStatus.OK)
+                        {
+                            // Open the selected object and check if it's a BlockReference
+                            ObjectId objectId = result.ObjectId;
+                            BlockReference block = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
+                            blockName = block.Name;
+
+                        }
+                        else
+                        {
+                            MessageBox.Show("Selection was not successful or the user canceled.");
                         }
 
-                        BlockReference mainRef = new BlockReference(centerPoint, mainBlock.ObjectId);
-                        modelSpace.AppendEntity(mainRef);
-                        tr.AddNewlyCreatedDBObject(mainRef, true);
+                        PromptDoubleOptions thick = new PromptDoubleOptions("\nEnter Door Thickness: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                        };
 
-                        Drawstiffnerheight(tr, bt, modelSpace, db, sourceDb, config, STIFFNER_TYPE, new Point3d(centerPoint.X + 500, centerPoint.Y, 0), height, 0);
+                        PromptDoubleResult thickResult = editor.GetDouble(thick);
 
+                        if (thickResult.Status == PromptStatus.OK)
+                        {
+                            doorthick = thickResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Door Thickness is required.");
+                            return;
+                        }
+
+                        PromptDoubleOptions whatthick = new PromptDoubleOptions("\nEnter Folding Length: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                        };
+
+                        PromptDoubleResult foldingResult = editor.GetDouble(whatthick);
+
+                        if (foldingResult.Status == PromptStatus.OK)
+                        {
+                            folding = foldingResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Folding Length input canceled or invalid.");
+                            return;
+                        }
+
+                        PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nSelect INCHES TYPE: ")
+                        {
+                            AllowNone = false // Prevent pressing Enter without selecting
+                        };
+
+                        // Add keyword options
+                        lineweightOptions.Keywords.Add("WELDED");
+                        lineweightOptions.Keywords.Add("STEPinches");
+
+                        // Optionally highlight default behavior
+                        lineweightOptions.Keywords.Default = "WELDED";
+
+                        PromptResult lineweightResult = editor.GetKeywords(lineweightOptions);
+
+                        if (lineweightResult.Status != PromptStatus.OK)
+                        {
+                            MessageBox.Show("Atleast select one INCHES type.");
+                            return;
+                        }
+
+                        string inches = lineweightResult.StringResult;
+
+
+                        Point3d descPoint = centerPoint;
+
+                        Processdoor(blockName, descPoint, inches, folding, doorthick);
+
+                    }
+                    else if (PARTTYPE == "MOUNTINGPLATE")
+                    {
+                        string blockName = null;
+                        double mpthick = 0;
+                        double folding = 0;
+
+                        PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
+                        promptOptions.SetRejectMessage("\nYou can only select a block.");
+                        promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
+
+                        // Get the user input
+                        PromptEntityResult result = editor.GetEntity(promptOptions);
+
+                        // Check if the user selected a valid entity
+                        if (result.Status == PromptStatus.OK)
+                        {
+                            // Open the selected object and check if it's a BlockReference
+                            ObjectId objectId = result.ObjectId;
+                            BlockReference block1 = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
+                            blockName = block1.Name;
+
+                        }
+                        else
+                        {
+                            MessageBox.Show("Selection was not successful or the user canceled.");
+                        }
+
+                        BlockTableRecord block = (BlockTableRecord)bt[blockName].GetObject(OpenMode.ForRead);
+
+                        PromptDoubleOptions thick = new PromptDoubleOptions("\nEnter MP Thickness: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                            
+                        };
+
+                        PromptDoubleResult thickResult = editor.GetDouble(thick);
+
+                        if (thickResult.Status == PromptStatus.OK)
+                        {
+                            mpthick = thickResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Door Thickness is required.");
+                            return;
+                        }
+
+                        PromptDoubleOptions whatthick = new PromptDoubleOptions("\nEnter Folding Length: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                        };
+
+                        PromptDoubleResult foldingResult = editor.GetDouble(whatthick);
+
+                        if (foldingResult.Status == PromptStatus.OK)
+                        {
+                            folding = foldingResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Folding Length input canceled or invalid.");
+                            return;
+                        }
+
+                        Point3d insertionPoint = centerPoint;
+
+                        using (BlockReference blockRef = new BlockReference(insertionPoint, block.ObjectId))
+                        {
+                            BlockTableRecord models = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                            models.AppendEntity(blockRef);
+                            tr.AddNewlyCreatedDBObject(blockRef, true);
+
+                            DBObjectCollection explodedObjects = new DBObjectCollection();
+                            blockRef.Explode(explodedObjects);
+
+                            bool foundLine1 = false;
+                            bool foundLine2 = false;
+
+                            Point3d localBasePoint = Point3d.Origin;
+                            bool baseFound = false;
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Line line && !baseFound)
+                                {
+                                    // Use first line's start point as base
+                                    localBasePoint = line.StartPoint;
+                                    baseFound = true;
+                                }
+                            }
+
+                            // Compute displacement from local base to insertion point
+                            Vector3d displacement = insertionPoint - localBasePoint;
+                            Matrix3d moveMatrix = Matrix3d.Displacement(displacement);
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Entity entity)
+                                {
+                                    modelSpace.AppendEntity(entity);
+                                    tr.AddNewlyCreatedDBObject(entity, true);
+                                    entity.TransformBy(moveMatrix);
+                                    entity.ColorIndex = 256;
+                                    ResultBuffer xdata = entity.XData;
+                                    if (xdata != null)
+                                    {
+                                        
+
+                                        foreach (TypedValue tv in xdata)
+                                        {
+                                            if (tv.TypeCode == (int)DxfCode.ExtendedDataRegAppName && tv.Value.ToString() == "MYAPP")
+                                            {
+                                                // Now find the AsciiString value for our line names
+                                                foreach (TypedValue val in xdata)
+                                                {
+                                                    if (val.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
+                                                    {
+                                                        string lineName = val.Value.ToString();
+                                                        if (lineName == "mpbendline1")
+                                                        {
+                                                            entity.Layer = "BENDING LINE";
+                                                            foundLine1 = true;
+                                                        }
+                                                        else if (lineName == "mpbendline2")
+                                                        {
+                                                            entity.Layer = "BENDING LINE";
+                                                            foundLine2 = true;
+                                                        }
+                                                        else if (lineName == "mpline1" && obj is Line line1)
+                                                        {
+                                                            Point3d startpoint = line1.StartPoint;
+                                                            Point3d endpoint = line1.EndPoint;
+
+                                                            line1.StartPoint = new Point3d(startpoint.X, startpoint.Y - folding + (mpthick*2), 0);
+                                                            line1.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + (mpthick * 2), 0);    
+
+                                                        }
+                                                        else if (lineName == "mpline3" && obj is Line line3)
+                                                        {
+                                                            Point3d startpoint = line3.StartPoint;
+                                                            Point3d endpoint = line3.EndPoint;
+
+                                                            line3.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (mpthick * 2), 0);
+                                                            line3.EndPoint = new Point3d(endpoint.X, endpoint.Y + folding - (mpthick * 2), 0);
+
+                                                            AlignedDimension dim1 = new AlignedDimension(line3.StartPoint, line3.EndPoint, new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 40, 0), "", dimStyleId2);
+                                                            modelSpace.AppendEntity(dim1);
+                                                            tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                        }
+                                                        else if (lineName == "mpline2" && obj is Line line2)
+                                                        {
+                                                            
+
+                                                            Polyline view = new Polyline(4);
+                                                            view.AddVertexAt(0, new Point2d(line2.StartPoint.X + 150, line2.StartPoint.Y), 0, 0, 0);
+                                                            view.AddVertexAt(1, new Point2d(line2.StartPoint.X + 150 - folding, line2.StartPoint.Y), 0, 0, 0);
+                                                            view.AddVertexAt(2, new Point2d(line2.EndPoint.X + 150 - folding, line2.EndPoint.Y), 0, 0, 0);
+                                                            view.AddVertexAt(3, new Point2d(line2.EndPoint.X + 150, line2.EndPoint.Y), 0, 0, 0);
+                                                            modelSpace.AppendEntity(view);
+                                                            tr.AddNewlyCreatedDBObject(view, true);
+
+                                                            AlignedDimension dim2 = new AlignedDimension(view.GetPoint3dAt(1), view.GetPoint3dAt(2), new Point3d(line2.StartPoint.X + 150 - folding - 35, line2.StartPoint.Y, 0), "", dimStyleId);
+                                                            modelSpace.AppendEntity(dim2);
+                                                            tr.AddNewlyCreatedDBObject(dim2, true);
+
+                                                            AlignedDimension dim3 = new AlignedDimension(view.GetPoint3dAt(2), view.GetPoint3dAt(3), new Point3d(line2.EndPoint.X + 150 - folding, line2.EndPoint.Y + 35, 0), "", dimStyleId);
+                                                            modelSpace.AppendEntity(dim3);
+                                                            tr.AddNewlyCreatedDBObject(dim3, true);
+
+                                                            Point3d startpoint = line2.StartPoint;
+                                                            Point3d endpoint = line2.EndPoint;
+
+                                                            line2.StartPoint = new Point3d(startpoint.X, startpoint.Y - folding + (mpthick * 2), 0);
+                                                            line2.EndPoint = new Point3d(endpoint.X, endpoint.Y + folding - (mpthick * 2), 0);
+
+                                                            AlignedDimension dim1 = new AlignedDimension(line2.StartPoint, line2.EndPoint, new Point3d(line2.StartPoint.X + 40, line2.StartPoint.Y, 0), "", dimStyleId2);
+                                                            modelSpace.AppendEntity(dim1);
+                                                            tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                        }
+                                                        else if (lineName == "mpline4" && obj is Line line4)
+                                                        {
+                                                            Point3d startpoint = line4.StartPoint;
+                                                            Point3d endpoint = line4.EndPoint;
+
+                                                            line4.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (mpthick * 2), 0);
+                                                            line4.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + (mpthick * 2), 0);
+
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                    }
+                                }
+                            }
+
+                            if (!foundLine1 || !foundLine2)
+                            {
+                                MessageBox.Show($"Missing bending lines", "Warning");
+                            }
+
+                            Point3d descPoint = new Point3d(centerPoint.X + 40, centerPoint.Y - 100, 0);
+                            int offset = 30;
+                                DBText textdesc = new DBText();
+                                textdesc.Position = descPoint;
+                                textdesc.Height = 15;
+                                textdesc.TextString = "DESCRIPTION - MOUNTING PLATE";
+                                textdesc.ColorIndex = 2;
+                                modelSpace.AppendEntity(textdesc);
+                                tr.AddNewlyCreatedDBObject(textdesc, true);
+
+                                Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textthick = new DBText();
+                                textthick.Position = thickpoint;
+                                textthick.Height = 15;
+                                textthick.TextString = $"THICKNESS - {mpthick} mm";
+                                textthick.ColorIndex = 3;
+                                modelSpace.AppendEntity(textthick);
+                                tr.AddNewlyCreatedDBObject(textthick, true);
+
+                                Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textqty = new DBText();
+                                textqty.Position = qtypoint;
+                                textqty.Height = 15;
+                                textqty.TextString = $"QTY - NOS";
+                                textqty.ColorIndex = 1;
+                                modelSpace.AppendEntity(textqty);
+                                tr.AddNewlyCreatedDBObject(textqty, true);
+
+                                Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textbend = new DBText();
+                                textbend.Position = bendpoint;
+                                textbend.Height = 15;
+                                textbend.TextString = "BENDING - BEND UP";
+                                textbend.ColorIndex = 3;
+                                modelSpace.AppendEntity(textbend);
+                                tr.AddNewlyCreatedDBObject(textbend, true);
+
+                                Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textmaterial = new DBText();
+                                textmaterial.Position = materialpoint;
+                                textmaterial.Height = 15;
+                                textmaterial.TextString = "MATERIAL - MS";
+                                textmaterial.ColorIndex = 2;
+                                modelSpace.AppendEntity(textmaterial);
+                                tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+                            Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText parttext = new DBText();
+                            parttext.Position = partpoint;
+                            parttext.Height = 15;
+                            parttext.TextString = "PART NUMBER -";
+                            modelSpace.AppendEntity(parttext);
+                            tr.AddNewlyCreatedDBObject(parttext, true);
+
+                            Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+                            Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+                            Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+                            Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+                            Polyline rectangle = new Polyline();
+
+                            // Add the rectangle's vertices
+                            rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+                            rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+                            rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+                            rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+                            // Close the polyline to form a rectangle
+                            rectangle.Closed = true;
+
+                            // Set the color index
+                            rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+                            // Add the polyline to the model space
+                            modelSpace.AppendEntity(rectangle);
+                            tr.AddNewlyCreatedDBObject(rectangle, true);
+
+                            blockRef.Erase();
+                        }
+    
+
+                    }
+                    else if (PARTTYPE == "MOUNTINGANGLE")
+                    {
+                        string blockName = null;
+                        double mpthick = 0;
+                        double folding = 0;
+
+                        PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
+                        promptOptions.SetRejectMessage("\nYou can only select a block.");
+                        promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
+
+                        // Get the user input
+                        PromptEntityResult result = editor.GetEntity(promptOptions);
+
+                        // Check if the user selected a valid entity
+                        if (result.Status == PromptStatus.OK)
+                        {
+                            // Open the selected object and check if it's a BlockReference
+                            ObjectId objectId = result.ObjectId;
+                            BlockReference block1 = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
+                            blockName = block1.Name;
+
+                        }
+                        else
+                        {
+                            MessageBox.Show("Selection was not successful or the user canceled.");
+                        }
+
+                        BlockTableRecord block = (BlockTableRecord)bt[blockName].GetObject(OpenMode.ForRead);
+
+                        PromptDoubleOptions thick = new PromptDoubleOptions("\nEnter MP Thickness: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+
+                        };
+
+                        PromptDoubleResult thickResult = editor.GetDouble(thick);
+
+                        if (thickResult.Status == PromptStatus.OK)
+                        {
+                            mpthick = thickResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Door Thickness is required.");
+                            return;
+                        }
+
+                        PromptDoubleOptions whatthick = new PromptDoubleOptions("\nEnter Folding Length: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                        };
+
+                        PromptDoubleResult foldingResult = editor.GetDouble(whatthick);
+
+                        if (foldingResult.Status == PromptStatus.OK)
+                        {
+                            folding = foldingResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Folding Length input canceled or invalid.");
+                            return;
+                        }
+
+                        Point3d insertionPoint = centerPoint;
+
+                        using (BlockReference blockRef = new BlockReference(insertionPoint, block.ObjectId))
+                        {
+                            BlockTableRecord models = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                            models.AppendEntity(blockRef);
+                            tr.AddNewlyCreatedDBObject(blockRef, true);
+
+                            DBObjectCollection explodedObjects = new DBObjectCollection();
+                            blockRef.Explode(explodedObjects);
+
+                            bool rightangle = false;
+                            
+                            Point3d localBasePoint = Point3d.Origin;
+                            Line firstLine = null;  // To store the first line
+                            bool baseFound = false;
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Line line && !baseFound)
+                                {
+                                    // Use first line's start point as base
+                                    localBasePoint = line.StartPoint;
+                                    firstLine = line;
+                                    baseFound = true;
+                                }
+                            }
+
+                            // Compute displacement from local base to insertion point
+                            Vector3d displacement = insertionPoint - localBasePoint;
+                            Matrix3d moveMatrix = Matrix3d.Displacement(displacement);
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Entity entity)
+                                {
+                                    modelSpace.AppendEntity(entity);
+                                    tr.AddNewlyCreatedDBObject(entity, true);
+                                    entity.TransformBy(moveMatrix);
+                                    entity.ColorIndex = 256;
+                                    ResultBuffer xdata = entity.XData;
+                                    if (xdata != null)
+                                    {
+
+
+                                        foreach (TypedValue tv in xdata)
+                                        {
+                                            if (tv.TypeCode == (int)DxfCode.ExtendedDataRegAppName && tv.Value.ToString() == "MYAPP")
+                                            {
+                                                // Now find the AsciiString value for our line names
+                                                foreach (TypedValue val in xdata)
+                                                {
+                                                    if (val.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
+                                                    {
+                                                        if (firstLine != null)
+                                                        {
+                                                            Point3d firstLineStart = firstLine.StartPoint;
+                                                            Point3d firstLineEnd = firstLine.EndPoint;
+
+                                                            if (firstLineStart.X > firstLineEnd.X)
+                                                            {
+                                                                string lineName = val.Value.ToString();
+                                                                rightangle = true;
+                                                                if (lineName == "mpanglebendline1")
+                                                                {
+                                                                    entity.Layer = "BENDING LINE";
+                                                                }
+                                                                else if (lineName == "mpangleline1" && obj is Line line1)
+                                                                {
+                                                                    Point3d startpoint = line1.StartPoint;
+                                                                    Point3d endpoint = line1.EndPoint;
+
+                                                                    line1.StartPoint = new Point3d(startpoint.X + folding - (mpthick * 2), startpoint.Y, 0);
+                                                                    //line1.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + (mpthick * 2), 0);
+
+                                                                }
+                                                                else if (lineName == "mpangleline3" && obj is Line line3)
+                                                                {
+                                                                    Point3d startpoint = line3.StartPoint;
+                                                                    Point3d endpoint = line3.EndPoint;
+
+                                                                    Polyline view = new Polyline(3);
+                                                                    view.AddVertexAt(0, new Point2d(line3.StartPoint.X - 3, line3.StartPoint.Y + 150), 0, 0, 0);
+                                                                    view.AddVertexAt(1, new Point2d(line3.EndPoint.X, line3.EndPoint.Y + 150), 0, 0, 0);
+                                                                    view.AddVertexAt(2, new Point2d(line3.EndPoint.X, line3.EndPoint.Y + folding + 150), 0, 0, 0);
+                                                                    modelSpace.AppendEntity(view);
+                                                                    tr.AddNewlyCreatedDBObject(view, true);
+
+                                                                    //line3.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (mpthick * 2), 0);
+                                                                    line3.EndPoint = new Point3d(endpoint.X + folding - (mpthick * 2), endpoint.Y, 0);
+
+                                                                    AlignedDimension dim1 = new AlignedDimension(new Point3d(line3.StartPoint.X - 3, line3.StartPoint.Y, 0), line3.EndPoint, new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 40, 0), "", dimStyleId2);
+                                                                    modelSpace.AppendEntity(dim1);
+                                                                    tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                                    AlignedDimension dim2 = new AlignedDimension(view.GetPoint3dAt(0), view.GetPoint3dAt(1), new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 150 - 40, 0), "", dimStyleId);
+                                                                    modelSpace.AppendEntity(dim2);
+                                                                    tr.AddNewlyCreatedDBObject(dim2, true);
+
+                                                                    AlignedDimension dim3 = new AlignedDimension(view.GetPoint3dAt(1), view.GetPoint3dAt(2), new Point3d(line3.EndPoint.X + 40, line3.EndPoint.Y + 150, 0), "", dimStyleId);
+                                                                    modelSpace.AppendEntity(dim3);
+                                                                    tr.AddNewlyCreatedDBObject(dim3, true);
+
+                                                                }
+                                                                else if (lineName == "mpangleline2" && obj is Line line2)
+                                                                {
+
+                                                                    Point3d startpoint = line2.StartPoint;
+                                                                    Point3d endpoint = line2.EndPoint;
+
+                                                                    AlignedDimension dim1 = new AlignedDimension(new Point3d(line2.StartPoint.X, line2.StartPoint.Y - 3, 0), new Point3d(line2.EndPoint.X, line2.EndPoint.Y + 3, 0), new Point3d(line2.StartPoint.X - 40, line2.StartPoint.Y, 0), "", dimStyleId2);
+                                                                    modelSpace.AppendEntity(dim1);
+                                                                    tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                                }
+                                                                else if (lineName == "mpangleline4" && obj is Line line4)
+                                                                {
+                                                                    Point3d startpoint = line4.StartPoint;
+                                                                    Point3d endpoint = line4.EndPoint;
+
+                                                                    line4.StartPoint = new Point3d(startpoint.X + folding - (mpthick * 2), startpoint.Y, 0);
+                                                                    line4.EndPoint = new Point3d(endpoint.X + folding - (mpthick * 2), endpoint.Y, 0);
+
+                                                                }
+                                                            }
+                                                            else
+                                                            {
+                                                                string lineName = val.Value.ToString();
+                                                                if (lineName == "mpanglebendline1")
+                                                                {
+                                                                    entity.Layer = "BENDING LINE";
+                                                                }
+                                                                else if (lineName == "mpangleline1" && obj is Line line1)
+                                                                {
+                                                                    Point3d startpoint = line1.StartPoint;
+                                                                    Point3d endpoint = line1.EndPoint;
+
+                                                                    line1.StartPoint = new Point3d(startpoint.X - folding + (mpthick * 2), startpoint.Y, 0);
+                                                                    //line1.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + (mpthick * 2), 0);
+
+                                                                }
+                                                                else if (lineName == "mpangleline3" && obj is Line line3)
+                                                                {
+                                                                    Point3d startpoint = line3.StartPoint;
+                                                                    Point3d endpoint = line3.EndPoint;
+
+                                                                    Polyline view = new Polyline(3);
+                                                                    view.AddVertexAt(0, new Point2d(line3.StartPoint.X + 3, line3.StartPoint.Y + 150), 0, 0, 0);
+                                                                    view.AddVertexAt(1, new Point2d(line3.EndPoint.X, line3.EndPoint.Y + 150), 0, 0, 0);
+                                                                    view.AddVertexAt(2, new Point2d(line3.EndPoint.X, line3.EndPoint.Y + folding + 150), 0, 0, 0);
+                                                                    modelSpace.AppendEntity(view);
+                                                                    tr.AddNewlyCreatedDBObject(view, true);
+
+                                                                    //line3.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (mpthick * 2), 0);
+                                                                    line3.EndPoint = new Point3d(endpoint.X - folding + (mpthick * 2), endpoint.Y, 0);
+
+                                                                    AlignedDimension dim1 = new AlignedDimension(new Point3d(line3.StartPoint.X + 3, line3.StartPoint.Y, 0), line3.EndPoint, new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 40, 0), "", dimStyleId2);
+                                                                    modelSpace.AppendEntity(dim1);
+                                                                    tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                                    AlignedDimension dim2 = new AlignedDimension(view.GetPoint3dAt(0), view.GetPoint3dAt(1), new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 150 - 40, 0), "", dimStyleId);
+                                                                    modelSpace.AppendEntity(dim2);
+                                                                    tr.AddNewlyCreatedDBObject(dim2, true);
+
+                                                                    AlignedDimension dim3 = new AlignedDimension(view.GetPoint3dAt(1), view.GetPoint3dAt(2), new Point3d(line3.EndPoint.X - 40, line3.EndPoint.Y + 150, 0), "", dimStyleId);
+                                                                    modelSpace.AppendEntity(dim3);
+                                                                    tr.AddNewlyCreatedDBObject(dim3, true);
+
+                                                                }
+                                                                else if (lineName == "mpangleline2" && obj is Line line2)
+                                                                {
+
+                                                                    Point3d startpoint = line2.StartPoint;
+                                                                    Point3d endpoint = line2.EndPoint;
+
+                                                                    AlignedDimension dim1 = new AlignedDimension(new Point3d(line2.StartPoint.X, line2.StartPoint.Y - 3, 0), new Point3d(line2.EndPoint.X, line2.EndPoint.Y + 3, 0), new Point3d(line2.StartPoint.X + 40, line2.StartPoint.Y, 0), "", dimStyleId2);
+                                                                    modelSpace.AppendEntity(dim1);
+                                                                    tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                                }
+                                                                else if (lineName == "mpangleline4" && obj is Line line4)
+                                                                {
+                                                                    Point3d startpoint = line4.StartPoint;
+                                                                    Point3d endpoint = line4.EndPoint;
+
+                                                                    line4.StartPoint = new Point3d(startpoint.X - folding + (mpthick * 2), startpoint.Y, 0);
+                                                                    line4.EndPoint = new Point3d(endpoint.X - folding + (mpthick * 2), endpoint.Y, 0);
+
+                                                                }
+                                                            }
+                                                        }
+
+                                                        
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                    }
+                                }
+                            }
+
+                            Point3d descPoint = new Point3d(centerPoint.X + 40, centerPoint.Y - 100, 0);
+
+                            if (rightangle)
+                            {
+                                descPoint = new Point3d(centerPoint.X - 50, centerPoint.Y - 100, 0);
+                            }
+
+                            int offset = 30;
+                            DBText textdesc = new DBText();
+                            textdesc.Position = descPoint;
+                            textdesc.Height = 15;
+                            textdesc.TextString = "DESCRIPTION - MOUNTING ANGLE";
+                            textdesc.ColorIndex = 2;
+                            modelSpace.AppendEntity(textdesc);
+                            tr.AddNewlyCreatedDBObject(textdesc, true);
+
+                            Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textthick = new DBText();
+                            textthick.Position = thickpoint;
+                            textthick.Height = 15;
+                            textthick.TextString = $"THICKNESS - {mpthick} mm";
+                            textthick.ColorIndex = 3;
+                            modelSpace.AppendEntity(textthick);
+                            tr.AddNewlyCreatedDBObject(textthick, true);
+
+                            Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textqty = new DBText();
+                            textqty.Position = qtypoint;
+                            textqty.Height = 15;
+                            textqty.TextString = $"QTY - NOS";
+                            textqty.ColorIndex = 1;
+                            modelSpace.AppendEntity(textqty);
+                            tr.AddNewlyCreatedDBObject(textqty, true);
+
+                            Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textbend = new DBText();
+                            textbend.Position = bendpoint;
+                            textbend.Height = 15;
+                            textbend.TextString = "BENDING - BENDUP & DOWN";
+                            textbend.ColorIndex = 3;
+                            modelSpace.AppendEntity(textbend);
+                            tr.AddNewlyCreatedDBObject(textbend, true);
+
+                            Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textmaterial = new DBText();
+                            textmaterial.Position = materialpoint;
+                            textmaterial.Height = 15;
+                            textmaterial.TextString = "MATERIAL - MS";
+                            textmaterial.ColorIndex = 2;
+                            modelSpace.AppendEntity(textmaterial);
+                            tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+                            Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText parttext = new DBText();
+                            parttext.Position = partpoint;
+                            parttext.Height = 15;
+                            parttext.TextString = "PART NUMBER -";
+                            modelSpace.AppendEntity(parttext);
+                            tr.AddNewlyCreatedDBObject(parttext, true);
+
+                            Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+                            Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+                            Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+                            Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+                            Polyline rectangle = new Polyline();
+
+                            // Add the rectangle's vertices
+                            rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+                            rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+                            rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+                            rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+                            // Close the polyline to form a rectangle
+                            rectangle.Closed = true;
+
+                            // Set the color index
+                            rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+                            // Add the polyline to the model space
+                            modelSpace.AppendEntity(rectangle);
+                            tr.AddNewlyCreatedDBObject(rectangle, true);
+
+                            blockRef.Erase();
+                        }
 
 
                     }
+                    else if (PARTTYPE == "PARTITIONCHANNEL")
+                    {
+                        string blockName = null;
+                        double thick = 0;
+                        double folding = 0;
+
+                        PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
+                        promptOptions.SetRejectMessage("\nYou can only select a block.");
+                        promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
+
+                        // Get the user input
+                        PromptEntityResult result = editor.GetEntity(promptOptions);
+
+                        // Check if the user selected a valid entity
+                        if (result.Status == PromptStatus.OK)
+                        {
+                            // Open the selected object and check if it's a BlockReference
+                            ObjectId objectId = result.ObjectId;
+                            BlockReference block1 = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
+                            blockName = block1.Name;
+
+                        }
+                        else
+                        {
+                            MessageBox.Show("Selection was not successful or the user canceled.");
+                        }
+
+                        BlockTableRecord block = (BlockTableRecord)bt[blockName].GetObject(OpenMode.ForRead);
+
+                        PromptDoubleOptions thickoption = new PromptDoubleOptions("\nEnter CHANNEL Thickness: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+
+                        };
+
+                        PromptDoubleResult thickResult = editor.GetDouble(thickoption);
+
+                        if (thickResult.Status == PromptStatus.OK)
+                        {
+                            thick = thickResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("CHANNEL Thickness is required.");
+                            return;
+                        }
+
+                        PromptDoubleOptions whatthick = new PromptDoubleOptions("\nEnter Folding Length: ")
+                        {
+                            AllowNegative = false, // Prevent negative values
+                            AllowZero = false
+                        };
+
+                        PromptDoubleResult foldingResult = editor.GetDouble(whatthick);
+
+                        if (foldingResult.Status == PromptStatus.OK)
+                        {
+                            folding = foldingResult.Value;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Folding Length input canceled or invalid.");
+                            return;
+                        }
+
+                        Point3d insertionPoint = centerPoint;
+
+                        using (BlockReference blockRef = new BlockReference(insertionPoint, block.ObjectId))
+                        {
+                            BlockTableRecord models = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                            models.AppendEntity(blockRef);
+                            tr.AddNewlyCreatedDBObject(blockRef, true);
+
+                            DBObjectCollection explodedObjects = new DBObjectCollection();
+                            blockRef.Explode(explodedObjects);
+
+                            Point3d localBasePoint = Point3d.Origin;
+                            bool baseFound = false;
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Line line && !baseFound)
+                                {
+                                    // Use first line's start point as base
+                                    localBasePoint = line.StartPoint;
+                                    baseFound = true;
+                                }
+                            }
+
+                            // Compute displacement from local base to insertion point
+                            Vector3d displacement = insertionPoint - localBasePoint;
+                            Matrix3d moveMatrix = Matrix3d.Displacement(displacement);
+
+                            foreach (DBObject obj in explodedObjects)
+                            {
+                                if (obj is Entity entity)
+                                {
+                                    modelSpace.AppendEntity(entity);
+                                    tr.AddNewlyCreatedDBObject(entity, true);
+                                    entity.TransformBy(moveMatrix);
+                                    entity.ColorIndex = 256;
+                                    ResultBuffer xdata = entity.XData;
+                                    if (xdata != null)
+                                    {
 
 
+                                        foreach (TypedValue tv in xdata)
+                                        {
+                                            if (tv.TypeCode == (int)DxfCode.ExtendedDataRegAppName && tv.Value.ToString() == "MYAPP")
+                                            {
+                                                // Now find the AsciiString value for our line names
+                                                foreach (TypedValue val in xdata)
+                                                {
+                                                    if (val.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
+                                                    {
+                                                        string lineName = val.Value.ToString();
+                                                        if (lineName == "vchbendline1")
+                                                        {
+                                                            entity.Layer = "BENDING LINE";
+                                                            
+                                                        }
+                                                        else if (lineName == "vchbendline2")
+                                                        {
+                                                            entity.Layer = "BENDING LINE";
+                                                            
+                                                        }
+                                                        else if (lineName == "hchbendline")
+                                                        {
+                                                            entity.Layer = "BENDING LINE";
+                                                            
+                                                        }
+                                                        else if (lineName == "hchline1" && obj is Line line1)
+                                                        {
+                                                            Point3d startpoint = line1.StartPoint;
+                                                            Point3d endpoint = line1.EndPoint;
+
+                                                            line1.StartPoint = new Point3d(startpoint.X, startpoint.Y - folding + (thick*2), 0);
+                                                            line1.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + (thick * 2), 0);
+
+                                                        }
+                                                        else if (lineName == "hchline3" && obj is Line line3)
+                                                        {
+                                                            Point3d startpoint = line3.StartPoint;
+                                                            Point3d endpoint = line3.EndPoint;
+
+                                                            line3.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (thick * 2), 0);
+                                                            line3.EndPoint = new Point3d(endpoint.X, endpoint.Y + folding - (thick * 2), 0);
+
+                                                            AlignedDimension dim1 = new AlignedDimension(line3.StartPoint, line3.EndPoint, new Point3d(line3.StartPoint.X, line3.StartPoint.Y + 40, 0), "", dimStyleId2);
+                                                            modelSpace.AppendEntity(dim1);
+                                                            tr.AddNewlyCreatedDBObject(dim1, true);
+
+                                                        }
+                                                        else if (lineName == "hchline21" && obj is Line line2)
+                                                        {
+                                                            double linelenght = line2.Length; 
+                                                            Polyline view = new Polyline(4);
+                                                            view.AddVertexAt(0, new Point2d(line2.StartPoint.X + 150, line2.StartPoint.Y), 0, 0, 0);
+                                                            view.AddVertexAt(1, new Point2d(line2.StartPoint.X + 150 - folding, line2.StartPoint.Y), 0, 0, 0);
+                                                            view.AddVertexAt(2, new Point2d(line2.EndPoint.X + 150 - folding, line2.EndPoint.Y + linelenght), 0, 0, 0);
+                                                            view.AddVertexAt(3, new Point2d(line2.EndPoint.X + 150, line2.EndPoint.Y + linelenght), 0, 0, 0);
+                                                            modelSpace.AppendEntity(view);
+                                                            tr.AddNewlyCreatedDBObject(view, true);
+
+                                                            AlignedDimension dim2 = new AlignedDimension(view.GetPoint3dAt(1), view.GetPoint3dAt(2), new Point3d(line2.StartPoint.X + 150 - folding - 35, line2.StartPoint.Y, 0), "", dimStyleId);
+                                                            modelSpace.AppendEntity(dim2);
+                                                            tr.AddNewlyCreatedDBObject(dim2, true);
+
+                                                            AlignedDimension dim3 = new AlignedDimension(view.GetPoint3dAt(2), view.GetPoint3dAt(3), new Point3d(line2.EndPoint.X + 150 - folding, line2.EndPoint.Y + 35, 0), "", dimStyleId);
+                                                            modelSpace.AppendEntity(dim3);
+                                                            tr.AddNewlyCreatedDBObject(dim3, true);
+
+                                                            Point3d startpoint = line2.StartPoint;
+                                                            Point3d endpoint = line2.EndPoint;
+
+                                                            line2.StartPoint = new Point3d(startpoint.X, startpoint.Y - folding + (thick * 2), 0);
+                                                            //line2.EndPoint = new Point3d(endpoint.X, endpoint.Y + folding - thick, 0);
+
+                                                            AlignedDimension dim1 = new AlignedDimension(line2.StartPoint, new Point3d(line2.EndPoint.X , line2.EndPoint.Y + linelenght, 0), new Point3d(line2.StartPoint.X + 40, line2.StartPoint.Y, 0), "", dimStyleId2);
+                                                            modelSpace.AppendEntity(dim1);
+                                                            tr.AddNewlyCreatedDBObject(dim1, true);
+                                                        }
+                                                        else if (lineName == "hchline22" && obj is Line line6)
+                                                        {
+                                                            Point3d startpoint = line6.StartPoint;
+                                                            Point3d endpoint = line6.EndPoint;
+
+                                                            line6.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (thick * 2), 0);
+                                                            //line6.EndPoint = new Point3d(endpoint.X, endpoint.Y + folding - thick, 0);
+
+                                                        }
+                                                        else if (lineName == "hchline41" && obj is Line line4)
+                                                        {
+                                                            Point3d startpoint = line4.StartPoint;
+                                                            Point3d endpoint = line4.EndPoint;
+
+                                                            line4.StartPoint = new Point3d(startpoint.X, startpoint.Y + folding - (thick * 2), 0);
+                                                            //line4.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + thick, 0);
+
+                                                        }
+                                                        else if (lineName == "hchline42" && obj is Line line5)
+                                                        {
+                                                            Point3d startpoint = line5.StartPoint;
+                                                            Point3d endpoint = line5.EndPoint;
+
+                                                            line5.StartPoint = new Point3d(startpoint.X, startpoint.Y - folding + (thick * 2), 0);
+                                                            //line5.EndPoint = new Point3d(endpoint.X, endpoint.Y - folding + thick, 0);
+
+                                                        }
+
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                    }
+                                }
+                            }
+
+                           
+                            Point3d descPoint = new Point3d(centerPoint.X - 20, centerPoint.Y - 100, 0);
+                            int offset = 30;
+                            DBText textdesc = new DBText();
+                            textdesc.Position = descPoint;
+                            textdesc.Height = 15;
+                            textdesc.TextString = "DESCRIPTION - PARTITION CHANNEL";
+                            textdesc.ColorIndex = 2;
+                            modelSpace.AppendEntity(textdesc);
+                            tr.AddNewlyCreatedDBObject(textdesc, true);
+
+                            Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textthick = new DBText();
+                            textthick.Position = thickpoint;
+                            textthick.Height = 15;
+                            textthick.TextString = $"THICKNESS - {thick} mm";
+                            textthick.ColorIndex = 3;
+                            modelSpace.AppendEntity(textthick);
+                            tr.AddNewlyCreatedDBObject(textthick, true);
+
+                            Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textqty = new DBText();
+                            textqty.Position = qtypoint;
+                            textqty.Height = 15;
+                            textqty.TextString = $"QTY - NOS";
+                            textqty.ColorIndex = 1;
+                            modelSpace.AppendEntity(textqty);
+                            tr.AddNewlyCreatedDBObject(textqty, true);
+
+                            Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textbend = new DBText();
+                            textbend.Position = bendpoint;
+                            textbend.Height = 15;
+                            textbend.TextString = "BENDING - BEND UP";
+                            textbend.ColorIndex = 3;
+                            modelSpace.AppendEntity(textbend);
+                            tr.AddNewlyCreatedDBObject(textbend, true);
+
+                            Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText textmaterial = new DBText();
+                            textmaterial.Position = materialpoint;
+                            textmaterial.Height = 15;
+                            textmaterial.TextString = "MATERIAL - MS";
+                            textmaterial.ColorIndex = 2;
+                            modelSpace.AppendEntity(textmaterial);
+                            tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+                            Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                            offset = offset + 30;
+                            DBText parttext = new DBText();
+                            parttext.Position = partpoint;
+                            parttext.Height = 15;
+                            parttext.TextString = "PART NUMBER -";
+                            modelSpace.AppendEntity(parttext);
+                            tr.AddNewlyCreatedDBObject(parttext, true);
+
+                            Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+                            Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+                            Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+                            Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+                            Polyline rectangle = new Polyline();
+
+                            // Add the rectangle's vertices
+                            rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+                            rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+                            rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+                            rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+                            // Close the polyline to form a rectangle
+                            rectangle.Closed = true;
+
+                            // Set the color index
+                            rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+                            // Add the polyline to the model space
+                            modelSpace.AppendEntity(rectangle);
+                            tr.AddNewlyCreatedDBObject(rectangle, true);
+
+                            blockRef.Erase();
+                        }
+                    }
 
 
-                    // Commit the transaction
                     tr.Commit();
 
-                    // Display a message
-                    doc.Editor.WriteMessage("\nRectangle created successfully.");
+                    doc.Editor.WriteMessage("\nPARTS created successfully.");
                 }
             }
         }
@@ -9850,35 +11018,40 @@ namespace CAD_AUTOMATION
                             PdfDocument outputDocument = new PdfDocument();
 
                             PdfDocument inputPdf1 = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+
                             foreach (PdfPage page in inputPdf1.Pages)
                             {
-                                if (page.Height > page.Width)  // If portrait, rotate it
-                                {
-                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
-                                }
                                 outputDocument.AddPage(page);
                             }
 
-                            // Merge the second PDF (BOM)
-                            PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
-                            foreach (PdfPage page in inputPdf2.Pages)
+                            PdfPage firstPage = inputPdf1.Pages[0];
+                            XUnit width = firstPage.Width;
+                            XUnit height = firstPage.Height;
+
+                            // Now use XPdfForm for BOM PDF
+                            XPdfForm bomForm = XPdfForm.FromFile(excelPdfSavePath);
+                            int pageCount = bomForm.PageCount;
+
+                            for (int i = 0; i < pageCount; i++)
                             {
-                                if (page.Height > page.Width)  // If portrait, rotate it
+                                PdfPage targetPage = outputDocument.AddPage();
+                                targetPage.Width = width;
+                                targetPage.Height = height;
+
+                                using (XGraphics gfx = XGraphics.FromPdfPage(targetPage))
                                 {
-                                    page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                    bomForm.PageNumber = i + 1;
+
+                                    double scaleX = width.Point / bomForm.PointWidth;
+                                    double scaleY = height.Point / bomForm.PointHeight;
+                                    double scale = Math.Min(scaleX, scaleY);
+
+                                    gfx.DrawImage(bomForm, 0, 0, bomForm.PointWidth * scale, bomForm.PointHeight * scale);
                                 }
-                                outputDocument.AddPage(page);
                             }
 
-                            // Save the merged PDF
                             outputDocument.Save(mergedPdfPath);
 
-                            // Cleanup
-                            //inputPdf1.Close();
-                            //inputPdf2.Close();
-                            //outputDocument.Close();
-
-                            // Delete individual PDFs after merging (optional)
                             File.Delete(filePath);
                             File.Delete(excelPdfSavePath);
                             File.Move(mergedPdfPath, filePath);
@@ -10545,22 +11718,33 @@ namespace CAD_AUTOMATION
                                 PdfDocument inputPdf1 = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
                                 foreach (PdfPage page in inputPdf1.Pages)
                                 {
-                                    if (page.Height > page.Width)  // If portrait, rotate it
-                                    {
-                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
-                                    }
                                     outputDocument.AddPage(page);
                                 }
 
-                                // Merge the second PDF (BOM)
-                                PdfDocument inputPdf2 = PdfReader.Open(excelPdfSavePath, PdfDocumentOpenMode.Import);
-                                foreach (PdfPage page in inputPdf2.Pages)
+                                PdfPage firstPage = inputPdf1.Pages[0];
+                                XUnit width = firstPage.Width;
+                                XUnit height = firstPage.Height;
+
+                                // Now use XPdfForm for BOM PDF
+                                XPdfForm bomForm = XPdfForm.FromFile(excelPdfSavePath);
+                                int pageCount = bomForm.PageCount;
+
+                                for (int i = 0; i < pageCount; i++)
                                 {
-                                    if (page.Height > page.Width)  // If portrait, rotate it
+                                    PdfPage targetPage = outputDocument.AddPage();
+                                    targetPage.Width = width;
+                                    targetPage.Height = height;
+
+                                    using (XGraphics gfx = XGraphics.FromPdfPage(targetPage))
                                     {
-                                        page.Rotate = 270;  // Rotate by 90 degrees to make landscape
+                                        bomForm.PageNumber = i + 1;
+
+                                        double scaleX = width.Point / bomForm.PointWidth;
+                                        double scaleY = height.Point / bomForm.PointHeight;
+                                        double scale = Math.Min(scaleX, scaleY);
+
+                                        gfx.DrawImage(bomForm, 0, 0, bomForm.PointWidth * scale, bomForm.PointHeight * scale);
                                     }
-                                    outputDocument.AddPage(page);
                                 }
 
                                 // Save the merged PDF
@@ -10828,143 +12012,6 @@ namespace CAD_AUTOMATION
             }
         }
 
-        [CommandMethod("DOOR")]
-        public static void HelloAutoCAD()
-        {
-            // Initialize AutoCAD application
-            if (!isEnabled)
-            {
-                MessageBox.Show("GaMeR Add-in is Disabled");
-                return;
-            }
-            try
-            {
-                var acadApp = Application.AcadApplication as dynamic;
-                if (acadApp == null)
-                {
-                    MessageBox.Show("AutoCAD is not running.");
-                    return;
-                }
-                Document doc = Application.DocumentManager.MdiActiveDocument;
-                Database db = doc.Database;
-                Editor editor = doc.Editor;
-
-                
-                string blockName = null;
-                double doorthick = 0;
-                double folding = 0;
-
-                using (Transaction tr = db.TransactionManager.StartTransaction())
-                {
-                    BlockTable bt = (BlockTable)db.BlockTableId.GetObject(OpenMode.ForRead);
-                    BlockTableRecord btr = (BlockTableRecord)db.CurrentSpaceId.GetObject(OpenMode.ForWrite);
-
-                    PromptEntityOptions promptOptions = new PromptEntityOptions("\nSelect a block: ");
-                    promptOptions.SetRejectMessage("\nYou can only select a block.");
-                    promptOptions.AddAllowedClass(typeof(BlockReference), true); // Restrict to BlockReference
-
-                    // Get the user input
-                    PromptEntityResult result = editor.GetEntity(promptOptions);
-
-                    // Check if the user selected a valid entity
-                    if (result.Status == PromptStatus.OK)
-                    {
-                        // Open the selected object and check if it's a BlockReference
-                        ObjectId objectId = result.ObjectId;
-                        BlockReference block = (BlockReference)tr.GetObject(objectId, OpenMode.ForRead);
-                        blockName = block.Name;
-   
-                    }
-                    else
-                    {
-                        MessageBox.Show("Selection was not successful or the user canceled.");
-                    }
-
-                    PromptDoubleOptions thick = new PromptDoubleOptions("\nEnter Door Thickness: ")
-                    {
-                        AllowNegative = false, // Prevent negative values
-                        AllowZero = false    
-                    };
-
-                    PromptDoubleResult thickResult = editor.GetDouble(thick);
-
-                    if (thickResult.Status == PromptStatus.OK)
-                    {
-                        doorthick = thickResult.Value;
-                    }
-                    else
-                    {
-                        MessageBox.Show("Door Thickness is required.");
-                        return;
-                    }
-
-                    PromptDoubleOptions whatthick = new PromptDoubleOptions("\nEnter Folding Length: ")
-                    {
-                        AllowNegative = false, // Prevent negative values
-                        AllowZero = false
-                    };
-
-                    PromptDoubleResult foldingResult = editor.GetDouble(whatthick);
-
-                    if (foldingResult.Status == PromptStatus.OK)
-                    {
-                        folding = foldingResult.Value;
-                    }
-                    else
-                    {
-                        MessageBox.Show("Folding Length input canceled or invalid.");
-                        return;
-                    }
-
-                    PromptKeywordOptions lineweightOptions = new PromptKeywordOptions("\nSelect INCHES TYPE: ")
-                    {
-                        AllowNone = false // Prevent pressing Enter without selecting
-                    };
-
-                    // Add keyword options
-                    lineweightOptions.Keywords.Add("WELDED");
-                    lineweightOptions.Keywords.Add("STEPinches");
-
-                    // Optionally highlight default behavior
-                    lineweightOptions.Keywords.Default = "WELDED";
-
-                    PromptResult lineweightResult = editor.GetKeywords(lineweightOptions);
-
-                    if (lineweightResult.Status != PromptStatus.OK)
-                    {
-                        MessageBox.Show("Atleast select one INCHES type.");
-                        return;
-                    }
-
-                    string inches = lineweightResult.StringResult;
-
-                    // Ask the user for a point
-                    PromptPointOptions pointOptions = new PromptPointOptions("Specify a point: ");
-                    PromptPointResult pointResult = editor.GetPoint(pointOptions);
-
-                    if (pointResult.Status != PromptStatus.OK)
-                    {
-                        return;
-                    }
-
-                    Point3d descPoint = pointResult.Value;
-
-                    Processdoor(blockName, descPoint,inches,folding,doorthick);
-
-
-                    tr.Commit();
-                }
-                editor.Command("DESCRIPTION");
-
-            }
-            catch (System.Exception ex)
-            {
-                MessageBox.Show(ex.Message);
-            }
-            
-
-        }
-
         [CommandMethod("MECHANICAL_GA")]
         public static void HelloAutoCAD2()
         {
@@ -11089,6 +12136,79 @@ namespace CAD_AUTOMATION
                     List<double> lineLengths = new List<double>();
                     double maxXLength = 0;
                     double maxYLength = 0;
+                    List<Entity> createdEntities = new List<Entity>();
+
+                    DimStyleTable dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
+
+                    string dimStyleName = "ROHITH";
+                    ObjectId dimStyleId;
+
+                    if (!dimStyleTable.Has(dimStyleName))
+                    {
+                        DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                        {
+                            Name = dimStyleName,
+                            Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                            Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 3),
+                            Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                            Dimasz = 30,
+                            Dimtxt = 30,
+                            Dimexo = 4.0,
+                            Dimdec = 0,
+                            Dimtad = 0,
+                            Dimjust = 0,
+                            Dimtoh = true,
+                            Dimtih = false,
+                            Dimupt = false,
+                            Dimgap = 5
+                        };
+
+                        // Only add to table AFTER setting all properties
+                        dimStyleTable.UpgradeOpen();
+                        dimStyleId = dimStyleTable.Add(newDimStyle);
+                        tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                        //db.SetDimstyleData(newDimStyle);
+                    }
+                    else
+                    {
+
+                        dimStyleId = dimStyleTable[dimStyleName];
+                    }
+
+                    string dimStyleName2 = "BLANK SIZE";
+                    ObjectId dimStyleId2;
+
+                    if (!dimStyleTable.Has(dimStyleName2))
+                    {
+                        // Create the new dimension style record and set its name
+                        DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                        {
+                            Name = dimStyleName2,
+                            Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                            Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 1),
+                            Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                            Dimasz = 30,
+                            Dimtxt = 30,
+                            Dimexo = 4.0,
+                            Dimdec = 0,
+                            Dimtad = 0,
+                            Dimjust = 0,
+                            Dimtoh = true,
+                            Dimtih = false,
+                            Dimupt = false,
+                            Dimgap = 5
+                        };
+
+                        // Add to the dim style table
+                        dimStyleTable.UpgradeOpen(); // Upgrade BEFORE adding
+                        dimStyleId2 = dimStyleTable.Add(newDimStyle);
+                        tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                        //db.SetDimstyleData(newDimStyle);
+                    }
+                    else
+                    {
+                        dimStyleId2 = dimStyleTable[dimStyleName2];
+                    }
 
                     foreach (ObjectId entityId in block)
                     {
@@ -11120,17 +12240,12 @@ namespace CAD_AUTOMATION
                         double length = maxXLength;
                         double width = maxYLength;
 
-                        //int length = (int)lineLengths[0];
-                        //int width = (int)lineLengths[1];
-                        //MessageBox.Show("Length: " + length + " Width: " + width);
-
                         double c = placepoint.Y;
                         double lx = placepoint.X;
                         double ly = placepoint.Y;
 
                         double fold = foldlength;
                         double fold1 = fold - thick;
-                        //MessageBox.Show("Fold: " + fold + " Fold1: " + fold1);
                         double off = thick * 2;
                         double len = length + fold1 + lx;
                         double wid = width + fold1;
@@ -11160,7 +12275,7 @@ namespace CAD_AUTOMATION
                                 Point3d p14 = new Point3d(lx + fold1 + inchx - thick, p13.Y, 0);
                                 Point3d p15 = new Point3d(p14.X, p13.Y + inchy, 0); 
                                 Point3d p16 = new Point3d(lx, p15.Y, 0);
-                                Point3d p17 = new Point3d(lx, (width / 2) - (inchy / 2) + ly + fold1, 0); 
+                                Point3d p17 = new Point3d(lx, (width / 2) - (inchy / 2) + ly + fold1 - thick, 0); 
                                 Point3d p18 = new Point3d(lx, p17.Y + inchy, 0); 
                                 Point3d p19 = new Point3d(lx, width - thick - inchclear - inchy + ly + fold1, 0); 
                                 Point3d p20 = new Point3d(lx, p19.Y + inchy, 0);
@@ -11250,6 +12365,23 @@ namespace CAD_AUTOMATION
                                 modelSpace.AppendEntity(line33);
                                 tr.AddNewlyCreatedDBObject(line33, true);
                                 line33.ColorIndex = 12;
+
+                                createdEntities.Add(line22);
+                                createdEntities.Add(line23);
+                                createdEntities.Add(line24);
+                                createdEntities.Add(line25);
+                                createdEntities.Add(line26);
+                                createdEntities.Add(line27);
+                                createdEntities.Add(line28);
+                                createdEntities.Add(line29);
+                                createdEntities.Add(line13);
+                                createdEntities.Add(line14);
+                                createdEntities.Add(line15);
+                                createdEntities.Add(line30);
+                                createdEntities.Add(line31);
+                                createdEntities.Add(line32);
+                                createdEntities.Add(line33);
+
                                 // Add lines to model space
                                 modelSpace.AppendEntity(line1);
                                 modelSpace.AppendEntity(line2);
@@ -11267,6 +12399,23 @@ namespace CAD_AUTOMATION
                                 modelSpace.AppendEntity(line19);
                                 modelSpace.AppendEntity(line20);
                                 modelSpace.AppendEntity(line21);
+
+                                createdEntities.Add(line1);
+                                createdEntities.Add(line2);
+                                createdEntities.Add(line3);
+                                createdEntities.Add(line4);
+                                createdEntities.Add(line5);
+                                createdEntities.Add(line6);
+                                createdEntities.Add(line7);
+                                createdEntities.Add(line8);
+                                createdEntities.Add(line9);
+                                createdEntities.Add(line11);
+                                createdEntities.Add(line12);
+                                createdEntities.Add(line17);
+                                createdEntities.Add(line18);
+                                createdEntities.Add(line19);
+                                createdEntities.Add(line20);
+                                createdEntities.Add(line21);
 
                                 // Commit the transaction
                                 tr.AddNewlyCreatedDBObject(line1, true);
@@ -11322,22 +12471,6 @@ namespace CAD_AUTOMATION
                                 Line line20 = new Line(p15, p16);
                                 Line line21 = new Line(p16, p19);
 
-                                //Line line22 = new Line(p13, p14);
-                                //modelSpace.AppendEntity(line22);
-                                //tr.AddNewlyCreatedDBObject(line22, true);
-                                //Line line23 = new Line(p14, p15);
-                                //modelSpace.AppendEntity(line23);
-                                //tr.AddNewlyCreatedDBObject(line23, true);
-                                //Line line24 = new Line(p15, p16);
-                                //modelSpace.AppendEntity(line24);
-                                //tr.AddNewlyCreatedDBObject(line24, true);
-                                //Vector3d moveVector = new Vector3d(0, p17.Y - p13.Y, 0);
-                                //line22.TransformBy(Matrix3d.Displacement(moveVector));
-                                //line23.TransformBy(Matrix3d.Displacement(moveVector));
-                                //line24.TransformBy(Matrix3d.Displacement(moveVector));
-                                //Line line25 = new Line(p18, p19);
-                                //modelSpace.AppendEntity(line25);
-                                //tr.AddNewlyCreatedDBObject(line25, true);
                                 Line line26 = new Line(p13, p14);
                                 modelSpace.AppendEntity(line26);
                                 tr.AddNewlyCreatedDBObject(line26, true);
@@ -11374,15 +12507,23 @@ namespace CAD_AUTOMATION
                                 modelSpace.AppendEntity(line31);
                                 tr.AddNewlyCreatedDBObject(line31, true);
                                 line31.ColorIndex = 12;
-                                //Line line32 = new Line(p24, p25);
-                                //modelSpace.AppendEntity(line32);
-                                //tr.AddNewlyCreatedDBObject(line32, true);
-                                //line32.ColorIndex = 12;
                                 Line line33 = new Line(p26, p9);
                                 modelSpace.AppendEntity(line33);
                                 tr.AddNewlyCreatedDBObject(line33, true);
                                 line33.ColorIndex = 12;
                                 // Add lines to model space
+
+                                createdEntities.Add(line26);
+                                createdEntities.Add(line27);
+                                createdEntities.Add(line28);
+                                createdEntities.Add(line29);
+                                createdEntities.Add(line13);
+                                createdEntities.Add(line14);
+                                createdEntities.Add(line15);
+                                createdEntities.Add(line30);
+                                createdEntities.Add(line31);
+                                createdEntities.Add(line33);
+
                                 modelSpace.AppendEntity(line1);
                                 modelSpace.AppendEntity(line2);
                                 modelSpace.AppendEntity(line3);
@@ -11399,6 +12540,23 @@ namespace CAD_AUTOMATION
                                 modelSpace.AppendEntity(line19);
                                 modelSpace.AppendEntity(line20);
                                 modelSpace.AppendEntity(line21);
+
+                                createdEntities.Add(line1);
+                                createdEntities.Add(line2);
+                                createdEntities.Add(line3);
+                                createdEntities.Add(line4);
+                                createdEntities.Add(line5);
+                                createdEntities.Add(line6);
+                                createdEntities.Add(line7);
+                                createdEntities.Add(line8);
+                                createdEntities.Add(line9);
+                                createdEntities.Add(line11);
+                                createdEntities.Add(line12);
+                                createdEntities.Add(line17);
+                                createdEntities.Add(line18);
+                                createdEntities.Add(line19);
+                                createdEntities.Add(line20);
+                                createdEntities.Add(line21);
 
                                 // Commit the transaction
                                 tr.AddNewlyCreatedDBObject(line1, true);
@@ -11455,31 +12613,19 @@ namespace CAD_AUTOMATION
                                 Line line20 = new Line(p15, p16);
                                 Line line21 = new Line(p16, p19);
 
-                                //Line line22 = new Line(p13, p14);
-                                //modelSpace.AppendEntity(line22);
-                                //tr.AddNewlyCreatedDBObject(line22, true);
-                                //Line line23 = new Line(p14, p15);
-                                //modelSpace.AppendEntity(line23);
-                                //tr.AddNewlyCreatedDBObject(line23, true);
-                                //Line line24 = new Line(p15, p16);
-                                //modelSpace.AppendEntity(line24);
-                                //tr.AddNewlyCreatedDBObject(line24, true);
-                                //Vector3d moveVector = new Vector3d(0, p17.Y - p13.Y, 0);
-                                //line22.TransformBy(Matrix3d.Displacement(moveVector));
-                                //line23.TransformBy(Matrix3d.Displacement(moveVector));
-                                //line24.TransformBy(Matrix3d.Displacement(moveVector));
-                                //Line line25 = new Line(p18, p19);
-                                //modelSpace.AppendEntity(line25);
-                                //tr.AddNewlyCreatedDBObject(line25, true);
+
                                 Line line26 = new Line(p13, p14);
                                 modelSpace.AppendEntity(line26);
                                 tr.AddNewlyCreatedDBObject(line26, true);
+                                createdEntities.Add(line26);
                                 Line line27 = new Line(p14, p15);
                                 modelSpace.AppendEntity(line27);
                                 tr.AddNewlyCreatedDBObject(line27, true);
+                                createdEntities.Add(line27);
                                 Line line28 = new Line(p15, p16);
                                 modelSpace.AppendEntity(line28);
                                 tr.AddNewlyCreatedDBObject(line28, true);
+                                createdEntities.Add(line28);
                                 Vector3d moveVector2 = new Vector3d(0, p19.Y - p13.Y, 0);
                                 line26.TransformBy(Matrix3d.Displacement(moveVector2));
                                 line27.TransformBy(Matrix3d.Displacement(moveVector2));
@@ -11487,33 +12633,36 @@ namespace CAD_AUTOMATION
                                 Line line29 = new Line(p20, p10);
                                 modelSpace.AppendEntity(line29);
                                 tr.AddNewlyCreatedDBObject(line29, true);
+                                createdEntities.Add(line29);
                                 Line line13 = new Line(p12, p3);
                                 modelSpace.AppendEntity(line13);
                                 tr.AddNewlyCreatedDBObject(line13, true);
+                                createdEntities.Add(line13);
                                 line13.ColorIndex = 12;
                                 Line line14 = new Line(p3, p6);
                                 modelSpace.AppendEntity(line14);
                                 tr.AddNewlyCreatedDBObject(line14, true);
+                                createdEntities.Add(line14);
                                 line14.ColorIndex = 12;
                                 Line line15 = new Line(p6, p9);
                                 modelSpace.AppendEntity(line15);
                                 tr.AddNewlyCreatedDBObject(line15, true);
+                                createdEntities.Add(line15);
                                 line15.ColorIndex = 12;
                                 Line line30 = new Line(p12, p21);
                                 modelSpace.AppendEntity(line30);
                                 tr.AddNewlyCreatedDBObject(line30, true);
+                                createdEntities.Add(line30);
                                 line30.ColorIndex = 12;
                                 Line line31 = new Line(p22, p25);
                                 modelSpace.AppendEntity(line31);
                                 tr.AddNewlyCreatedDBObject(line31, true);
+                                createdEntities.Add(line31);
                                 line31.ColorIndex = 12;
-                                //Line line32 = new Line(p24, p25);
-                                //modelSpace.AppendEntity(line32);
-                                //tr.AddNewlyCreatedDBObject(line32, true);
-                                //line32.ColorIndex = 12;
                                 Line line33 = new Line(p26, p9);
                                 modelSpace.AppendEntity(line33);
                                 tr.AddNewlyCreatedDBObject(line33, true);
+                                createdEntities.Add(line33);
                                 line33.ColorIndex = 12;
                                 // Add lines to model space
                                 modelSpace.AppendEntity(line1);
@@ -11532,6 +12681,23 @@ namespace CAD_AUTOMATION
                                 modelSpace.AppendEntity(line19);
                                 modelSpace.AppendEntity(line20);
                                 modelSpace.AppendEntity(line21);
+
+                                createdEntities.Add(line1);
+                                createdEntities.Add(line2);
+                                createdEntities.Add(line3);
+                                createdEntities.Add(line4);
+                                createdEntities.Add(line5);
+                                createdEntities.Add(line6);
+                                createdEntities.Add(line7);
+                                createdEntities.Add(line8);
+                                createdEntities.Add(line9);
+                                createdEntities.Add(line11);
+                                createdEntities.Add(line12);
+                                createdEntities.Add(line17);
+                                createdEntities.Add(line18);
+                                createdEntities.Add(line19);
+                                createdEntities.Add(line20);
+                                createdEntities.Add(line21);
 
                                 // Commit the transaction
                                 tr.AddNewlyCreatedDBObject(line1, true);
@@ -11572,18 +12738,22 @@ namespace CAD_AUTOMATION
                             Line line13 = new Line(p12, p3);
                             modelSpace.AppendEntity(line13);
                             tr.AddNewlyCreatedDBObject(line13, true);
+                            createdEntities.Add(line13);
                             line13.ColorIndex = 12;
                             Line line14 = new Line(p3, p6);
                             modelSpace.AppendEntity(line14);
                             tr.AddNewlyCreatedDBObject(line14, true);
+                            createdEntities.Add(line14);
                             line14.ColorIndex = 12;
                             Line line15 = new Line(p6, p9);
                             modelSpace.AppendEntity(line15);
                             tr.AddNewlyCreatedDBObject(line15, true);
+                            createdEntities.Add(line15);
                             line15.ColorIndex = 12;
                             Line line16 = new Line(p9, p12);
                             modelSpace.AppendEntity(line16);
                             tr.AddNewlyCreatedDBObject(line16, true);
+                            createdEntities.Add(line16);
                             line16.ColorIndex = 12;
                             
                             // Add lines to model space
@@ -11599,7 +12769,20 @@ namespace CAD_AUTOMATION
                             modelSpace.AppendEntity(line10);
                             modelSpace.AppendEntity(line11);
                             modelSpace.AppendEntity(line12);
-                            
+
+                            createdEntities.Add(line1);
+                            createdEntities.Add(line2);
+                            createdEntities.Add(line3);
+                            createdEntities.Add(line4);
+                            createdEntities.Add(line5);
+                            createdEntities.Add(line6);
+                            createdEntities.Add(line7);
+                            createdEntities.Add(line8);
+                            createdEntities.Add(line9);
+                            createdEntities.Add(line10);
+                            createdEntities.Add(line11);
+                            createdEntities.Add(line12);
+
 
                             // Commit the transaction
                             tr.AddNewlyCreatedDBObject(line1, true);
@@ -11618,28 +12801,99 @@ namespace CAD_AUTOMATION
                         }
 
                         Point3d dd1 = new Point3d(p4.X + 40, 0, 0);
-                        AlignedDimension dim1 = new AlignedDimension(p4, p5, dd1, "", ObjectId.Null);
+                        AlignedDimension dim1 = new AlignedDimension(p4, p5, dd1, "", dimStyleId);
                         modelSpace.AppendEntity(dim1);
                         tr.AddNewlyCreatedDBObject(dim1, true);
+                        createdEntities.Add(dim1);
 
-                        Point3d dd2 = new Point3d(p2.X + fold1 + 65, 0, 0);
-                        AlignedDimension dim2 = new AlignedDimension(p2, p7, dd2, "", ObjectId.Null);
+                        Point3d dd2 = new Point3d(p2.X + fold1 + 90, 0, 0);
+                        AlignedDimension dim2 = new AlignedDimension(p2, p7, dd2, "", dimStyleId2);
                         modelSpace.AppendEntity(dim2);
                         tr.AddNewlyCreatedDBObject(dim2, true);
+                        createdEntities.Add(dim2);
 
                         Point3d dd3 = new Point3d(0,p7.Y + 30, 0);
-                        AlignedDimension dim3 = new AlignedDimension(p7, p8, dd3, "", ObjectId.Null);
+                        AlignedDimension dim3 = new AlignedDimension(p7, p8, dd3, "", dimStyleId);
                         modelSpace.AppendEntity(dim3);
                         tr.AddNewlyCreatedDBObject(dim3, true);
+                        createdEntities.Add(dim3);
 
-                        Point3d dd4 = new Point3d(0,p10.Y + fold1 + 55, 0);
-                        AlignedDimension dim4 = new AlignedDimension(p5, p10, dd4, "", ObjectId.Null);
+                        Point3d dd4 = new Point3d(0,p10.Y + fold1 + 85, 0);
+                        AlignedDimension dim4 = new AlignedDimension(p5, p10, dd4, "", dimStyleId2);
                         modelSpace.AppendEntity(dim4);
                         tr.AddNewlyCreatedDBObject(dim4, true);
+                        createdEntities.Add(dim4);
 
-                        AlignedDimension dim5 = new AlignedDimension(p5, p6, dd3, "", ObjectId.Null);
+                        AlignedDimension dim5 = new AlignedDimension(p5, p6, dd3, "", dimStyleId);
                         modelSpace.AppendEntity(dim5);
                         tr.AddNewlyCreatedDBObject(dim5, true);
+                        createdEntities.Add(dim5);
+
+
+                        Point3d s1 = new Point3d(p1.X - thick, p8.Y + 200, 0);
+                        Point3d s2 = new Point3d(p2.X + thick, p8.Y + 200, 0);
+                        Point3d s3 = new Point3d(p2.X + thick, p8.Y + 200 + foldlength, 0);
+                        Point3d s4 = new Point3d(p1.X - thick, p8.Y + 200 + foldlength, 0);
+
+                        Point3d s5 = new Point3d(p4.X + 200, p4.Y - thick, 0);
+                        Point3d s6 = new Point3d(p4.X + 200, p5.Y + thick, 0);
+                        Point3d s7 = new Point3d(p4.X + 200 + foldlength, p5.Y + thick, 0);
+                        Point3d s8 = new Point3d(p4.X + 200 + foldlength, p4.Y - thick, 0);
+
+                        Line lines1 = new Line(s1, s2);
+                        modelSpace.AppendEntity(lines1);
+                        tr.AddNewlyCreatedDBObject(lines1, true);
+                        
+                        Line lines2 = new Line(s2, s3);
+                        modelSpace.AppendEntity(lines2);
+                        tr.AddNewlyCreatedDBObject(lines2, true);
+
+                        Line lines3 = new Line(s1, s4);
+                        modelSpace.AppendEntity(lines3);
+                        tr.AddNewlyCreatedDBObject(lines3, true);
+                        Line lines4 = new Line(s5, s6);
+                        modelSpace.AppendEntity(lines4);
+                        tr.AddNewlyCreatedDBObject(lines4, true);
+                        Line lines5 = new Line(s7, s6);
+                        modelSpace.AppendEntity(lines5);
+                        tr.AddNewlyCreatedDBObject(lines5, true);
+                        Line lines6 = new Line(s5, s8);
+                        modelSpace.AppendEntity(lines6);
+                        tr.AddNewlyCreatedDBObject(lines6, true);
+
+                        createdEntities.Add(lines1);
+                        createdEntities.Add(lines2);
+                        createdEntities.Add(lines3);
+                        createdEntities.Add(lines4);
+                        createdEntities.Add(lines5);
+                        createdEntities.Add(lines6);
+
+                        Point3d dd6 = new Point3d(0, s1.Y - 40, 0);
+                        AlignedDimension dim6 = new AlignedDimension(s1, s2, dd6, "", dimStyleId);
+                        modelSpace.AppendEntity(dim6);
+                        tr.AddNewlyCreatedDBObject(dim6, true);
+                        createdEntities.Add(dim6);
+
+                        Point3d dd7 = new Point3d(s2.X + 40, 0, 0);
+                        AlignedDimension dim7 = new AlignedDimension(s2, s3, dd7, "", dimStyleId);
+                        modelSpace.AppendEntity(dim7);
+                        tr.AddNewlyCreatedDBObject(dim7, true);
+                        createdEntities.Add(dim7);
+
+                        Point3d dd8 = new Point3d(s5.X - 40, 0, 0);
+                        AlignedDimension dim8 = new AlignedDimension(s5, s6, dd8, "", dimStyleId);
+                        modelSpace.AppendEntity(dim8);
+                        tr.AddNewlyCreatedDBObject(dim8, true);
+                        createdEntities.Add(dim8);
+
+                        Point3d dd9 = new Point3d(0, s5.Y - 40, 0);
+                        AlignedDimension dim9 = new AlignedDimension(s5, s8, dd9, "", dimStyleId);
+                        modelSpace.AppendEntity(dim9);
+                        tr.AddNewlyCreatedDBObject(dim9, true);
+                        createdEntities.Add(dim9);
+
+                        
+
 
                         Point3d insertionPoint = p12;
                         using (BlockReference blockRef = new BlockReference(insertionPoint, block.ObjectId))
@@ -11652,16 +12906,18 @@ namespace CAD_AUTOMATION
                             DBObjectCollection explodedObjects = new DBObjectCollection();
                             blockRef.Explode(explodedObjects);
 
-                            
+
                             Point3d p99 = Point3d.Origin;
                             bool foundLine = false;
+                            Line firstLine = null;  // To store the first line
 
+                            // Loop through the exploded entities to get the first line and its start point
                             foreach (DBObject obj in explodedObjects)
                             {
                                 if (obj is Line line)
                                 {
                                     p99 = line.StartPoint;
-                                    //MessageBox.Show($"{p99.X.ToString()}-{p99.Y.ToString()}");
+                                    firstLine = line;  // Save the first line
                                     foundLine = true;
                                     break;
                                 }
@@ -11673,73 +12929,175 @@ namespace CAD_AUTOMATION
                                 return;
                             }
 
-                            // Now use p99 as the insertion point for the exploded entities
-                            foreach (DBObject obj in explodedObjects)
+                            if (firstLine != null)
                             {
-                                if (obj is Entity entity)
+                                Point3d firstLineStart = firstLine.StartPoint;
+                                Point3d firstLineEnd = firstLine.EndPoint;
+
+                                Point3d descPoint = new Point3d(lx + (length / 2) - 40, ly - 100, 0);
+                                // Check if the line is to the left or right of the insertion point
+                                if (firstLineStart.X > firstLineEnd.X)
                                 {
-                                    Vector3d offset2 = new Vector3d(insertionPoint.X - p99.X - thick, insertionPoint.Y - p99.Y - thick , 0);
-                                    entity.TransformBy(Matrix3d.Displacement(offset2));
-                                    
-                                    if (entity.ColorIndex != 50)
+                                    descPoint = new Point3d(lx - (length / 2) - 40, ly - 100, 0);
+
+                                    foreach (DBObject obj in explodedObjects)
                                     {
-                                        modelSpace.AppendEntity(entity);
-                                        tr.AddNewlyCreatedDBObject(entity, true);
+                                        if (obj is Entity entity)
+                                        {
+                                            Vector3d offset2 = new Vector3d(insertionPoint.X - p99.X - thick, insertionPoint.Y - p99.Y - thick, 0);
+                                            entity.TransformBy(Matrix3d.Displacement(offset2));
+
+                                            if (entity.ColorIndex != 50)
+                                            {
+                                                modelSpace.AppendEntity(entity);
+                                                tr.AddNewlyCreatedDBObject(entity, true);
+                                            }
+
+                                        }
                                     }
-                                    
+
+                                    // Define the mirror line (for mirroring across the insertion point)
+                                    Line3d mirrorLine = new Line3d(
+                                        new Point3d(insertionPoint.X, insertionPoint.Y, insertionPoint.Z),  // X-axis for horizontal mirror
+                                        new Point3d(insertionPoint.X, insertionPoint.Y + 1, insertionPoint.Z) // A vertical line
+                                    );
+
+                                    Matrix3d mirrorMatrix = Matrix3d.Mirroring(mirrorLine);
+
+                                    // Apply the mirror transformation to all tracked entities
+                                    foreach (Entity entity in createdEntities)
+                                    {
+                                        // If the entity is an AlignedDimension, handle it separately
+                                        if (entity is AlignedDimension dimension)
+                                        {
+                                            Vector3d text = dimension.Normal;
+
+                                            // Apply the mirror transformation
+                                            dimension.TransformBy(mirrorMatrix);
+                                            dimension.Normal = text;
+
+                                        }
+                                        else
+                                        {
+                                            // Apply the mirror transformation to non-dimension entities
+                                            entity.TransformBy(mirrorMatrix);
+                                        }
+                                    }
+
+
                                 }
+                                else if (firstLineStart.X < firstLineEnd.X)
+                                {
+                                    // Now use p99 as the insertion point for the exploded entities
+                                    foreach (DBObject obj in explodedObjects)
+                                    {
+                                        if (obj is Entity entity)
+                                        {
+                                            Vector3d offset2 = new Vector3d(insertionPoint.X - p99.X - thick, insertionPoint.Y - p99.Y - thick, 0);
+                                            entity.TransformBy(Matrix3d.Displacement(offset2));
+
+                                            if (entity.ColorIndex != 50)
+                                            {
+                                                modelSpace.AppendEntity(entity);
+                                                tr.AddNewlyCreatedDBObject(entity, true);
+                                            }
+
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    doc.Editor.WriteMessage("\nThe line crosses the center.");
+                                }
+
+                                
+                                int offset = 30;
+                                DBText textdesc = new DBText();
+                                textdesc.Position = descPoint;
+                                textdesc.Height = 15;
+                                textdesc.TextString = "DESCRIPTION - DOOR";
+                                textdesc.ColorIndex = 2;
+                                modelSpace.AppendEntity(textdesc);
+                                tr.AddNewlyCreatedDBObject(textdesc, true);
+
+                                Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textthick = new DBText();
+                                textthick.Position = thickpoint;
+                                textthick.Height = 15;
+                                textthick.TextString = $"THICKNESS - {thick} mm";
+                                textthick.ColorIndex = 3;
+                                modelSpace.AppendEntity(textthick);
+                                tr.AddNewlyCreatedDBObject(textthick, true);
+
+                                Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textqty = new DBText();
+                                textqty.Position = qtypoint;
+                                textqty.Height = 15;
+                                textqty.TextString = $"QTY - NOS";
+                                textqty.ColorIndex = 1;
+                                modelSpace.AppendEntity(textqty);
+                                tr.AddNewlyCreatedDBObject(textqty, true);
+
+                                Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textbend = new DBText();
+                                textbend.Position = bendpoint;
+                                textbend.Height = 15;
+                                textbend.TextString = "BENDING - BEND DOWN";
+                                textbend.ColorIndex = 3;
+                                modelSpace.AppendEntity(textbend);
+                                tr.AddNewlyCreatedDBObject(textbend, true);
+
+                                Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText textmaterial = new DBText();
+                                textmaterial.Position = materialpoint;
+                                textmaterial.Height = 15;
+                                textmaterial.TextString = "MATERIAL - MS";
+                                textmaterial.ColorIndex = 2;
+                                modelSpace.AppendEntity(textmaterial);
+                                tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+                                Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+                                offset = offset + 30;
+                                DBText parttext = new DBText();
+                                parttext.Position = partpoint;
+                                parttext.Height = 15;
+                                parttext.TextString = "PART NUMBER -";
+                                modelSpace.AppendEntity(parttext);
+                                tr.AddNewlyCreatedDBObject(parttext, true);
+
+                                Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+                                Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+                                Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+                                Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+                                Polyline rectangle = new Polyline();
+
+                                // Add the rectangle's vertices
+                                rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+                                rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+                                rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+                                rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+                                // Close the polyline to form a rectangle
+                                rectangle.Closed = true;
+
+                                // Set the color index
+                                rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+                                // Add the polyline to the model space
+                                modelSpace.AppendEntity(rectangle);
+                                tr.AddNewlyCreatedDBObject(rectangle, true);
+
+
                             }
 
                             blockRef.Erase();
 
-                            Point3d s1 = new Point3d(p1.X - thick, p8.Y + 200, 0);
-                            Point3d s2 = new Point3d(p2.X + thick, p8.Y + 200, 0);
-                            Point3d s3 = new Point3d(p2.X + thick, p8.Y + 200 + foldlength, 0);
-                            Point3d s4 = new Point3d(p1.X - thick, p8.Y + 200 + foldlength, 0);
-
-                            Point3d s5 = new Point3d(p4.X + 200, p4.Y - thick, 0);
-                            Point3d s6 = new Point3d(p4.X + 200, p5.Y + thick, 0);
-                            Point3d s7 = new Point3d(p4.X + 200 + foldlength, p5.Y + thick, 0);
-                            Point3d s8 = new Point3d(p4.X + 200 + foldlength, p4.Y - thick, 0);
-
-                            Line lines1 = new Line(s1, s2);
-                            modelSpace.AppendEntity(lines1);
-                            tr.AddNewlyCreatedDBObject(lines1, true);
-                            Line lines2 = new Line(s2, s3);
-                            modelSpace.AppendEntity(lines2);
-                            tr.AddNewlyCreatedDBObject(lines2, true);
-                            Line lines3 = new Line(s1, s4);
-                            modelSpace.AppendEntity(lines3);
-                            tr.AddNewlyCreatedDBObject(lines3, true);
-                            Line lines4 = new Line(s5, s6);
-                            modelSpace.AppendEntity(lines4);
-                            tr.AddNewlyCreatedDBObject(lines4, true);
-                            Line lines5 = new Line(s7, s6);
-                            modelSpace.AppendEntity(lines5);
-                            tr.AddNewlyCreatedDBObject(lines5, true);
-                            Line lines6 = new Line(s5, s8);
-                            modelSpace.AppendEntity(lines6);
-                            tr.AddNewlyCreatedDBObject(lines6, true);
-
-                            Point3d dd6 = new Point3d(0, s1.Y - 40, 0);
-                            AlignedDimension dim6 = new AlignedDimension(s1, s2, dd6, "", ObjectId.Null);
-                            modelSpace.AppendEntity(dim6);
-                            tr.AddNewlyCreatedDBObject(dim6, true);
-
-                            Point3d dd7 = new Point3d(s2.X + 40, 0, 0);
-                            AlignedDimension dim7 = new AlignedDimension(s2, s3, dd7, "", ObjectId.Null);
-                            modelSpace.AppendEntity(dim7);
-                            tr.AddNewlyCreatedDBObject(dim7, true);
-
-                            Point3d dd8 = new Point3d(s5.X - 40, 0, 0);
-                            AlignedDimension dim8 = new AlignedDimension(s5, s6, dd8, "", ObjectId.Null);
-                            modelSpace.AppendEntity(dim8);
-                            tr.AddNewlyCreatedDBObject(dim8, true);
-
-                            Point3d dd9 = new Point3d(0, s5.Y - 40, 0);
-                            AlignedDimension dim9 = new AlignedDimension(s5, s8, dd9, "", ObjectId.Null);
-                            modelSpace.AppendEntity(dim9);
-                            tr.AddNewlyCreatedDBObject(dim9, true);
+                            
 
 
                         }
@@ -12215,6 +13573,89 @@ namespace CAD_AUTOMATION
 
             }
 
+            Point3d descPoint = new Point3d(insertpoint.X - 40, insertpoint.Y - 150, 0);
+
+            int offset = 30;
+            DBText textdesc = new DBText();
+            textdesc.Position = descPoint;
+            textdesc.Height = 15;
+            textdesc.TextString = "DESCRIPTION - STIFFNER";
+            textdesc.ColorIndex = 2;
+            modelSpace.AppendEntity(textdesc);
+            tr.AddNewlyCreatedDBObject(textdesc, true);
+
+            Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textthick = new DBText();
+            textthick.Position = thickpoint;
+            textthick.Height = 15;
+            textthick.TextString = $"THICKNESS - {thick} mm";
+            textthick.ColorIndex = 3;
+            modelSpace.AppendEntity(textthick);
+            tr.AddNewlyCreatedDBObject(textthick, true);
+
+            Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textqty = new DBText();
+            textqty.Position = qtypoint;
+            textqty.Height = 15;
+            textqty.TextString = $"QTY - NOS";
+            textqty.ColorIndex = 1;
+            modelSpace.AppendEntity(textqty);
+            tr.AddNewlyCreatedDBObject(textqty, true);
+
+            Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textbend = new DBText();
+            textbend.Position = bendpoint;
+            textbend.Height = 15;
+            textbend.TextString = "BENDING - BEND DOWN";
+            textbend.ColorIndex = 3;
+            modelSpace.AppendEntity(textbend);
+            tr.AddNewlyCreatedDBObject(textbend, true);
+
+            Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textmaterial = new DBText();
+            textmaterial.Position = materialpoint;
+            textmaterial.Height = 15;
+            textmaterial.TextString = "MATERIAL - MS";
+            textmaterial.ColorIndex = 2;
+            modelSpace.AppendEntity(textmaterial);
+            tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+            Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText parttext = new DBText();
+            parttext.Position = partpoint;
+            parttext.Height = 15;
+            parttext.TextString = "PART NUMBER -";
+            modelSpace.AppendEntity(parttext);
+            tr.AddNewlyCreatedDBObject(parttext, true);
+
+            Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+            Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+            Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+            Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+            Polyline rectangle = new Polyline();
+
+            // Add the rectangle's vertices
+            rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+            rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+            rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+            rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+            // Close the polyline to form a rectangle
+            rectangle.Closed = true;
+
+            // Set the color index
+            rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+            // Add the polyline to the model space
+            modelSpace.AppendEntity(rectangle);
+            tr.AddNewlyCreatedDBObject(rectangle, true);
+
             source.Erase();
 
 
@@ -12236,7 +13677,103 @@ namespace CAD_AUTOMATION
             double pitch = Convert.ToDouble(config["stiffner_holes_pitch"]);
             double radius = 3;
 
+            DimStyleTable dimStyleTable = tr.GetObject(db.DimStyleTableId, OpenMode.ForWrite) as DimStyleTable;
 
+            string dimStyleName = "ROHITH";
+            ObjectId dimStyleId;
+
+            if (!dimStyleTable.Has(dimStyleName))
+            {
+                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                {
+                    Name = dimStyleName,
+                    Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                    Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 3),
+                    Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 2),
+                    Dimasz = 30,
+                    Dimtxt = 30,
+                    Dimexo = 4.0,
+                    Dimdec = 0,
+                    Dimtad = 0,
+                    Dimjust = 0,
+                    Dimtoh = true,
+                    Dimtih = false,
+                    Dimupt = false,
+                    Dimgap = 5
+                };
+
+                // Only add to table AFTER setting all properties
+                dimStyleTable.UpgradeOpen();
+                dimStyleId = dimStyleTable.Add(newDimStyle);
+                tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                //db.SetDimstyleData(newDimStyle);
+            }
+            else
+            {
+
+                dimStyleId = dimStyleTable[dimStyleName];
+            }
+
+            string dimStyleName2 = "BLANK SIZE";
+            ObjectId dimStyleId2;
+
+            if (!dimStyleTable.Has(dimStyleName2))
+            {
+                // Create the new dimension style record and set its name
+                DimStyleTableRecord newDimStyle = new DimStyleTableRecord
+                {
+                    Name = dimStyleName2,
+                    Dimclrd = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                    Dimclrt = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 1),
+                    Dimclre = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByColor, 4),
+                    Dimasz = 30,
+                    Dimtxt = 30,
+                    Dimexo = 4.0,
+                    Dimdec = 0,
+                    Dimtad = 0,
+                    Dimjust = 0,
+                    Dimtoh = true,
+                    Dimtih = false,
+                    Dimupt = false,
+                    Dimgap = 5
+                };
+
+                // Add to the dim style table
+                dimStyleTable.UpgradeOpen(); // Upgrade BEFORE adding
+                dimStyleId2 = dimStyleTable.Add(newDimStyle);
+                tr.AddNewlyCreatedDBObject(newDimStyle, true);
+                //db.SetDimstyleData(newDimStyle);
+            }
+            else
+            {
+                dimStyleId2 = dimStyleTable[dimStyleName2];
+            }
+
+
+            LinetypeTable ltTable = (LinetypeTable)tr.GetObject(db.LinetypeTableId, OpenMode.ForRead);
+            if (!ltTable.Has("HIDDEN"))
+            {
+                db.LoadLineTypeFile("HIDDEN", "acad.lin");
+            }
+
+            LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+
+            if (!lt.Has(layerName))
+            {
+                // Open for write to add a new layer
+                lt.UpgradeOpen();
+
+                // Create new layer
+                LayerTableRecord ltr = new LayerTableRecord
+                {
+                    Name = layerName,
+                    Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 4),
+                    LinetypeObjectId = ltTable["HIDDEN"] // Default to "Continuous"
+                };
+
+                lt.Add(ltr);
+                tr.AddNewlyCreatedDBObject(ltr, true);
+            }
 
             Point3d p1 = new Point3d(lx + folding1 - thick, ly, 0);
             Point3d p2 = new Point3d(p1.X + width - (folding1 * 2) - off, ly, 0);
@@ -12337,7 +13874,113 @@ namespace CAD_AUTOMATION
                 Matrix3d moveUp = Matrix3d.Displacement(new Vector3d(balancewidth / 2.0,0, 0));
                 assocArrayBlock.TransformBy(moveUp);
             }
-            
+
+            AlignedDimension dim1 = new AlignedDimension(p2, p7, new Point3d(p2.X + 40, p2.Y, 0), "", dimStyleId2);
+            modelSpace.AppendEntity(dim1);
+            tr.AddNewlyCreatedDBObject(dim1, true);
+
+            AlignedDimension dim2 = new AlignedDimension(p7, p8, new Point3d(p7.X, p7.Y + 40, 0), "", dimStyleId2);
+            modelSpace.AppendEntity(dim2);
+            tr.AddNewlyCreatedDBObject(dim2, true);
+
+            Polyline foldingview = new Polyline(4);
+            foldingview.AddVertexAt(0, new Point2d(p3.X + 200, p3.Y - thick - 0.5), 0, 0, 0);
+            foldingview.AddVertexAt(1, new Point2d(p3.X + 200 - folding1, p3.Y - thick - 0.5), 0, 0, 0);
+            foldingview.AddVertexAt(2, new Point2d(p6.X + 200 - folding1, p6.Y + thick + 0.5), 0, 0, 0);
+            foldingview.AddVertexAt(3, new Point2d(p6.X + 200, p6.Y + thick + 0.5), 0, 0, 0);
+            modelSpace.AppendEntity(foldingview);
+            tr.AddNewlyCreatedDBObject(foldingview, true);
+
+            AlignedDimension dim3 = new AlignedDimension(foldingview.GetPoint3dAt(1), foldingview.GetPoint3dAt(2), new Point3d(p3.X + 150, p3.Y, 0), "", dimStyleId);
+            modelSpace.AppendEntity(dim3);
+            tr.AddNewlyCreatedDBObject(dim3, true);
+
+            AlignedDimension dim4 = new AlignedDimension(foldingview.GetPoint3dAt(0), foldingview.GetPoint3dAt(1), new Point3d(p3.X + 150, p3.Y - 40, 0), "", dimStyleId);
+            modelSpace.AppendEntity(dim4);
+            tr.AddNewlyCreatedDBObject(dim4, true);
+
+            Point3d descPoint = new Point3d(insertpoint.X + (width/2) - 100, insertpoint.Y - 150, 0);
+
+            int offset = 30;
+            DBText textdesc = new DBText();
+            textdesc.Position = descPoint;
+            textdesc.Height = 15;
+            textdesc.TextString = "DESCRIPTION - STIFFNER";
+            textdesc.ColorIndex = 2;
+            modelSpace.AppendEntity(textdesc);
+            tr.AddNewlyCreatedDBObject(textdesc, true);
+
+            Point3d thickpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textthick = new DBText();
+            textthick.Position = thickpoint;
+            textthick.Height = 15;
+            textthick.TextString = $"THICKNESS - {thick} mm";
+            textthick.ColorIndex = 3;
+            modelSpace.AppendEntity(textthick);
+            tr.AddNewlyCreatedDBObject(textthick, true);
+
+            Point3d qtypoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textqty = new DBText();
+            textqty.Position = qtypoint;
+            textqty.Height = 15;
+            textqty.TextString = $"QTY - NOS";
+            textqty.ColorIndex = 1;
+            modelSpace.AppendEntity(textqty);
+            tr.AddNewlyCreatedDBObject(textqty, true);
+
+            Point3d bendpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textbend = new DBText();
+            textbend.Position = bendpoint;
+            textbend.Height = 15;
+            textbend.TextString = "BENDING - BEND DOWN";
+            textbend.ColorIndex = 3;
+            modelSpace.AppendEntity(textbend);
+            tr.AddNewlyCreatedDBObject(textbend, true);
+
+            Point3d materialpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText textmaterial = new DBText();
+            textmaterial.Position = materialpoint;
+            textmaterial.Height = 15;
+            textmaterial.TextString = "MATERIAL - MS";
+            textmaterial.ColorIndex = 2;
+            modelSpace.AppendEntity(textmaterial);
+            tr.AddNewlyCreatedDBObject(textmaterial, true);
+
+            Point3d partpoint = new Point3d(descPoint.X, descPoint.Y - offset, descPoint.Z);
+            offset = offset + 30;
+            DBText parttext = new DBText();
+            parttext.Position = partpoint;
+            parttext.Height = 15;
+            parttext.TextString = "PART NUMBER -";
+            modelSpace.AppendEntity(parttext);
+            tr.AddNewlyCreatedDBObject(parttext, true);
+
+            Point3d point1 = new Point3d(descPoint.X - 30, descPoint.Y + 45, descPoint.Z);
+            Point3d point2 = new Point3d(descPoint.X + 250, descPoint.Y + 45, descPoint.Z);
+            Point3d point3 = new Point3d(descPoint.X - 30, descPoint.Y - offset - 30, descPoint.Z);
+            Point3d point4 = new Point3d(descPoint.X + 250, descPoint.Y - offset - 30, descPoint.Z);
+
+            Polyline rectangle = new Polyline();
+
+            // Add the rectangle's vertices
+            rectangle.AddVertexAt(0, new Point2d(point1.X, point1.Y), 0, 0, 0); // Start point
+            rectangle.AddVertexAt(1, new Point2d(point2.X, point2.Y), 0, 0, 0); // Top-right point
+            rectangle.AddVertexAt(2, new Point2d(point4.X, point4.Y), 0, 0, 0); // Bottom-right point
+            rectangle.AddVertexAt(3, new Point2d(point3.X, point3.Y), 0, 0, 0); // Bottom-left point
+
+            // Close the polyline to form a rectangle
+            rectangle.Closed = true;
+
+            // Set the color index
+            rectangle.ColorIndex = 8; // Set to color index 8 (gray)
+
+            // Add the polyline to the model space
+            modelSpace.AppendEntity(rectangle);
+            tr.AddNewlyCreatedDBObject(rectangle, true);
 
             source.Erase();
 
